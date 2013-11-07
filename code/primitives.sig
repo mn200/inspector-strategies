@@ -1,3 +1,7 @@
+(* inspector primitives
+ *
+ *)
+ 
 signature primitives =
 sig
 
