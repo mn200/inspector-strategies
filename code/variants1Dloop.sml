@@ -26,12 +26,11 @@ fun orgcode (B,C,f,g,N) =
 
 (* Using the origcode requires initializing B, C, f, g, and N with values. *)
 
-let
-    val f = list_to_mvector [1,2,3,4,5]
+val f = list_to_mvector [0,1,2,3,4]
 
-    val g = list_to_mvector [5,4,3,2,1,0]
+val g = list_to_mvector [4,3,2,1,0]
 
-    val C = list_to_mvector [10,20,30,40,50]
-in
-    orgcode (empty_v,C,f,g,5)
-end
+val C = list_to_mvector [10,20,30,40,50]
+
+orgcode (empty_v,C,f,g,5)
+
