@@ -13,7 +13,7 @@ use "primitives.sml";
 open primitives
 
 (* Original Code in C
- * 
+ *
  * for (i=0; i<N; i++) {
  *     B[i] = C[ f[i] ] + C[ g[i] ];
  * }
@@ -32,5 +32,4 @@ val g = list_to_mvector [4,3,2,1,0]
 
 val C = list_to_mvector [10,20,30,40,50]
 
-orgcode (empty_v,C,f,g,5)
-
+val result = mvector_to_list(orgcode (empty_v,C,f,g,5))
