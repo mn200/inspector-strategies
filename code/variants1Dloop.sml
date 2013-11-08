@@ -91,6 +91,11 @@ fun construct_explicit_relation (N,f,g) =
     (*list_to_mrel [(1,0),(4,0),(2,1),(3,1),(3,2),(2,2),(4,3),(1,3),(0,4),(0,4)]*)
 
 fun inspector (E) =
+(* LEFTOFF thinking about how to do this step.
+    let fun pack_i_in_E 
+
+    let fun pack_leftovers
+*)
     (* cheating initially to test codevariant1 *)
     list_to_mvector [4,0,3,1,2]
 
