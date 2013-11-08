@@ -82,9 +82,13 @@ val test_org = mvector_to_list(orgcode (empty_v,C,f,g,5)) = [70,70,70,70,20]
  * }
  *)
 (* constructs mrel for d2c = { [ x ] -> [ i ] | x=f(i) \/ x=g(i) } *)
-fun construct_explicit_relation (f,g) =
+fun construct_explicit_relation (N,f,g) =
+    FOR (0,N)
+        (fn i => fn E => r_update(r_update(E,sub(f,i),i), sub(g,i),i))
+        empty_r
+
     (* cheating initially to test codevariant1 *)
-    list_to_mrel [(1,0),(4,0),(2,1),(3,1),(3,2),(2,2),(4,3),(1,3),(0,4),(0,4)]
+    (*list_to_mrel [(1,0),(4,0),(2,1),(3,1),(3,2),(2,2),(4,3),(1,3),(0,4),(0,4)]*)
 
 fun inspector (E) =
     (* cheating initially to test codevariant1 *)
@@ -92,7 +96,7 @@ fun inspector (E) =
 
 fun codevariant1 (B,C,f,g,N) =
     let
-	val E = construct_explicit_relation(f,g)
+	val E = construct_explicit_relation(N,f,g)
 	val dinv = inspector(E)
     in
 
