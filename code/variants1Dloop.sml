@@ -26,16 +26,18 @@ fun orgcode (B,C,f,g,N) =
 
 (* Using the origcode requires initializing B, C, f, g, and N with values. *)
 
-val f = list_to_mvector [0,1,2,3,4]
+val f = list_to_mvector [1,2,3,4,0]
 
 val g = list_to_mvector [4,3,2,1,0]
 
 val C = list_to_mvector [10,20,30,40,50]
 
-val test1_org = mvector_to_list(orgcode (empty_v,C,f,g,5)) = [60,60,60,60,60]
+val test_org = mvector_to_list(orgcode (empty_v,C,f,g,5)) = [70,70,70,70,20]
 
-(* Transformed code in C, using cpack heuristic to reorder iterations
- * 
+(* Variant 1
+ * Transformed code in C, using cpack heuristic to reorder iterations
+ *     T = { [i] -> [j] | j=d(i) } is transformation specification
+ *
  * // Inspector creating hypergraph-like (or CSR-like) representation
  * // for input to lexgroup heuristic.  Stores data to computation relation.
  * //    d2c = { [ x ] -> [ i ] | x=f(i) \/ x=g(i) } 
@@ -79,3 +81,28 @@ val test1_org = mvector_to_list(orgcode (empty_v,C,f,g,5)) = [60,60,60,60,60]
  *     B[dinv[j]] = C[ f[dinv[j]] ] + C[ g[dinv[j]] ];
  * }
  *)
+(* constructs mrel for d2c = { [ x ] -> [ i ] | x=f(i) \/ x=g(i) } *)
+fun construct_explicit_relation (f,g) =
+    (* cheating initially to test codevariant1 *)
+    list_to_mrel [(1,0),(4,0),(2,1),(3,1),(3,2),(2,2),(4,3),(1,3),(0,4),(0,4)]
+
+fun inspector (E) =
+    (* cheating initially to test codevariant1 *)
+    list_to_mvector [4,0,3,1,2]
+
+fun codevariant1 (B,C,f,g,N) =
+    let
+	val E = construct_explicit_relation(f,g)
+	val dinv = inspector(E)
+    in
+
+	FOR (0,N)
+            (fn j => fn B => 
+                let val i = sub(dinv,j) in
+	            update(B, i, sub(C, sub(f,i)) + sub(C, sub(g,i)))
+                end )
+            B
+    end
+
+val test_variant1 = mvector_to_list(orgcode(empty_v,C,f,g,5)) 
+                    = mvector_to_list(codevariant1(empty_v,C,f,g,5))
