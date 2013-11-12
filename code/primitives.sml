@@ -20,6 +20,10 @@ struct
   fun r_update ((rf, xsz, ysz), x, y) =
       (fnupdate rf (x,y) true, Int.max(xsz,x+1), Int.max(ysz,y+1))
 
+  fun size ((f,sz) : mvector) = sz
+  fun rsize_for_x ((rf,xsz,ysz) : mrelation) = xsz
+  fun rsize_for_y ((rf,xsz,ysz) : mrelation) = ysz
+
   fun list_to_mvector l =
       ((fn i => Vector.sub(Vector.fromList l,i)), length l)
   fun mvector_to_list (f, sz) =

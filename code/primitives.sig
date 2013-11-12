@@ -17,6 +17,10 @@ sig
   val sub : mvector * int -> int
   val rsub : mrelation * int * int -> bool
 
+  val size : mvector -> int
+  val rsize_for_x : mrelation -> int
+  val rsize_for_y : mrelation -> int
+
   val list_to_mvector : int list -> mvector
   val mvector_to_list : mvector -> int list
   val list_to_mrel : (int * int) list -> mrelation

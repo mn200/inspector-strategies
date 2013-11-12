@@ -92,9 +92,28 @@ fun construct_explicit_relation (N,f,g) =
 
 fun inspector (E) =
 (* LEFTOFF thinking about how to do this step.
-    let fun pack_i_in_E 
+    let 
+        val visited = FOR (0,rsize_for_y(E))
+                          (fn i => fn visited => update(visited, i, 0) )
+                          empty_v
+        fun pack_i_in_E _ = 
+                      FOR (0,rsize_for_x(E))
+                          (fn i => fn dinv =>
+                              let 
+                                  fun pack (dinv,y::ys) =
+                                    if null(ys) dinv
+                                    else
+                                      if sub(visited,i)=0
+                                      then update(dinv, size(dinv), y)
+                                      else dinv
+                              in
+                                  pack( dinv, mrel_at_x( E, i ) )
+                              end 
 
-    let fun pack_leftovers
+        fun pack_leftovers
+    in
+        pack_leftovers( pack_i_in_E )
+    end
 *)
     (* cheating initially to test codevariant1 *)
     list_to_mvector [4,0,3,1,2]
