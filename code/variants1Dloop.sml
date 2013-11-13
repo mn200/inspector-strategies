@@ -23,17 +23,6 @@ fun orgcode (B,C,f,g,N) =
         (fn i => fn B => update(B, i, sub(C, sub(f,i)) + sub(C, sub(g,i))))
         B
 
-
-(* Using the origcode requires initializing B, C, f, g, and N with values. *)
-
-val f = list_to_mvector [1,2,3,4,0]
-
-val g = list_to_mvector [4,3,2,1,0]
-
-val C = list_to_mvector [10,20,30,40,50]
-
-val test_org = mvector_to_list(orgcode (empty_v,C,f,g,5)) = [70,70,70,70,20]
-
 (* Variant 1
  * Transformed code in C, using cpack heuristic to reorder iterations
  *     T = { [i] -> [j] | j=d(i) } is transformation specification
@@ -90,33 +79,37 @@ fun construct_explicit_relation (N,f,g) =
     (* cheating initially to test codevariant1 *)
     (*list_to_mrel [(1,0),(4,0),(2,1),(3,1),(3,2),(2,2),(4,3),(1,3),(0,4),(0,4)]*)
 
+    (* cheating initially to test codevariant1 *)
+(*    list_to_mvector [4,0,3,1,2] *)
+
+(* Using 0 and 1 for false and true because that is what mvector handles. *)
 fun inspector (E) =
-(* LEFTOFF thinking about how to do this step.
     let 
         val visited = FOR (0,rsize_for_y(E))
                           (fn i => fn visited => update(visited, i, 0) )
                           empty_v
-        fun pack_i_in_E _ = 
+        fun pack_i_in_E E = 
                       FOR (0,rsize_for_x(E))
-                          (fn i => fn dinv =>
-                              let 
-                                  fun pack (dinv,y::ys) =
-                                    if null(ys) dinv
-                                    else
-                                      if sub(visited,i)=0
-                                      then update(dinv, size(dinv), y)
-                                      else dinv
-                              in
-                                  pack( dinv, mrel_at_x( E, i ) )
-                              end 
+                          (fn i => fn (dinv,visited) =>
+                              (foldl 
+                                (fn (y,(dinv,visited)) =>
+                                  if 0=sub(visited,i)
+                                  then (update(dinv, size(dinv), y),
+                                        update(visited, y, 1))
+                                  else (dinv,visited))
+                                (dinv,visited)  (mrel_at_x E i) ) )
+                          (empty_v,visited)
+        val (dinv,visited) = pack_i_in_E E
+    in
+        dinv
+    end 
+(*                           
 
         fun pack_leftovers
     in
         pack_leftovers( pack_i_in_E )
     end
 *)
-    (* cheating initially to test codevariant1 *)
-    list_to_mvector [4,0,3,1,2]
 
 fun codevariant1 (B,C,f,g,N) =
     let
@@ -132,5 +125,32 @@ fun codevariant1 (B,C,f,g,N) =
             B
     end
 
-val test_variant1 = mvector_to_list(orgcode(empty_v,C,f,g,5)) 
-                    = mvector_to_list(codevariant1(empty_v,C,f,g,5))
+
+(***** Testing for the original and all of the variants *****)
+(* Using the origcode requires initializing B, C, f, g, and N with values. *)
+
+val f = list_to_mvector [1,2,3,4,0]
+
+val g = list_to_mvector [4,3,2,1,0]
+
+val C = list_to_mvector [10,20,30,40,50]
+
+val test_org = mvector_to_list(orgcode (empty_v,C,f,g,5)) = [70,70,70,70,20]
+
+val variant1_test1 = mvector_to_list(orgcode(empty_v,C,f,g,5)) 
+                     = mvector_to_list(codevariant1(empty_v,C,f,g,5))
+
+(* Test where packing needs to do a cleanup pass *)
+(* Well no because output of original code doesn't depend on index 2
+ * if it just isn't there *)
+val f = list_to_mvector [1,1,3,3,0]
+
+val g = list_to_mvector [4,4,1,1,0]
+
+val C = list_to_mvector [10,20,30,40,50]
+
+val variant1_test2 = mvector_to_list(orgcode(empty_v,C,f,g,5)) 
+                     = mvector_to_list(codevariant1(empty_v,C,f,g,5))
+
+(* What about the output from the inspector? *)
+val inspec_out = mvector_to_list(inspector( construct_explicit_relation(5,f,g)))
