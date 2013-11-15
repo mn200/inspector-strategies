@@ -13,7 +13,7 @@ struct
   fun update ((f,sz) : mvector, i, v) =
       (fnupdate f i v, Int.max(sz,i+1))
 
-  val empty_r = ((fn _ => false), 0, 0)
+  fun empty_r (n,m) = ((fn _ => false), n, m)
   fun rsub ((rf,xsz,ysz), x, y) =
       if x < xsz andalso y < ysz then rf(x,y)
       else raise Fail "indexing outside relation's domain"
@@ -30,16 +30,17 @@ struct
       List.rev (FOR (0,sz) (fn i => fn l => f i :: l) [])
 
 
-    val list_to_mrel = List.foldl (fn ((x,y), r) => r_update (r,x,y))
-                                  empty_r
-    fun mrel_to_list (mf, xsz, ysz) =
+  fun list_to_mrel (N,M) = List.foldl (fn ((x,y), r) => r_update (r,x,y))
+                                      (empty_r (N,M))
+
+  fun mrel_to_list (mf, xsz, ysz) =
        FOR(0,xsz) (fn x => fn l =>
          FOR (0, ysz)
            (fn y => fn l => if mf (x,y) then (x,y)::l else l)
            l)
            []
 
-    fun mrel_at_x (mf, xsz, ysz) x =
+  fun mrel_at_x (mf, xsz, ysz) x =
       List.rev
           (FOR(0,ysz) (fn y => fn l => if mf(x,y) then y::l else l) [])
 

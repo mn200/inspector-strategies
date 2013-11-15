@@ -71,10 +71,12 @@ fun orgcode (B,C,f,g,N) =
  * }
  *)
 (* constructs mrel for d2c = { [ x ] -> [ i ] | x=f(i) \/ x=g(i) } *)
-fun construct_explicit_relation (N,f,g) =
+(* M is the domain size [0,M). *)
+(* N is the range size [0,N) or possible values of i. *)
+fun construct_explicit_relation (M,N,f,g) =
     FOR (0,N)
         (fn i => fn E => r_update(r_update(E,sub(f,i),i), sub(g,i),i))
-        empty_r
+        (empty_r (M,N))
 
     (* cheating initially to test codevariant1 *)
     (*list_to_mrel [(1,0),(4,0),(2,1),(3,1),(3,2),(2,2),(4,3),(1,3),(0,4),(0,4)]*)
@@ -111,9 +113,9 @@ fun inspector (E) =
     end
 *)
 
-fun codevariant1 (B,C,f,g,N) =
+fun codevariant1 (B,C,f,g,N,M) =
     let
-	val E = construct_explicit_relation(N,f,g)
+	val E = construct_explicit_relation(M,N,f,g)
 	val dinv = inspector(E)
     in
 
@@ -138,7 +140,7 @@ val C = list_to_mvector [10,20,30,40,50]
 val test_org = mvector_to_list(orgcode (empty_v,C,f,g,5)) = [70,70,70,70,20]
 
 val variant1_test1 = mvector_to_list(orgcode(empty_v,C,f,g,5)) 
-                     = mvector_to_list(codevariant1(empty_v,C,f,g,5))
+                     = mvector_to_list(codevariant1(empty_v,C,f,g,5,5))
 
 (* Test where packing needs to do a cleanup pass *)
 (* Well no because output of original code doesn't depend on index 2
@@ -150,7 +152,17 @@ val g = list_to_mvector [4,4,1,1,0]
 val C = list_to_mvector [10,20,30,40,50]
 
 val variant1_test2 = mvector_to_list(orgcode(empty_v,C,f,g,5)) 
-                     = mvector_to_list(codevariant1(empty_v,C,f,g,5))
+                     = mvector_to_list(codevariant1(empty_v,C,f,g,5,5))
 
 (* What about the output from the inspector? *)
-val inspec_out = mvector_to_list(inspector( construct_explicit_relation(5,f,g)))
+val inspec_out = mvector_to_list(inspector( construct_explicit_relation(5,5,f,g)))
+
+val fsz3 =  list_to_mvector [1,1,3]
+
+val gsz3 =  list_to_mvector [1,1,3]
+
+(*
+val test = mrel_to_list ( construct_explicit_relation(3,5,fsz3,gsz3) )
+val inspec_out3 = 
+    mvector_to_list(inspector( construct_explicit_relation(5,3,fsz3,gsz3)))
+*)

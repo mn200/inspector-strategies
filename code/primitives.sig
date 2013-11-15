@@ -4,15 +4,26 @@
  
 signature primitives =
 sig
+  
+  type mvector
+  type mrelation
 
+(* Hiding implementation details in the interface declaration.  
   type mvector = (int -> int) * int
   type mrelation = ((int * int -> bool) * int * int)
+*)
 
+  (* Create an empty vector domain [0,0) *)
   val empty_v : mvector
+
+  (* return a vector where given index has been changed to given value *)
   val update : mvector * int * int -> mvector
 
+  (* create a relation with the specified domain [0,N)x[0,M) *)
+  val empty_r : int * int -> mrelation
+
+  (* created relation should include old relation union new pair *)
   val r_update : mrelation * int * int -> mrelation
-  val empty_r : mrelation
 
   val sub : mvector * int -> int
   val rsub : mrelation * int * int -> bool
@@ -23,7 +34,7 @@ sig
 
   val list_to_mvector : int list -> mvector
   val mvector_to_list : mvector -> int list
-  val list_to_mrel : (int * int) list -> mrelation
+  val list_to_mrel : (int*int) -> (int * int) list -> mrelation
   val mrel_to_list : mrelation -> (int * int) list
   val mrel_at_x : mrelation -> int -> int list
 
