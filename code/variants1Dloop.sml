@@ -62,6 +62,9 @@ fun orgcode (B,C,f,g,N) =
  *     if (!visited[i]) { dinv[count++] = i; visited[i] = 1; }
  *   }
  * }
+ * // Will want this for more general version of cpack but for
+ * // this particular example not needed since know each iteration
+ * // i will show up in the relation.
  * for (i=0; i<N; i++) {  \\ check that everyone got reordered
  *   if (!visited[i]) { dinv[count++] = i; }
  *
@@ -78,11 +81,6 @@ fun construct_explicit_relation (M,N,f,g) =
         (fn i => fn E => r_update(r_update(E,sub(f,i),i), sub(g,i),i))
         (empty_r (M,N))
 
-    (* cheating initially to test codevariant1 *)
-    (*list_to_mrel [(1,0),(4,0),(2,1),(3,1),(3,2),(2,2),(4,3),(1,3),(0,4),(0,4)]*)
-
-    (* cheating initially to test codevariant1 *)
-(*    list_to_mvector [4,0,3,1,2] *)
 
 (* Using 0 and 1 for false and true because that is what mvector handles. *)
 fun inspector (E) =
@@ -95,7 +93,7 @@ fun inspector (E) =
                           (fn i => fn (dinv,visited) =>
                               (foldl 
                                 (fn (y,(dinv,visited)) =>
-                                  if 0=sub(visited,i)
+                                  if 0=sub(visited,y)
                                   then (update(dinv, size(dinv), y),
                                         update(visited, y, 1))
                                   else (dinv,visited))
@@ -105,14 +103,8 @@ fun inspector (E) =
     in
         dinv
     end 
-(*                           
 
-        fun pack_leftovers
-    in
-        pack_leftovers( pack_i_in_E )
-    end
-*)
-
+(* N is number of iterations, M is size of dataspaces *)
 fun codevariant1 (B,C,f,g,N,M) =
     let
 	val E = construct_explicit_relation(M,N,f,g)
@@ -155,14 +147,25 @@ val variant1_test2 = mvector_to_list(orgcode(empty_v,C,f,g,5))
                      = mvector_to_list(codevariant1(empty_v,C,f,g,5,5))
 
 (* What about the output from the inspector? *)
-val inspec_out = mvector_to_list(inspector( construct_explicit_relation(5,5,f,g)))
+val inspec_test2 = 
+    mvector_to_list(inspector( construct_explicit_relation(5,5,f,g)))
+    = [4,0,1,2,3]
 
-val fsz3 =  list_to_mvector [1,1,3]
+(* Test 3: Another example.  Now N=3 and M=5.  C can stay the same. *)
+val fsz3 =  list_to_mvector [0,4,3]
+val gsz3 =  list_to_mvector [1,4,2]
 
-val gsz3 =  list_to_mvector [1,1,3]
+val er_test3 = 
+    mrel_to_list ( construct_explicit_relation(5,3,fsz3,gsz3) )
+    =  [(4,1),(3,2),(2,2),(1,0),(0,0)]
 
-(*
-val test = mrel_to_list ( construct_explicit_relation(3,5,fsz3,gsz3) )
-val inspec_out3 = 
+(* Used for debugging.
+val E = construct_explicit_relation(5,3,fsz3,gsz3);
+val xsize = rsize_for_x(E);
+val ysize = rsize_for_y(E);
+val inspec_test3 = 
     mvector_to_list(inspector( construct_explicit_relation(5,3,fsz3,gsz3)))
 *)
+val variant1_test3 = mvector_to_list(orgcode(empty_v,C,fsz3,gsz3,3)) 
+                     = mvector_to_list(codevariant1(empty_v,C,fsz3,gsz3,3,5))
+
