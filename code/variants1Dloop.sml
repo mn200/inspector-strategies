@@ -88,7 +88,7 @@ fun inspector (E) =
         val visited = FOR (0,rsizey(E))
                           (fn i => fn visited => update(visited, i, 0) )
                           empty_v
-        fun pack_i_in_E E = 
+        (*fun pack_i_in_E E = 
                       FOR (0,rsizex(E))
                           (fn i => fn (dinv,visited) =>
                               (foldl 
@@ -98,8 +98,15 @@ fun inspector (E) =
                                         update(visited, y, 1))
                                   else (dinv,visited))
                                 (dinv,visited)  (mrel_at_x E i) ) )
-                          (empty_v,visited)
-        val (dinv,visited) = pack_i_in_E E
+                          (empty_v,visited)*)
+        val (dinv,visited) = 
+	    RFOR X 
+		 (fn (x,y) => fn (dinv,visited) =>
+		     if 0=sub(visited,y)
+	             then ( update(dinv,size(dinv),y), update(visited, y, 1) )
+                     else ( dinv, visited ) )
+                 E
+		 (empty_v,visited)
     in
         dinv
     end 
