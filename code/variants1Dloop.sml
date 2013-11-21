@@ -83,39 +83,41 @@ fun construct_explicit_relation (M,N,f,g) =
 
 
 (* Using 0 and 1 for false and true because that is what mvector handles. *)
-fun inspector (E) =
+fun cpack_inspector (E) =
     let 
         val visited = FOR (0,rsizey(E))
-                          (fn i => fn visited => update(visited, i, 0) )
+                          (fn i => fn visited => update(visited,i,0) )
                           empty_v
-        (*fun pack_i_in_E E = 
-                      FOR (0,rsizex(E))
-                          (fn i => fn (dinv,visited) =>
-                              (foldl 
-                                (fn (y,(dinv,visited)) =>
-                                  if 0=sub(visited,y)
-                                  then (update(dinv, size(dinv), y),
-                                        update(visited, y, 1))
-                                  else (dinv,visited))
-                                (dinv,visited)  (mrel_at_x E i) ) )
-                          (empty_v,visited)*)
+
+        fun pack (dinv,visited,y) =
+	    if 0=sub(visited,y)
+	    then ( update(dinv,size(dinv),y), update(visited, y, 1) )
+            else ( dinv, visited  )
+
+        (* use the relation to pack values of y as seen 
+         * with in order x values *)
         val (dinv,visited) = 
 	    RFOR X 
-		 (fn (x,y) => fn (dinv,visited) =>
-		     if 0=sub(visited,y)
-	             then ( update(dinv,size(dinv),y), update(visited, y, 1) )
-                     else ( dinv, visited ) )
+		 (fn (x,y) => fn (dinv,visited) => 
+		     pack(dinv,visited,y))
                  E
 		 (empty_v,visited)
+
+        (* do cleanup on dinv to ensure all y's in relation have 
+         * been ordered in dinv *)
+	val (dinv,visited) =	 
+            FOR (0,rsizey(E))
+		(fn y => fn (dinv,visited) => pack(dinv,visited,y))
+		(dinv,visited)
     in
-        dinv
-    end 
+	dinv
+    end
 
 (* N is number of iterations, M is size of dataspaces *)
 fun codevariant1 (B,C,f,g,N,M) =
     let
 	val E = construct_explicit_relation(M,N,f,g)
-	val dinv = inspector(E)
+	val dinv = cpack_inspector(E)
     in
 
 	FOR (0,N)
@@ -155,7 +157,8 @@ val variant1_test2 = mvector_to_list(orgcode(empty_v,C,f,g,5))
 
 (* What about the output from the inspector? *)
 val inspec_test2 = 
-    mvector_to_list(inspector( construct_explicit_relation(5,5,f,g)))
+    mvector_to_list(cpack_inspector( 
+			 construct_explicit_relation(5,5,f,g)))
     = [4,0,1,2,3]
 
 (* Test 3: Another example.  Now N=3 and M=5.  C can stay the same. *)
