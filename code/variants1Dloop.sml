@@ -85,11 +85,11 @@ fun construct_explicit_relation (M,N,f,g) =
 (* Using 0 and 1 for false and true because that is what mvector handles. *)
 fun inspector (E) =
     let 
-        val visited = FOR (0,rsize_for_y(E))
+        val visited = FOR (0,rsizey(E))
                           (fn i => fn visited => update(visited, i, 0) )
                           empty_v
         fun pack_i_in_E E = 
-                      FOR (0,rsize_for_x(E))
+                      FOR (0,rsizex(E))
                           (fn i => fn (dinv,visited) =>
                               (foldl 
                                 (fn (y,(dinv,visited)) =>

@@ -8,6 +8,7 @@ sig
   type mvector
   type mrelation
 
+
 (* Hiding implementation details in the interface declaration.  
   type mvector = (int -> int) * int
   type mrelation = ((int * int -> bool) * int * int)
@@ -29,14 +30,15 @@ sig
   val rsub : mrelation * int * int -> bool
 
   val size : mvector -> int
-  val rsize_for_x : mrelation -> int
-  val rsize_for_y : mrelation -> int
+  val rsizex : mrelation -> int
+  val rsizey : mrelation -> int
 
   val list_to_mvector : int list -> mvector
   val mvector_to_list : mvector -> int list
   val list_to_mrel : (int*int) -> (int * int) list -> mrelation
   val mrel_to_list : mrelation -> (int * int) list
   val mrel_at_x : mrelation -> int -> int list
+  val mrel_at_y : mrelation -> int -> int list
 
 (*
          val C,D,f,g :  mvector
@@ -45,6 +47,17 @@ sig
   val f = list_to_mvector [1,2,3,4]
 
 *)
+
+  datatype direction = X | Y
+
+  (* RFOR dir f mrel acc
+     
+     is a functional for loop over the (x,y) relations in mrel.
+     dir indicates whether to visit the relations in order of X or Y
+     values.  f is the body of the loop and modifies the accumulator.
+  *)
+  val RFOR : direction -> ((int * int) -> 'a -> 'a) -> mrelation -> 'a -> 'a
+ 
 
   val FOR : (int * int) -> (int -> 'a -> 'a) -> 'a -> 'a
   (* FOR (lo, hi) f acc

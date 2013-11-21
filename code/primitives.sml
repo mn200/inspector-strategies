@@ -4,6 +4,8 @@ struct
   type mvector = (int -> int) * int
   type mrelation = ((int * int -> bool) * int * int)
 
+  datatype direction = X | Y
+
   fun FOR (lo,hi) f acc = if lo >= hi then acc else FOR (lo+1,hi) f (f lo acc)
 
   fun fnupdate f d r = (fn x => if x = d then r else f x)
@@ -21,8 +23,8 @@ struct
       (fnupdate rf (x,y) true, Int.max(xsz,x+1), Int.max(ysz,y+1))
 
   fun size ((f,sz) : mvector) = sz
-  fun rsize_for_x ((rf,xsz,ysz) : mrelation) = xsz
-  fun rsize_for_y ((rf,xsz,ysz) : mrelation) = ysz
+  fun rsizex ((rf,xsz,ysz) : mrelation) = xsz
+  fun rsizey ((rf,xsz,ysz) : mrelation) = ysz
 
   fun list_to_mvector l =
       ((fn i => Vector.sub(Vector.fromList l,i)), length l)
@@ -44,7 +46,26 @@ struct
       List.rev
           (FOR(0,ysz) (fn y => fn l => if mf(x,y) then y::l else l) [])
 
+  fun mrel_at_y (mf, xsz, ysz) y =
+      List.rev
+          (FOR(0,xsz) (fn x => fn l => if mf(x,y) then x::l else l) [])
 
+  fun RFOR dir f mrel acc =
+      case dir of
+	  X => FOR (0, rsizex(mrel))
+		   (fn x => fn acc =>
+		       let val row = mrel_at_x mrel x
+		       in
+			   foldl (fn(y,acc) => f(x,y) acc) acc row
+		       end)
+		   acc
+	| Y => FOR (0,rsizey(mrel))
+                   (fn y => fn acc => 
+		       let val col = mrel_at_y mrel y
+		       in
+			   foldl (fn(x,acc) => f(x,y) acc) acc col
+		       end)
+		   acc
 
 
 end
