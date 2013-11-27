@@ -52,19 +52,21 @@ val _ = new_theory "simpleLoop";
 
 val vsub_simple_update_out_range_FOR = store_thm(
   "vsub_simple_update_out_range_FOR",
-  ``∀i A. i < lo ∨ hi ≤ i ⇒ FOR (lo,hi) (λi a. update a i (g i a)) A ' i = A ' i``,
-  Induct_on `hi - lo` >> srw_tac[ARITH_ss][Once FOR_def] >>
+  ``∀i A. i < lo ∨ hi ≤ i ∨ vsz A ≤ i ⇒ FOR (lo,hi) (λi a. update a i (g i a)) A ' i = A ' i``,
+  rpt strip_tac >> DEEP_INTRO_TAC FOR_RULE >>
+  qexists_tac `λj a. vsz A = vsz a ∧ a ' i = A ' i` >>
   srw_tac[ARITH_ss][update_sub]);
 
 val vsub_simple_update_in_range_FOR = store_thm(
   "vsub_simple_update_in_range_FOR",
   ``∀i A. lo ≤ i ∧ i < hi ∧ hi ≤ vsz A ⇒
           FOR (lo,hi) (λj a. update a j (g j)) A ' i = g i``,
-  Induct_on `hi - lo` >- srw_tac[ARITH_ss][Once FOR_def] >>
-  rpt strip_tac >> srw_tac[ARITH_ss][Once FOR_def] >>
-  `i = lo ∨ lo + 1 ≤ i ∧ i < hi` by decide_tac
-  >- srw_tac[ARITH_ss][vsub_simple_update_out_range_FOR, update_sub] >>
-  srw_tac[ARITH_ss][]);
+  rpt strip_tac >> DEEP_INTRO_TAC FOR_RULE >>
+  qexists_tac `λj a. vsz a = vsz A ∧ ∀k. lo ≤ k ∧ k < j ⇒ a ' k = g k` >>
+  asm_simp_tac (srw_ss() ++ ARITH_ss)[] >>
+  map_every qx_gen_tac [`j`, `a`] >> strip_tac >>
+  qx_gen_tac `k` >> strip_tac >>
+  `k = j ∨ k < j` by decide_tac >> srw_tac[ARITH_ss][update_sub]);
 
 val PERMS_suffice0 = prove(
   ``BIJ Δ (count N) (count N) ∧

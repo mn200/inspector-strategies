@@ -92,17 +92,26 @@ val vsz_update = store_thm(
   Cases_on `a` >> rw[update_def]);
 val _ = export_rewrites ["vsz_update"]
 
+val FOR_RULE = store_thm(
+  "FOR_RULE",
+  ``Inv lo A ∧ (∀i a. lo ≤ i ∧ i < hi ∧ Inv i a ⇒ Inv (i + 1) (f i a)) ∧
+    (∀j a. hi ≤ j ∧ Inv j a ⇒ P a)
+   ⇒
+    P (FOR (lo,hi) f A)``,
+  qid_spec_tac `A` >> Induct_on `hi - lo`
+  >- srw_tac[ARITH_ss][Once FOR_def] >>
+  srw_tac[ARITH_ss][FOR_nonzero]);
+
 val vsz_update_FOR = store_thm(
   "vsz_update_FOR",
   ``∀A. vsz (FOR (lo, hi) (λi a. update a (f i a) (g i a)) A) = vsz A``,
-  Induct_on `hi - lo` >> ONCE_REWRITE_TAC [FOR_def] >>
-  srw_tac[ARITH_ss][]);
+  strip_tac >> DEEP_INTRO_TAC FOR_RULE >> qexists_tac `λi a. vsz a = vsz A` >>
+  srw_tac[][]);
 
 val range_CONG = store_thm(
   "range_CONG",
   ``(!i A. lo ≤ i ∧ i < hi ⇒ (f i A = f' i A)) ⇒
     FOR (lo, hi) f B = FOR (lo,hi) f' B``,
-  strip_tac >>
   qid_spec_tac `B` >> Induct_on `hi - lo`
   >- (ONCE_REWRITE_TAC [FOR_def] >> srw_tac[ARITH_ss][]) >>
   rpt strip_tac >> srw_tac[ARITH_ss][FOR_nonzero]);
