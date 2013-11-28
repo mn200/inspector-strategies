@@ -355,10 +355,12 @@ val _ = Hol_datatype`direction = X | Y`
 val RFOR_def = Define`
   RFOR X f mr A =
     FOR (0, rsizex mr)
-        (λx acc. FOLDL (λy acc. f (x,y) acc) acc (mrel_at_x mr x)) ∧
+        (λx acc. FOLDL (λacc y. f (x,y) acc) acc (mrel_at_x mr x))
+        A ∧
   RFOR Y f mr A =
     FOR (0, rsizey mr)
-        (λy acc. FOLDL (λx acc. f (x,y) acc) acc (mrel_at_y mr y))
+        (λy acc. FOLDL (λacc x. f (x,y) acc) acc (mrel_at_y mr y))
+        A
 `
 
 val _ = export_theory();
