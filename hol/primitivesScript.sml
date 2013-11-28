@@ -8,6 +8,8 @@ val _ = new_theory "primitives";
 val _ = ParseExtras.tight_equality()
 
 val _ = type_abbrev ("mvector", ``:(num -> 'a) # num``)
+val SAT_ss = SatisfySimps.SATISFY_ss
+val _ = augment_srw_ss [SAT_ss]
 
 val empty_v_def = Define`empty_v n v = (K v, n)`
 
@@ -45,6 +47,16 @@ val FOR_SUC_shift = store_thm(
     SRW_TAC[ARITH_ss][GSYM arithmeticTheory.ADD1]
   ]);
 
+val FOR_RULE = store_thm(
+  "FOR_RULE",
+  ``Inv lo A ∧ (∀i a. lo ≤ i ∧ i < hi ∧ Inv i a ⇒ Inv (i + 1) (f i a)) ∧
+    (∀j a. hi ≤ j ∧ Inv j a ⇒ P a)
+   ⇒
+    P (FOR (lo,hi) f A)``,
+  qid_spec_tac `A` >> Induct_on `hi - lo`
+  >- srw_tac[ARITH_ss][Once FOR_def] >>
+  srw_tac[ARITH_ss][FOR_nonzero]);
+
 val update_def = Define`
   update (mv,sz) d r = if d < sz then ((d =+ r) mv, sz) else (mv, sz)
 `;
@@ -65,6 +77,29 @@ val mvector_to_list_def = Define`
 
 (* e.g. *)
 val _ = EVAL ``mvector_to_list (list_to_mvector [1;2;3;4])``
+
+val LENGTH_mvector_to_list = store_thm(
+  "LENGTH_mvector_to_list",
+  ``LENGTH (mvector_to_list mv) = vsz mv``,
+  `∃mvf msz. mv = (mvf, msz)` by (Cases_on `mv` >> simp[]) >>
+  rw[mvector_to_list_def] >>
+  DEEP_INTRO_TAC FOR_RULE >>
+  qexists_tac `λi l. i ≤ msz ∧ LENGTH l = i` >> simp[]);
+val _ = export_rewrites ["LENGTH_mvector_to_list"]
+
+val EL_mvector_to_list = store_thm(
+  "EL_mvector_to_list",
+  ``i < vsz v ⇒ (EL i (mvector_to_list v) = v ' i)``,
+  `∃vf vz. v = (vf,vz)` by (Cases_on `v` >> simp[]) >>
+  rw[mvector_to_list_def] >>
+  DEEP_INTRO_TAC FOR_RULE >>
+  qexists_tac `
+    λj a. j ≤ vz ∧ LENGTH a = j ∧ (∀k. k < j ⇒ EL k (REVERSE a) = vf k)` >>
+  simp[] >> rpt strip_tac
+  >- (`k = LENGTH a ∨ k < LENGTH a` by decide_tac
+      >- simp[rich_listTheory.EL_APPEND2] >>
+      simp[rich_listTheory.EL_APPEND1]) >>
+  simp[vsub_def]);
 
 val mvector_list_ISO = store_thm(
   "mvector_list_ISO",
@@ -93,16 +128,6 @@ val vsz_update = store_thm(
   ``vsz (update a i x) = vsz a``,
   Cases_on `a` >> rw[update_def]);
 val _ = export_rewrites ["vsz_update"]
-
-val FOR_RULE = store_thm(
-  "FOR_RULE",
-  ``Inv lo A ∧ (∀i a. lo ≤ i ∧ i < hi ∧ Inv i a ⇒ Inv (i + 1) (f i a)) ∧
-    (∀j a. hi ≤ j ∧ Inv j a ⇒ P a)
-   ⇒
-    P (FOR (lo,hi) f A)``,
-  qid_spec_tac `A` >> Induct_on `hi - lo`
-  >- srw_tac[ARITH_ss][Once FOR_def] >>
-  srw_tac[ARITH_ss][FOR_nonzero]);
 
 val vsz_update_FOR = store_thm(
   "vsz_update_FOR",
