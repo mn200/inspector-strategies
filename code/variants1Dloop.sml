@@ -1,4 +1,6 @@
+(******************************************************************************)
 (* variants1Dloop.sml *)
+(******************************************************************************)
 
 (* A fully parallelizable 1D loop implemented functionally
  * and variants of it with various inspector strategies.
@@ -12,6 +14,20 @@ use "primitives.sig";
 use "primitives.sml";
 open primitives
 
+(******************************************************************************)
+(* Some testing for primitives *)
+val iupdate_test1 =
+    ivector_to_list( iupdate( empty_iv(3,7), 2, 42)) = [0,0,42]
+
+val dupdate_test1 =
+    dvector_to_list( dupdate( empty_dv(3,false), 1, true)) = [false,true,false]
+
+
+
+
+
+
+(******************************************************************************)
 (* Original Code in C
  *
  * for (i=0; i<N; i++) {
@@ -20,12 +36,13 @@ open primitives
  *)
 fun orgcode (B,C,f,g,N) =
     FOR (0,N)
-        (fn i => fn B => update(B, i, sub(C, sub(f,i)) + sub(C, sub(g,i))))
+        (fn i => fn B => dupdate(B, i, dsub(C, isub(f,i)) + dsub(C, isub(g,i))))
         B
 
+(******************************************************************************)
 (* Variant 1
  * Transformed code in C, using cpack heuristic to reorder iterations
- *     T = { [i] -> [j] | j=d(i) } is transformation specification
+ *     T = { [i] -> [j] | j=d(i) /\ 0<=i ... } is transformation specification
  *
  * // Inspector creating hypergraph-like (or CSR-like) representation
  * // for input to lexgroup heuristic.  Stores data to computation relation.
@@ -78,37 +95,37 @@ fun orgcode (B,C,f,g,N) =
 (* N is the range size [0,N) or possible values of i. *)
 fun construct_explicit_relation (M,N,f,g) =
     FOR (0,N)
-        (fn i => fn E => r_update(r_update(E,sub(f,i),i), sub(g,i),i))
+        (fn i => fn E => r_update(r_update(E,isub(f,i),i), isub(g,i),i))
         (empty_r (M,N))
 
 
 (* Using 0 and 1 for false and true because that is what mvector handles. *)
 fun cpack_inspector (E) =
     let 
-        val visited = FOR (0,rsizey(E))
-                          (fn i => fn visited => update(visited,i,0) )
-                          empty_v
+        val visited = empty_dv ( rsizey(E), false )
+        val count = 0
 
-        fun pack (dinv,visited,y) =
-	    if 0=sub(visited,y)
-	    then ( update(dinv,size(dinv),y), update(visited, y, 1) )
-            else ( dinv, visited  )
+        (* pack y into dinv, count is current count of packed vals *)
+        fun pack (dinv,visited,count,y) =
+	    if not( dsub(visited,y) )
+	    then ( iupdate(dinv,count,y), dupdate(visited, y, true), count+1 )
+            else ( dinv, visited, count )
 
         (* use the relation to pack values of y as seen 
          * with in order x values *)
-        val (dinv,visited) = 
+        val (dinv,visited,count) = 
 	    RFOR X 
-		 (fn (x,y) => fn (dinv,visited) => 
-		     pack(dinv,visited,y))
+		 (fn (x,y) => fn (dinv,visited,count) => 
+		     pack(dinv,visited,count,y))
                  E
-		 (empty_v,visited)
+		 (empty_iv(rsizey(E),rsizey(E)), visited, count)
 
         (* do cleanup on dinv to ensure all y's in relation have 
          * been ordered in dinv *)
-	val (dinv,visited) =	 
+	val (dinv,visited,count) =	 
             FOR (0,rsizey(E))
-		(fn y => fn (dinv,visited) => pack(dinv,visited,y))
-		(dinv,visited)
+		(fn y => fn (dinv,visited,count) => pack(dinv,visited,count,y))
+		(dinv,visited,count)
     in
 	dinv
     end
@@ -122,60 +139,76 @@ fun codevariant1 (B,C,f,g,N,M) =
 
 	FOR (0,N)
             (fn j => fn B => 
-                let val i = sub(dinv,j) in
-	            update(B, i, sub(C, sub(f,i)) + sub(C, sub(g,i)))
+                let val i = isub(dinv,j) in
+	            dupdate(B, i, dsub(C, isub(f,i)) + dsub(C, isub(g,i)))
                 end )
             B
     end
 
-
+(******************************************************************************)
+(******************************************************************************)
 (***** Testing for the original and all of the variants *****)
 (* Using the origcode requires initializing B, C, f, g, and N with values. *)
 
-val f = list_to_mvector [1,2,3,4,0]
+val f = list_to_ivector [1,2,3,4,0]
 
-val g = list_to_mvector [4,3,2,1,0]
+val g = list_to_ivector [4,3,2,1,0]
 
-val C = list_to_mvector [10,20,30,40,50]
+val C = list_to_dvector [10,20,30,40,50]
+(*
+val test_org = dvector_to_list(orgcode (empty_dv(isizex(f),0),C,f,g,5)) 
+	       = [70,70,70,70,20]
 
-val test_org = mvector_to_list(orgcode (empty_v,C,f,g,5)) = [70,70,70,70,20]
-
-val variant1_test1 = mvector_to_list(orgcode(empty_v,C,f,g,5)) 
-                     = mvector_to_list(codevariant1(empty_v,C,f,g,5,5))
+val er_test1 = mrel_to_list(construct_explicit_relation(5,5,f,g))
+*)
+val inspec_test1 = 
+    ivector_to_list(cpack_inspector( 
+			 construct_explicit_relation(5,5,f,g)))
+    = [4,0,3,1,2]
+(*
+val variant1_out = dvector_to_list(
+	codevariant1(empty_dv(isizex(f),0),C,f,g,5,5))
+*)
+val variant1_test1 = dvector_to_list(orgcode(empty_dv(isizex(f),0),C,f,g,5)) 
+                     = dvector_to_list(
+			 codevariant1(empty_dv(isizex(f),0),C,f,g,5,5))
 
 (* Test where packing needs to do a cleanup pass *)
 (* Well no because output of original code doesn't depend on index 2
  * if it just isn't there *)
-val f = list_to_mvector [1,1,3,3,0]
+val f = list_to_ivector [1,1,3,3,0]
 
-val g = list_to_mvector [4,4,1,1,0]
+val g = list_to_ivector [4,4,1,1,0]
 
-val C = list_to_mvector [10,20,30,40,50]
+val C = list_to_dvector [10,20,30,40,50]
 
-val variant1_test2 = mvector_to_list(orgcode(empty_v,C,f,g,5)) 
-                     = mvector_to_list(codevariant1(empty_v,C,f,g,5,5))
+val variant1_test2 = dvector_to_list(orgcode(empty_dv(isizex(f),0),C,f,g,5)) 
+                     = dvector_to_list(
+			 codevariant1(empty_dv(isizex(f),0),C,f,g,5,5))
 
 (* What about the output from the inspector? *)
 val inspec_test2 = 
-    mvector_to_list(cpack_inspector( 
+    ivector_to_list(cpack_inspector( 
 			 construct_explicit_relation(5,5,f,g)))
     = [4,0,1,2,3]
 
 (* Test 3: Another example.  Now N=3 and M=5.  C can stay the same. *)
-val fsz3 =  list_to_mvector [0,4,3]
-val gsz3 =  list_to_mvector [1,4,2]
-
+val fsz3 =  list_to_ivector [0,4,3]
+val gsz3 =  list_to_ivector [1,4,2]
+(*
 val er_test3 = 
     mrel_to_list ( construct_explicit_relation(5,3,fsz3,gsz3) )
     =  [(4,1),(3,2),(2,2),(1,0),(0,0)]
-
-(* Used for debugging.
-val E = construct_explicit_relation(5,3,fsz3,gsz3);
-val xsize = rsize_for_x(E);
-val ysize = rsize_for_y(E);
-val inspec_test3 = 
-    mvector_to_list(inspector( construct_explicit_relation(5,3,fsz3,gsz3)))
 *)
-val variant1_test3 = mvector_to_list(orgcode(empty_v,C,fsz3,gsz3,3)) 
-                     = mvector_to_list(codevariant1(empty_v,C,fsz3,gsz3,3,5))
+(* Used for debugging. *)
+(*val E = construct_explicit_relation(5,3,fsz3,gsz3);
+val xsize = rsizex(E);
+val ysize = rsizey(E);
+val inspec_test3 = 
+    ivector_to_list(cpack_inspector(construct_explicit_relation(5,3,fsz3,gsz3)))
+*)
+val variant1_test3 = dvector_to_list(
+	                 orgcode(empty_dv(isizex(fsz3),0),C,fsz3,gsz3,3)) 
+		     = dvector_to_list(
+			 codevariant1(empty_dv(isizex(fsz3),0),C,fsz3,gsz3,3,5))
 

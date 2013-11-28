@@ -1,19 +1,43 @@
 structure primitives :> primitives =
 struct
 
-  type mvector = (int -> int) * int
+  type 'a dvector = (int -> 'a) * int
+  type ivector = (int -> int) * int * int
   type mrelation = ((int * int -> bool) * int * int)
 
   datatype direction = X | Y
 
   fun FOR (lo,hi) f acc = if lo >= hi then acc else FOR (lo+1,hi) f (f lo acc)
 
-  fun fnupdate f d r = (fn x => if x = d then r else f x)
-  val empty_v = (fn _ => raise Fail "indexing past end of vector", 0)
-  fun sub((f,sz): mvector, i) = if i < sz then f i
-                                else raise Fail "indexing past end of vector"
-  fun update ((f,sz) : mvector, i, v) =
-      (fnupdate f i v, Int.max(sz,i+1))
+  (*val empty_v = (fn _ => raise Fail "indexing past end of vector", 0)*)
+  fun empty_dv (N, initval) =
+      (fn idx => if (0<=idx andalso idx<N) 
+		 then initval 
+		 else raise Fail "index out of bounds",
+       N)
+
+  fun empty_iv (N,M) =
+      (fn idx => if (0<=idx andalso idx<N) 
+		 then 0 
+		 else raise Fail "index out of bounds",
+       N, M)
+
+  fun fnsub (f, i, xsz) =
+      if (0<=i andalso i < xsz) then f i
+      else raise Fail "indexing out of bounds"
+
+  fun dsub((f,xsz): 'a dvector, i) =
+      fnsub (f, i, xsz)
+
+  fun isub((f,xsz,ysz): ivector, i) = 
+      fnsub (f, i, xsz)
+
+  fun fnupdate f idx v = (fn x => if x = idx then v else f x)
+
+  fun dupdate ((f,xsz) : 'a dvector, idx, v) =
+      (fnupdate f idx v, xsz)
+  fun iupdate ((f,xsz,ysz) : ivector, idx, v) =
+      (fnupdate f idx v, xsz, ysz)
 
   fun empty_r (n,m) = ((fn _ => false), n, m)
   fun rsub ((rf,xsz,ysz), x, y) =
@@ -22,14 +46,33 @@ struct
   fun r_update ((rf, xsz, ysz), x, y) =
       (fnupdate rf (x,y) true, Int.max(xsz,x+1), Int.max(ysz,y+1))
 
-  fun size ((f,sz) : mvector) = sz
+  fun dsizex ((f,xsz) : 'a dvector) = xsz
+  fun isizex ((f,xsz,ysz) : ivector) = xsz
+  fun isizey ((f,xsz,ysz) : ivector) = ysz
   fun rsizex ((rf,xsz,ysz) : mrelation) = xsz
   fun rsizey ((rf,xsz,ysz) : mrelation) = ysz
 
-  fun list_to_mvector l =
+  fun list_to_dvector l =
       ((fn i => Vector.sub(Vector.fromList l,i)), length l)
-  fun mvector_to_list (f, sz) =
+
+  fun list_to_ivector l =
+      let val vec = Vector.fromList l
+      in
+	  ((fn i => Vector.sub(vec,i)), 
+	   length l,
+	   (* compute the max value for values, assume 0 is min *)
+	   foldl (fn (v,max) => if v>max then v else max)
+		 0 
+		 l
+	  )
+      end
+
+
+  fun dvector_to_list (f, sz) =
       List.rev (FOR (0,sz) (fn i => fn l => f i :: l) [])
+
+  fun ivector_to_list (f, xsz, ysz) =
+      List.rev (FOR (0,xsz) (fn i => fn l => f i :: l) [])
 
 
   fun list_to_mrel (N,M) = List.foldl (fn ((x,y), r) => r_update (r,x,y))
@@ -67,5 +110,5 @@ struct
 		       end)
 		   acc
 
-
 end
+

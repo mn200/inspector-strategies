@@ -5,20 +5,20 @@
 signature primitives =
 sig
   
-  type mvector
-  type mrelation
+  type 'a dvector (* data array *)
+  type ivector    (* index array, or explicit function *)
+  type mrelation  (* explicit relation *)
 
+  (* Create a data vector with domain [0,N) and given initial values. *)
+  val empty_dv : int * 'a -> 'a dvector
 
-(* Hiding implementation details in the interface declaration.  
-  type mvector = (int -> int) * int
-  type mrelation = ((int * int -> bool) * int * int)
-*)
-
-  (* Create an empty vector domain [0,0) *)
-  val empty_v : mvector
+  (* Create a vector with domain [0,N) and range [0,M) and
+   * set all initial values to 0. *)
+  val empty_iv : int * int -> ivector
 
   (* return a vector where given index has been changed to given value *)
-  val update : mvector * int * int -> mvector
+  val dupdate : 'a dvector * int * 'a  -> 'a dvector
+  val iupdate : ivector * int * int -> ivector
 
   (* create a relation with the specified domain [0,N)x[0,M) *)
   val empty_r : int * int -> mrelation
@@ -26,27 +26,28 @@ sig
   (* created relation should include old relation union new pair *)
   val r_update : mrelation * int * int -> mrelation
 
-  val sub : mvector * int -> int
+  (* index into vectors or relation *)
+  val isub : ivector * int -> int
+  val dsub : 'a dvector * int -> 'a
   val rsub : mrelation * int * int -> bool
 
-  val size : mvector -> int
+  (* Return domain size (x) or range size (y) *)
+  val dsizex : 'a dvector -> int
+  val isizex : ivector -> int
+  val isizey : ivector -> int
   val rsizex : mrelation -> int
   val rsizey : mrelation -> int
 
-  val list_to_mvector : int list -> mvector
-  val mvector_to_list : mvector -> int list
+  (* utility functions for testing and initialization *)
+  val list_to_dvector : 'a list -> 'a dvector
+  val list_to_ivector : int list -> ivector
+  val dvector_to_list : 'a dvector -> 'a list
+  val ivector_to_list : ivector -> int list
   val list_to_mrel : (int*int) -> (int * int) list -> mrelation
   val mrel_to_list : mrelation -> (int * int) list
   val mrel_at_x : mrelation -> int -> int list
   val mrel_at_y : mrelation -> int -> int list
 
-(*
-         val C,D,f,g :  mvector
-         val E :  mrelation
-
-  val f = list_to_mvector [1,2,3,4]
-
-*)
 
   datatype direction = X | Y
 
