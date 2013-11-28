@@ -9,6 +9,8 @@ val _ = ParseExtras.tight_equality()
 
 val _ = type_abbrev ("mvector", ``:(num -> 'a) # num``)
 
+val empty_v_def = Define`empty_v n v = (K v, n)`
+
 val FOR_def = TotalDefn.tDefine "FOR" `
   FOR (lo,hi) body A = if lo < hi then FOR (lo+1,hi) body (body lo A)
                        else A
