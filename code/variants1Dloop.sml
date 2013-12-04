@@ -147,7 +147,7 @@ fun codevariant1 (B,C,f,g,N,M) =
 
 (******************************************************************************)
 (******************************************************************************)
-(***** Testing for the original and all of the variants *****)
+(***** Testing for the original loop with no deps and all of the variants *****)
 (* Using the origcode requires initializing B, C, f, g, and N with values. *)
 
 val f = list_to_ivector [1,2,3,4,0]
@@ -212,3 +212,153 @@ val variant1_test3 = dvector_to_list(
 		     = dvector_to_list(
 			 codevariant1(empty_dv(isizex(fsz3),0),C,fsz3,gsz3,3,5))
 
+
+
+(******************************************************************************)
+(* Original Code in C for loop with deps
+ *
+ *   for (i=0; i<N; i++) {
+ *     A[ f[i] ] =  A[ g[i] ] + A[ h[i] ];
+ *   }
+ *)
+fun orgcode (A,f,g,h,N) =
+    FOR (0,N)
+        (fn i => fn A => dupdate(A, isub(f,i), 
+				 dsub(A, isub(g,i)) + dsub(A, isub(h,i))))
+        A
+
+(*
+ * Domains and Ranges
+ *   Domain for A is [0,M)
+ *   Domain for original loop is [0,N)
+ *   Domain for f, g, and h is [0,N)
+ *   Range for f, g, and h is [0,M)
+ *
+ * Read Access Relation for A dataspace
+ *
+ *   R_A = { [i] -> [x] : i in Domain(loop) /\ x in Domain(A) /\
+ *                        (x=g(i) \/ x=h(i)) }
+ *
+ * Write Access Relation for A dataspace
+ *
+ *   W_A = { [i] -> [x] : i in Domain(loop) /\ x in Domain(A) /\
+ *                        x=f(i) }
+ *
+ * Dependence Relation
+ * 
+ *   Dep = { [i1] -> [i2] : i1 in Domain(loop) /\ i2 in Domain(loop) /\ 
+ *                          i1<i2 /\
+ *                          (exists x: ( (i1,x) in R_A /\ (i2,x) in W_A )
+ *                                  \/ ( (i1,x) in W_A /\ (i2,x) in W_A )
+ *                                  \/ ( (i1,x) in W_A /\ (i2,x) in R_A ) ) }
+ *)
+
+(* construct_R_A creates the read access relation for A *)
+fun construct_R_A(N,M,g,h) = 
+    FOR (0,N)
+	(fn i => fn E => r_update(r_update(E,i,isub(g,i)), i, isub(h,i)))
+        (empty_r (N,M))
+
+(* construct_W_A creates the write access relation for A *)
+fun construct_W_A(N,M,f) = 
+    FOR (0,N)
+	(fn i => fn E => r_update(E,i,isub(f,i)))
+        (empty_r (N,M))
+
+(* construct_Deps creates Deps.*)
+fun construct_Deps (N,R_A,W_A) =
+    empty_r(N,N) (* TODO *)
+
+
+(******************************************************************************)
+(* Variant 2, Topological sort
+ * Transformed code in C, use dependence relation direction 
+ * and do a topological sort
+ *
+ * Transformation specification
+ *     T = { [i] -> [j] | j=d(i) } is transformation specification
+ *
+ * User-defined inspector topsort
+ *     Assume dinv is inverse of d and that topological sort is returning dinv.
+ *   
+ *)
+
+(**** Input to user-defined inspector is Deps. ****)
+
+
+
+(******************************************************************************)
+(******************************************************************************)
+(***** Testing for the original loop with no deps and all of the variants *****)
+(* Using the origcode requires initializing B, C, f, g, and N with values. *)
+(*
+val f = list_to_ivector [1,2,3,4,0]
+
+val g = list_to_ivector [4,3,2,1,0]
+
+val C = list_to_dvector [10,20,30,40,50]
+*)
+(*
+val test_org = dvector_to_list(orgcode (empty_dv(isizex(f),0),C,f,g,5)) 
+	       = [70,70,70,70,20]
+
+val er_test1 = mrel_to_list(construct_explicit_relation(5,5,f,g))
+*)
+(*
+val inspec_test1 = 
+    ivector_to_list(cpack_inspector( 
+			 construct_explicit_relation(5,5,f,g)))
+    = [4,0,3,1,2]
+*)
+(*
+val variant1_out = dvector_to_list(
+	codevariant1(empty_dv(isizex(f),0),C,f,g,5,5))
+*)
+(*
+val variant1_test1 = dvector_to_list(orgcode(empty_dv(isizex(f),0),C,f,g,5)) 
+                     = dvector_to_list(
+			 codevariant1(empty_dv(isizex(f),0),C,f,g,5,5))
+*)
+(* Test where packing needs to do a cleanup pass *)
+(* Well no because output of original code doesn't depend on index 2
+ * if it just isn't there *)
+(*
+val f = list_to_ivector [1,1,3,3,0]
+
+val g = list_to_ivector [4,4,1,1,0]
+
+val C = list_to_dvector [10,20,30,40,50]
+
+val variant1_test2 = dvector_to_list(orgcode(empty_dv(isizex(f),0),C,f,g,5)) 
+                     = dvector_to_list(
+			 codevariant1(empty_dv(isizex(f),0),C,f,g,5,5))
+*)
+(* What about the output from the inspector? *)
+(*
+val inspec_test2 = 
+    ivector_to_list(cpack_inspector( 
+			 construct_explicit_relation(5,5,f,g)))
+    = [4,0,1,2,3]
+*)
+(* Test 3: Another example.  Now N=3 and M=5.  C can stay the same. *)
+val fsz3 =  list_to_ivector [0,4,3]
+val gsz3 =  list_to_ivector [1,4,2]
+(*
+val er_test3 = 
+    mrel_to_list ( construct_explicit_relation(5,3,fsz3,gsz3) )
+    =  [(4,1),(3,2),(2,2),(1,0),(0,0)]
+*)
+(* Used for debugging. *)
+(*val E = construct_explicit_relation(5,3,fsz3,gsz3);
+val xsize = rsizex(E);
+val ysize = rsizey(E);
+val inspec_test3 = 
+    ivector_to_list(cpack_inspector(construct_explicit_relation(5,3,fsz3,gsz3)))
+*)
+(*
+val variant1_test3 = dvector_to_list(
+	                 orgcode(empty_dv(isizex(fsz3),0),C,fsz3,gsz3,3)) 
+		     = dvector_to_list(
+			 codevariant1(empty_dv(isizex(fsz3),0),C,fsz3,gsz3,3,5))
+
+*)
