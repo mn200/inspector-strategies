@@ -13,6 +13,18 @@ val _ = augment_srw_ss [SAT_ss]
 
 val empty_v_def = Define`empty_v n v = (K v, n)`
 
+val vsz_empty_v = store_thm(
+  "vsz_empty_v",
+  ``vsz (empty_v n v) = n``,
+  simp[empty_v_def]);
+val _ = export_rewrites ["vsz_empty_v"]
+
+val empty_v_sub = store_thm(
+  "empty_v_sub",
+  ``empty_v n v ' i = v``,
+  simp[empty_v_def, vsub_def]);
+val _ = export_rewrites ["empty_v_sub"]
+
 val FOR_def = TotalDefn.tDefine "FOR" `
   FOR (lo,hi) body A = if lo < hi then FOR (lo+1,hi) body (body lo A)
                        else A
