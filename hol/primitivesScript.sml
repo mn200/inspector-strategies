@@ -11,6 +11,14 @@ val _ = type_abbrev ("mvector", ``:(num -> 'a) # num``)
 val SAT_ss = SatisfySimps.SATISFY_ss
 val _ = augment_srw_ss [SAT_ss]
 
+
+val vsub_def = Define`vsub (mv,sz) d = mv d`
+
+val _ = set_fixity "'" (Infixl 2000)
+val _ = overload_on ("'", ``vsub``)
+val _ = overload_on ("vsz", ``SND : (num -> 'a) # num -> num``)
+
+
 val empty_v_def = Define`empty_v n v = (K v, n)`
 
 val vsz_empty_v = store_thm(
@@ -72,12 +80,6 @@ val FOR_RULE = store_thm(
 val update_def = Define`
   update (mv,sz) d r = if d < sz then ((d =+ r) mv, sz) else (mv, sz)
 `;
-
-val vsub_def = Define`vsub (mv,sz) d = mv d`
-
-val _ = set_fixity "'" (Infixl 2000)
-val _ = overload_on ("'", ``vsub``)
-val _ = overload_on ("vsz", ``SND : (num -> 'a) # num -> num``)
 
 val list_to_mvector_def = Define`
   list_to_mvector l = ((λi. EL i l), LENGTH l)

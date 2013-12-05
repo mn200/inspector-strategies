@@ -95,12 +95,6 @@ val SEG_GENLIST = store_thm(
   Cases_on `m` >> simp[rich_listTheory.SEG, listTheory.GENLIST_CONS,
                        combinTheory.o_DEF, arithmeticTheory.ADD_CLAUSES]);
 
- dl = TAKE dp (mvector_to_list di)
-    in
-      ALL_DISTINCT dl ∧ (∀y. MEM y dl ⇒ y < N) ∧
-      (∀y. y < i ⇒ v ' y) ∧
-      ∀y. y < N ⇒ (v ' y ⇔ MEM y dl)
-
 val primpack_E = store_thm(
   "primpack_E",
   ``∀dv0 pos0 visited0 i dv pos visited.
@@ -167,7 +161,8 @@ val FOLDL_RULE = prove(
 
 val cpack_correct = store_thm(
   "cpack_correct",
-  ``∀E. (∀x y. MEM y (mrel_at_x E x) ⇒ y < rsizey E) ⇒ BIJ (vsub (cpack E)) (count (rsizey E)) (count (rsizey E))``,
+  ``∀E. (∀x y. MEM y (mrel_at_x E x) ⇒ y < rsizey E) ⇒
+        BIJ (vsub (cpack E)) (count (rsizey E)) (count (rsizey E))``,
   asm_simp_tac (srw_ss()) [cpack_def] >> rw[] >> qunabbrev_tac `visited` >>
   qmatch_assum_rename_tac `RFOR X FF E AA = (dinv0,dp0,visited0)` ["FF", "AA"] >>
   qmatch_assum_rename_tac `FOR YY FF AA = (dinv,dp,visited)` ["FF", "AA", "YY"]>>
