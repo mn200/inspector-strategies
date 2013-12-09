@@ -221,7 +221,7 @@ val variant1_test3 = dvector_to_list(
  *     A[ f[i] ] =  A[ g[i] ] + A[ h[i] ];
  *   }
  *)
-fun orgcode (A,f,g,h,N) =
+fun orgcode_with_deps (A,f,g,h,N) =
     FOR (0,N)
         (fn i => fn A => dupdate(A, isub(f,i), 
 				 dsub(A, isub(g,i)) + dsub(A, isub(h,i))))
@@ -297,8 +297,63 @@ fun construct_Deps (N,R_A,W_A) =
  *     Assume dinv is inverse of d and that topological sort is returning dinv.
  *   
  *)
+fun topological_inspector(deps) =
+    let
+        (* find wavefront of iterations that can execute *)
+        fun wavefront ( visited, deps ) =
+	    RFOR X
+                 (* remove iterations where deps not satisfied yet *)
+		 (fn (i1,i2) => fn (ready) =>
+		     if dsub(visited, i1) = false
+		     then dupdate(ready, i2, false)
+		     else ready)
+		 deps
+                 (* start out assuming all iterations are ready *)
+		 (empty_dv ( rsizex(deps), true ) )
 
-(**** Input to user-defined inspector is Deps. ****)
+	(* pack all iterations in wavefront, modifies visited *)
+	fun pack_wavefront ( dinv, visited, count, ready ) =
+	    FOR (0,dsizex(ready))
+		(fn i => fn (dinv, visited, count ) =>
+		    if not( dsub(visited,i) ) andalso dsub(ready,i)
+		    then (iupdate(dinv,count,i),dupdate(visited,i,true),count+1)
+		    else (dinv,visited,count))
+		(dinv,visited,count)
+
+	(* returns true if all iterations have been visited *)
+	fun all_visited ( visited ) =
+	    FOR (0,dsizex(visited))
+		(fn i => fn acc => if dsub(visited,i) then acc else false)
+		true
+
+        (* recursively pack all wavefronts *)
+	fun pack_levels ( dinv, visited, count ) =
+	    if all_visited( visited )
+	    then dinv
+	    else pack_levels(
+		    pack_wavefront(dinv,visited,count,wavefront(visited,deps)))
+    in
+        (* initial dinv, visited, and count *)
+	pack_levels ( empty_iv(rsizex(deps),rsizex(deps)), 
+		      empty_dv(rsizex(deps),false), 
+		      0 )
+    end
+
+(* N is number of iterations, M is size of dataspaces *)
+fun codevariant2 (A,f,g,h,N,M) =
+    let
+	val deps = construct_Deps(N,construct_R_A(N,M,g,h),construct_W_A(N,M,f))
+	val dinv = topological_inspector(deps)
+    in
+
+	FOR (0,N)
+            (fn j => fn A => 
+                let val i = isub(dinv,j) in
+		    dupdate(A, isub(f,i), 
+			    dsub(A, isub(g,i)) + dsub(A, isub(h,i)))
+                end )
+            A
+    end
 
 
 
@@ -334,67 +389,33 @@ val W_A2 = construct_W_A(N,M,f)
 val test_W_A2 = mrel_to_list( W_A2 )
 val test_Deps2 = mrel_to_list(construct_Deps(N,R_A2,W_A2))
 
-(*
-val test_org = dvector_to_list(orgcode (empty_dv(isizex(f),0),C,f,g,5)) 
-	       = [70,70,70,70,20]
+(* Now let's do the actual computation *)
+val A = list_to_dvector [10,20,30,40,50]
+val test_org_with_deps = dvector_to_list(orgcode_with_deps(A,f,g,h,N)) 
+	       = [10,60,80,40,50]
 
-val er_test1 = mrel_to_list(construct_explicit_relation(5,5,f,g))
-*)
-(*
-val inspec_test1 = 
-    ivector_to_list(cpack_inspector( 
-			 construct_explicit_relation(5,5,f,g)))
-    = [4,0,3,1,2]
-*)
-(*
-val variant1_out = dvector_to_list(
-	codevariant1(empty_dv(isizex(f),0),C,f,g,5,5))
-*)
-(*
-val variant1_test1 = dvector_to_list(orgcode(empty_dv(isizex(f),0),C,f,g,5)) 
-                     = dvector_to_list(
-			 codevariant1(empty_dv(isizex(f),0),C,f,g,5,5))
-*)
-(* Test where packing needs to do a cleanup pass *)
-(* Well no because output of original code doesn't depend on index 2
- * if it just isn't there *)
-(*
-val f = list_to_ivector [1,1,3,3,0]
+(* testing the topological inspector *)
+val top_test1 = 
+    ivector_to_list(topological_inspector(construct_Deps(N,R_A2,W_A2)))
+    = [0,1,2,3,4]
 
-val g = list_to_ivector [4,4,1,1,0]
+(* above example results in permutation equal to original order *)
+(* here is another example where should get 0,3,1,4,2 *)
+val f = list_to_ivector [1,1,1,2,2] (* writes *)
+val g = list_to_ivector [4,3,4,3,4] (* reads *)
+val h = list_to_ivector [0,3,0,3,0] (* reads *)
+val R_A2 = construct_R_A(N,M,g,h)
+val test_R_A2 = mrel_to_list( R_A2 )
+val W_A2 = construct_W_A(N,M,f)
+val test_W_A2 = mrel_to_list( W_A2 )
+val test_Deps2 = mrel_to_list(construct_Deps(N,R_A2,W_A2))
 
-val C = list_to_dvector [10,20,30,40,50]
+val top_test2 = 
+    ivector_to_list(topological_inspector(construct_Deps(N,R_A2,W_A2)))
+    = [0,3,1,4,2]
 
-val variant1_test2 = dvector_to_list(orgcode(empty_dv(isizex(f),0),C,f,g,5)) 
-                     = dvector_to_list(
-			 codevariant1(empty_dv(isizex(f),0),C,f,g,5,5))
-*)
-(* What about the output from the inspector? *)
-(*
-val inspec_test2 = 
-    ivector_to_list(cpack_inspector( 
-			 construct_explicit_relation(5,5,f,g)))
-    = [4,0,1,2,3]
-*)
-(* Test 3: Another example.  Now N=3 and M=5.  C can stay the same. *)
-val fsz3 =  list_to_ivector [0,4,3]
-val gsz3 =  list_to_ivector [1,4,2]
-(*
-val er_test3 = 
-    mrel_to_list ( construct_explicit_relation(5,3,fsz3,gsz3) )
-    =  [(4,1),(3,2),(2,2),(1,0),(0,0)]
-*)
-(* Used for debugging. *)
-(*val E = construct_explicit_relation(5,3,fsz3,gsz3);
-val xsize = rsizex(E);
-val ysize = rsizey(E);
-val inspec_test3 = 
-    ivector_to_list(cpack_inspector(construct_explicit_relation(5,3,fsz3,gsz3)))
-*)
-(*
-val variant1_test3 = dvector_to_list(
-	                 orgcode(empty_dv(isizex(fsz3),0),C,fsz3,gsz3,3)) 
-		     = dvector_to_list(
-			 codevariant1(empty_dv(isizex(fsz3),0),C,fsz3,gsz3,3,5))
+val variant2_out = dvector_to_list(codevariant2(A,f,g,h,N,M))
 
-*)
+val variant2_test2 = dvector_to_list(orgcode_with_deps(A,f,g,h,N)) 
+                     = dvector_to_list(codevariant2(A,f,g,h,N,M))
+
