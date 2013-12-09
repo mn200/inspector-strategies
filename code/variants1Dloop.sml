@@ -267,8 +267,23 @@ fun construct_W_A(N,M,f) =
 
 (* construct_Deps creates Deps.*)
 fun construct_Deps (N,R_A,W_A) =
-    empty_r(N,N) (* TODO *)
-
+    (* finds (i1,i2) st i1<i2 and (i1,y) in rel1 and (i2,y) in rel2 *)
+    (* puts those pairs into acc relation and returns it *)
+    let fun join_idx(rel1,rel2,acc) =
+	    RFOR X
+		 (fn (i1,y1) => fn (Deps) =>
+		     RFOR X
+			  (fn (i2,y2) => fn (Deps) =>
+			      if (i1<i2 andalso y1=y2) 
+			      then r_update(Deps, i1,i2)
+			      else Deps )
+			  rel2
+			  Deps)
+		 rel1
+		 acc
+    in
+	join_idx(W_A,W_A,join_idx(W_A,R_A,join_idx(R_A,W_A,empty_r(N,N))))
+    end
 
 (******************************************************************************)
 (* Variant 2, Topological sort
@@ -291,13 +306,34 @@ fun construct_Deps (N,R_A,W_A) =
 (******************************************************************************)
 (***** Testing for the original loop with no deps and all of the variants *****)
 (* Using the origcode requires initializing B, C, f, g, and N with values. *)
-(*
-val f = list_to_ivector [1,2,3,4,0]
 
-val g = list_to_ivector [4,3,2,1,0]
+val N = 5
+val M = 5
+val f = list_to_ivector [1,2,1,4,0] (* writes *)
+val g = list_to_ivector [4,3,2,1,0] (* reads *)
+val h = list_to_ivector [0,1,2,3,4] (* reads *)
+(* Deps should have
+ *      anti: (0,3),(0,4),(1,2)
+ *      flow: (0,1),(1,2),(2,3),(3,4),(0,3)
+ *      output: (0,2)
+ *)
+val R_A = construct_R_A(N,M,g,h)
+val test_R_A = mrel_to_list( R_A )
+val W_A = construct_W_A(N,M,f)
+val test_W_A = mrel_to_list( W_A )
+val test_Deps = mrel_to_list(construct_Deps(N,R_A,W_A))
 
-val C = list_to_dvector [10,20,30,40,50]
-*)
+(* Of course above example results in a full order. *)
+(* Here is an example that doesn't. *)
+val f = list_to_ivector [1,2,1,2,1] (* writes *)
+val g = list_to_ivector [4,3,4,3,4] (* reads *)
+val h = list_to_ivector [0,3,0,3,0] (* reads *)
+val R_A2 = construct_R_A(N,M,g,h)
+val test_R_A2 = mrel_to_list( R_A2 )
+val W_A2 = construct_W_A(N,M,f)
+val test_W_A2 = mrel_to_list( W_A2 )
+val test_Deps2 = mrel_to_list(construct_Deps(N,R_A2,W_A2))
+
 (*
 val test_org = dvector_to_list(orgcode (empty_dv(isizex(f),0),C,f,g,5)) 
 	       = [70,70,70,70,20]
