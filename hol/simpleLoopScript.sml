@@ -1,6 +1,6 @@
 open HolKernel Parse boolLib bossLib;
 
-open pred_setTheory primitivesTheory
+open pred_setTheory forLoopTheory primitivesTheory
 open lcsymtacs
 
 val _ = new_theory "simpleLoop";
