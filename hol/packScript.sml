@@ -234,4 +234,45 @@ val cpack_correct = store_thm(
     metis_tac[listTheory.MEM_EL, listTheory.EL_ALL_DISTINCT_EL_EQ]
   ]);
 
+val construct_explicit_relation_def = Define`
+  construct_explicit_relation M N f g =
+    FOR (0,N)
+        (λi E. rupdate (rupdate E (vsub f i, i)) (vsub g i, i))
+        (∅, (M, N))
+`;
+
+val cer_guarantees_ys = store_thm(
+  "cer_guarantees_ys",
+  ``(E = construct_explicit_relation M N f g) ⇒
+    (∀x y. MEM y (mrel_at_x E x) ⇒ y < rsizey E)``,
+  simp[construct_explicit_relation_def] >> DEEP_INTRO_TAC FOR_RULE >>
+  qexists_tac `λi mr. ∀x y. MEM y (mrel_at_x mr x) ⇒ y < rsizey mr` >>
+  simp[xmrels_present] >> conj_tac >- simp[RIN_def] >>
+  simp[RIN_rupdate] >> rw[] >> metis_tac[]);
+
+val cer_rsizey = store_thm(
+  "cer_rsizey",
+  ``E = construct_explicit_relation M N f g ⇒ rsizey E = N``,
+  simp[construct_explicit_relation_def] >> DEEP_INTRO_TAC FOR_RULE >>
+  qexists_tac `λi mr. rsizey mr = N` >> simp[]);
+
+val cpackcer = MATCH_MP cpack_correct (UNDISCH_ALL cer_guarantees_ys)
+
+(*
+ |- E = construct_explicit_relation M N f g ⇒
+    δ = cpack E ⇒
+    N ≤ vsz A ⇒
+    FOR (0,N) (λi A. update A (δ ' i) (rhs (δ ' i) (A ' (δ ' i)))) A =
+    FOR (0,N) (λi A. update A i (rhs i (A ' i))) A
+*)
+
+val final_correctness = save_thm(
+  "final_correctness",
+  PART_MATCH (lhand o lhand)
+             (PERMS_SUFFICE |> Q.INST [`f` |-> `rhs`] |> GEN_ALL)
+             (concl cpackcer)
+    |> REWRITE_RULE [cpackcer, UNDISCH_ALL cer_rsizey]
+    |> REWRITE_RULE [GSYM (ASSUME ``δ = cpack E``)]
+    |> DISCH_ALL);
+
 val _ = export_theory();

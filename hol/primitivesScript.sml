@@ -167,10 +167,31 @@ val RIN_def = Define`
 `;
 val _ = overload_on("IN", ``RIN``)
 
+val rupdate_def = Define`
+  rupdate (mr,(mx,my)) (x,y) =
+    if x < mx ∧ y < my then ((x,y) INSERT mr, (mx, my))
+    else (mr, (mx, my))
+`
+
 val RIN_bounds = store_thm(
   "RIN_bounds",
   ``(x,y) ∈ mr ⇒ x < rsizex mr ∧ y < rsizey mr``,
   simp[RIN_def]);
+
+val RIN_rupdate = store_thm(
+  "RIN_rupdate",
+  ``(x,y) ∈ rupdate mr (a,b) ⇔
+    (x,y) ∈ mr ∨ x = a ∧ y = b ∧ x < rsizex mr ∧ y < rsizey mr``,
+  PairCases_on `mr` >> simp[rupdate_def, RIN_def] >> rw[]
+  >- (simp[SPECIFICATION] >> metis_tac[]) >>
+  metis_tac[]);
+
+val rsize_rupdate = store_thm(
+  "rsize_rupdate",
+  ``rsizex (rupdate mr p) = rsizex mr ∧
+    rsizey (rupdate mr p) = rsizey mr``,
+  map_every PairCases_on [`mr`, `p`] >> rw[rupdate_def]);
+val _ = export_rewrites ["rsize_rupdate"]
 
 val canonical_def = Define`
   canonical mr ⇔
