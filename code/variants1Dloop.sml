@@ -14,6 +14,20 @@ use "primitives.sig";
 use "primitives.sml";
 open primitives
 
+(* dump routines for debugging *)
+fun dump_dvector v vstr =
+    FOR (0,dsizex(v))
+	(fn i => fn count =>
+	    (print(vstr^"["^Int.toString(i)^"]="^Int.toString(dsub(v,i))^"\n"); dsub(v,i)))
+	0
+
+fun dump_ivector v vstr =
+    FOR (0,isizex(v))
+	(fn i => fn count =>
+	    (print(vstr^"["^Int.toString(i)^"]="^Int.toString(isub(v,i))^"\n"); isub(v,i)))
+	0
+
+
 (******************************************************************************)
 (* Some testing for primitives *)
 val iupdate_test1 =
@@ -287,7 +301,7 @@ fun construct_Deps (N,R_A,W_A) =
 
 (******************************************************************************)
 (* Variant 2, Topological sort
- * Transformed code in C, use dependence relation direction 
+ * Transformed code in C, use dependence relation directly 
  * and do a topological sort
  *
  * Transformation specification
@@ -355,12 +369,196 @@ fun codevariant2 (A,f,g,h,N,M) =
             A
     end
 
+(******************************************************************************)
+(* Variant 3, Fast topological sort
+ * Transformed code in C, use data access relations
+ * and do a topological sort.  Really fast from the standpoint that the
+ * data dependence relation does not have to be constructed.
+ *
+ * Transformation specification
+ *     T = { [i] -> [j] | j=d(i) } is transformation specification
+ *
+ * User-defined inspector fast top sort
+ *     Assume dinv is inverse of d and that topological sort is returning dinv.
+ * 
+ * Algorithm Sketch
+ *     data structures
+ *         wave[i] = wavefront for iteration i, init=(numiters-1)
+ *         lw_iter[y] = last iteration to write to this data location
+ *         lr_iter[y] = last iteration to read this data location
+ *     logic
+ *         Visit read and write access relation pairs (i,y) in order of 
+ *         iterations i.
+ *             For read, either
+ *                 i is reading from location already written to in i
+ *                     thus can be in same wavefront as wave[i], update lr_iter
+ *                 i is reading from location written to by a previous iteration
+ *                     thus wave[i] = wave[lw_iter[y]] + 1, update lr_iter
+ *             For write, either
+ *                 i is writing to a location already read or written to in i
+ *                     thus can be in same wavefront as wave[i], update lw_iter[y]
+ *                 i is writing to loc read or written by a prev iteration
+ *                     thus wave[i]=max(wave[lw_iter[y]]+1,wave[lr_iter[y]]+1)
+ *                          lw_iter[y]=i
+ *         Then do counting sort on iterations based on wave numbers.
+ *)
+fun fast_top_inspector(R_A,W_A) =
+    (* assuming R_A and W_A have same domains and same ranges *)
+    let
+	(* wavefront number for iteration i *)
+	val wave = empty_dv(rsizex(R_A),rsizex(R_A)-1)
+
+	(*  last iteration to write to this data location *)
+        val lw_iter = empty_dv(rsizey(R_A),~1)
+
+	(*  last iteration to read from this data location *)
+        val lr_iter = empty_dv(rsizey(R_A),~1)
+
+        (* i is iteration *)
+	fun handle_reads (wave,lw_iter,lr_iter) i =
+	    foldl (fn (y,(wave,lr_iter)) =>
+		      (* i reading loc already written to in i *)
+		      if dsub(lw_iter,y)=i	    
+		      (* just update lr_iter *)
+		      then (wave,dupdate(lr_iter,y,i))
+		      (* wave[i] = wave[lw_iter[y]] + 1 *)
+		      else (dupdate(wave,i,dsub(wave,dsub(lw_iter,y)+1)),
+			    dupdate(lr_iter,y,i)))
+		  (wave,lr_iter)
+
+        (* i is iteration *)
+	fun handle_writes (wave,lw_iter,lr_iter) i =
+	    foldl (fn (y,(wave,lw_iter)) =>
+		      (* i writing loc already read or written to in i *)
+		      if dsub(lw_iter,y)=i orelse dsub(lr_iter,y)=i	    
+		      (* just update lw_iter *)
+		      then (wave, dupdate(lw_iter,y,i))
+		      (*  wave[i]=max(wave[lw_iter[y]]+1,wave[lr_iter[y]]+1) *)
+		      else 
+			  let 
+			      val write_wave = if dsub(lw_iter,y)>=0
+					       then dsub(wave,dsub(lw_iter,y))
+					       else ~1
+			      val read_wave = if dsub(lr_iter,y)>=0
+					      then dsub(wave,dsub(lr_iter,y))
+					      else ~1
+			      val w = if (write_wave+1) > (read_wave+1)
+				      then (write_wave+1)
+				      else (read_wave+1)
+			  in
+			      (dupdate(wave,i,w), dupdate(lw_iter,y,i))
+			  end)
+		  (wave,lw_iter)
+
+        (* assign wavefront numbers to iterations *)
+        fun find_waves (wave,lw_iter,lr_iter) =
+            (* NOTE, can't use RFORX, have to visit both R_A and W_A *)
+	    FOR (0,rsizex(R_A)) 
+		(fn i => fn (wave,lw_iter,lr_iter) =>
+		    let
+			val (wave,lr_iter) =
+			    handle_reads (wave,lw_iter,lr_iter) 
+					 i 
+					 (mrel_at_x R_A i)
+			val (wave,lw_iter) =
+			    handle_writes (wave,lw_iter,lr_iter) 
+					  i 
+					  (mrel_at_x W_A i)
+		    in
+			(wave,lw_iter,lr_iter)
+		    end)
+		(wave,lw_iter,lr_iter)
+
+        (* Compute the wave number for each iteration *)
+        val (wave,_,_) = find_waves(wave,lw_iter,lr_iter)
+
+        (* Compute the maximum wave value *)
+        val max_wave =
+	    FOR (0,dsizex(wave))
+		(fn w => fn (curr_max) =>
+		    if dsub(wave,w)>curr_max 
+		    then dsub(wave,w) 
+		    else curr_max)
+		0
+
+	(* pack all iterations based on their wave number
+           and return dinv, inverse of loop permutation *)
+	fun pack_waves ( dinv, wave ) =
+	    let
+		(* iterate over wave and count how many iters per wave *)
+		val wcount =
+		    FOR (0,dsizex(wave))
+			(fn i => fn (wcount) =>
+			    let val w = dsub(wave,i)
+			    in dupdate(wcount,w,dsub(wcount,w)+1)
+			    end)
+			(empty_dv (max_wave+1,0))
+
+		(*val debug = dump_dvector wcount "wcount"
+		val debug = dump_dvector wave "wave"*)
+
+                (* determine where to start putting iterations for each wave *)
+		val wstart =
+		    FOR (1,dsizex(wcount))
+			(fn i => fn wstart =>
+			    dupdate(wstart,i,
+				    dsub(wstart,i-1)+dsub(wcount,i-1)))
+			(empty_dv (dsizex(wcount),0))
+
+		(*val debug = dump_dvector wstart "wstart"*)
+
+		(* use wavestart and another pass over wave to create dinv *)
+		val (dinv,wcount) =
+		    FOR (0,dsizex(wave))
+			(fn i => fn (dinv,wstart) =>
+			    let val w = dsub(wave,i)
+				val j = dsub(wstart,w)
+			    in
+				(iupdate(dinv,j,i), dupdate(wstart,w,j+1))
+			    end)
+			(dinv, wstart)
+
+		val debug = dump_ivector dinv "dinv"
+	    in
+		dinv
+	    end
+
+    in
+	pack_waves ( empty_iv(rsizex(R_A),0),       (* init dinv *)
+                     wave )                         (* wave number per iter *)
+    end
+
+(* N is number of iterations, M is size of dataspaces *)
+(* Only difference with codevariant2 is that the inspector
+ * only uses the read and access relations to do the topological
+ * sort by wavefront, or level set.
+ *)
+fun codevariant3 (A,f,g,h,N,M) =
+    let
+	val R_A = construct_R_A(N,M,g,h)
+	val W_A = construct_W_A(N,M,f)
+	val dinv = fast_top_inspector(R_A,W_A)
+    in
+
+	FOR (0,N)
+            (fn j => fn A => 
+                let val i = isub(dinv,j) in
+		    dupdate(A, isub(f,i), 
+			    dsub(A, isub(g,i)) + dsub(A, isub(h,i)))
+                end )
+            A
+    end
 
 
 (******************************************************************************)
 (******************************************************************************)
-(***** Testing for the original loop with no deps and all of the variants *****)
-(* Using the origcode requires initializing B, C, f, g, and N with values. *)
+(***** Testing for the original loop with deps and all of the variants *****)
+(* Original Code in C for loop with deps
+ *
+ *   for (i=0; i<N; i++) {
+ *     A[ f[i] ] =  A[ g[i] ] + A[ h[i] ];
+ *   }
+ *)
 
 val N = 5
 val M = 5
@@ -394,9 +592,13 @@ val A = list_to_dvector [10,20,30,40,50]
 val test_org_with_deps = dvector_to_list(orgcode_with_deps(A,f,g,h,N)) 
 	       = [10,60,80,40,50]
 
-(* testing the topological inspector *)
+(* testing the topological inspectors *)
 val top_test1 = 
     ivector_to_list(topological_inspector(construct_Deps(N,R_A2,W_A2)))
+    = [0,1,2,3,4]
+
+val fast_top_test1 =
+    ivector_to_list(fast_top_inspector(R_A2,W_A2))
     = [0,1,2,3,4]
 
 (* above example results in permutation equal to original order *)
@@ -414,8 +616,14 @@ val top_test2 =
     ivector_to_list(topological_inspector(construct_Deps(N,R_A2,W_A2)))
     = [0,3,1,4,2]
 
+val fast_top_test2 =
+    ivector_to_list(fast_top_inspector(R_A2,W_A2))
+    = [0,3,1,4,2]
+
 val variant2_out = dvector_to_list(codevariant2(A,f,g,h,N,M))
 
 val variant2_test2 = dvector_to_list(orgcode_with_deps(A,f,g,h,N)) 
                      = dvector_to_list(codevariant2(A,f,g,h,N,M))
 
+val variant3_test2 = dvector_to_list(orgcode_with_deps(A,f,g,h,N)) 
+                     = dvector_to_list(codevariant3(A,f,g,h,N,M))
