@@ -21,6 +21,14 @@ fun dump_dvector v vstr =
 	    (print(vstr^"["^Int.toString(i)^"]="^Int.toString(dsub(v,i))^"\n"); dsub(v,i)))
 	0
 
+(* when dvector has a boolean value, ick *)
+fun dump_bvector v vstr =
+    FOR (0,dsizex(v))
+	(fn i => fn count =>
+	    (print(vstr^"["^Int.toString(i)^"]="^Bool.toString(dsub(v,i))^"\n"); dsub(v,i)))
+	false
+
+
 fun dump_ivector v vstr =
     FOR (0,isizex(v))
 	(fn i => fn count =>
@@ -309,48 +317,104 @@ fun construct_Deps (N,R_A,W_A) =
  *
  * User-defined inspector topsort
  *     Assume dinv is inverse of d and that topological sort is returning dinv.
- *   
+ *
+ * Below there are two versions: BFS based one and pack wavefronts.  They 
+ * both work.  I uncommented the one that is shortest.
  *)
 fun topological_inspector(deps) =
+(*
     let
-        (* find wavefront of iterations that can execute *)
-        fun wavefront ( visited, deps ) =
+	(* determine number of predecessors in deps graph for each iteration *)
+	val num_preds =
 	    RFOR X
-                 (* remove iterations where deps not satisfied yet *)
-		 (fn (i1,i2) => fn (ready) =>
-		     if dsub(visited, i1) = false
-		     then dupdate(ready, i2, false)
-		     else ready)
+		 (fn (x,y) => fn num_preds =>
+		     dupdate(num_preds,y,dsub(num_preds,y)+1))
 		 deps
-                 (* start out assuming all iterations are ready *)
-		 (empty_dv ( rsizex(deps), true ) )
+		 (empty_dv(rsizey(deps),0))
 
-	(* pack all iterations in wavefront, modifies visited *)
-	fun pack_wavefront ( dinv, visited, count, ready ) =
-	    FOR (0,dsizex(ready))
-		(fn i => fn (dinv, visited, count ) =>
-		    if not( dsub(visited,i) ) andalso dsub(ready,i)
-		    then (iupdate(dinv,count,i),dupdate(visited,i,true),count+1)
-		    else (dinv,visited,count))
-		(dinv,visited,count)
+	(* find those iterations with no predecessor and put them in queue *)
+	val queue =
+	    FOR (0,dsizex(num_preds))
+		(fn y => fn queue =>
+		    if dsub(num_preds,y)=0
+		    then y::queue
+		    else queue)
+		[]
 
-	(* returns true if all iterations have been visited *)
-	fun all_visited ( visited ) =
-	    FOR (0,dsizex(visited))
-		(fn i => fn acc => if dsub(visited,i) then acc else false)
-		true
+	(* pack items in the queue into dinv with BFS on deps *)
+	fun BFS (queue,num_preds,dinv,visited,count) =
+	    case queue of
+		[]    => dinv
+	     |  x::xs => 
+		let
+		    (* determine which of x's successors in deps are ready
+		     * and decrement their predecessor count *)
+		    val (ready_kids,num_preds) =
+			foldl (fn (y,(ready_kids,num_preds)) =>
+				  let val num_preds =
+					  dupdate(num_preds,y,dsub(num_preds,y)-1)
+				  in
+				      if dsub(num_preds,y)=0 
+					 andalso not (dsub(visited,y))
+				      then (y::ready_kids,num_preds)
+				      else (ready_kids,num_preds)
+				  end)
+			      ([],num_preds)
+			      (mrel_at_x deps x)
+		in
+		    (* packing x into dinv and then calling BFS on rest of queue *)
+		    (* Assuming that there are no self edges in deps, thus
+                     * visited not updated until here *)
+		    BFS(xs@ready_kids,num_preds,
+			iupdate(dinv,count,x),
+			dupdate(visited,x,true),
+			count+1)
+		end
+    in
+	BFS ( queue, num_preds, 
+	      empty_iv(rsizey(deps), rsizey(deps)), (* init dinv *)
+	      empty_dv(rsizey(deps), false), (* init visited *)
+	      0 )
+    end
+*)
+    let
+        (* find wavefront of iterations that can executed, 
+         * reduction so can't pack as we look,
+         * could check visited, but have to recheck that in pack_wavefront anyway *)
+        fun find_wavefront ( dinv, visited, count ) =
+	    RFOR X
+		 (fn (i1,i2) => fn (ready) =>
+		     (* if predecessor not visited then not ready *)
+		     dupdate(ready,i2,dsub(visited, i1) andalso dsub(ready,i2)))
+		 deps
+		 (empty_dv(rsizey(deps),true)) (* initially all ready *)
 
-        (* recursively pack all wavefronts *)
-	fun pack_levels ( dinv, visited, count ) =
-	    if all_visited( visited )
+	(* recursively pack all wavefronts  *)
+	fun pack_wavefront ( dinv, visited, count ) =
+	    if count >= rsizey(deps)
 	    then dinv
-	    else pack_levels(
-		    pack_wavefront(dinv,visited,count,wavefront(visited,deps)))
+            else
+		let val ready = find_wavefront( dinv, visited, count )
+		    (* have to check if visited here because can't assume
+                     * any (v,i) entries in deps *)
+		    val (dinv,visited,count) =
+			FOR (0,dsizex(ready))
+			    (fn i => fn (dinv, visited, count ) =>
+				if dsub(ready,i) andalso not (dsub(visited,i))
+				then (iupdate(dinv,count,i),
+				      dupdate(visited,i,true),
+				      count+1)
+				else (dinv,visited,count))
+			    (dinv,visited,count)
+		in
+		    pack_wavefront( dinv, visited, count )
+		end
+
     in
         (* initial dinv, visited, and count *)
-	pack_levels ( empty_iv(rsizex(deps),rsizex(deps)), 
-		      empty_dv(rsizex(deps),false), 
-		      0 )
+	pack_wavefront ( empty_iv(rsizex(deps),rsizex(deps)), 
+			 empty_dv(rsizex(deps),false), 
+			 0 )
     end
 
 (* N is number of iterations, M is size of dataspaces *)
@@ -518,7 +582,7 @@ fun fast_top_inspector(R_A,W_A) =
 			    end)
 			(dinv, wstart)
 
-		val debug = dump_ivector dinv "dinv"
+		(*val debug = dump_ivector dinv "dinv"*)
 	    in
 		dinv
 	    end
@@ -614,7 +678,7 @@ val test_Deps2 = mrel_to_list(construct_Deps(N,R_A2,W_A2))
 
 val top_test2 = 
     ivector_to_list(topological_inspector(construct_Deps(N,R_A2,W_A2)))
-    = [0,3,1,4,2]
+    (*= [0,3,1,4,2]*)
 
 val fast_top_test2 =
     ivector_to_list(fast_top_inspector(R_A2,W_A2))
