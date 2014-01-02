@@ -45,7 +45,7 @@ sig
   val ivector_to_list : ivector -> int list
   val list_to_mrel : (int*int) -> (int * int) list -> mrelation
   val mrel_to_list : mrelation -> (int * int) list
-  val mrel_at_x : mrelation -> int -> int list
+(*  val mrel_at_x : mrelation -> int -> int list *)
   val mrel_at_y : mrelation -> int -> int list
 
 
@@ -58,16 +58,22 @@ sig
      values.  f is the body of the loop and modifies the accumulator.
   *)
   val RFOR : direction -> ((int * int) -> 'a -> 'a) -> mrelation -> 'a -> 'a
- 
 
-  val FOR : (int * int) -> (int -> 'a -> 'a) -> 'a -> 'a
+ (* RFOR_AT_X f mrel x acc
+
+    is a functional to loop over all y's associated with the given
+    x.  f is the body of the loop and modifies the accumulator.
+  *) 
+  val RFOR_AT_X : (int -> 'a -> 'a) -> mrelation -> int -> 'a -> 'a 
+
   (* FOR (lo, hi) f acc
 
-     is a functional for-loop that iterates over indices lo to hi
+     is a functional fo r-loop that iterates over indices lo to hi
      (i.e., for (i=lo; i<hi; i++)), and transforms the "state", which
      is the polymorphic 'a above.  The body of the loop implements the
      transformation and gets access to the index and to the current state.
      It's responsibility is to calculate the value of the state for the
      next iteration.
   *)
+  val FOR : (int * int) -> (int -> 'a -> 'a) -> 'a -> 'a
 end

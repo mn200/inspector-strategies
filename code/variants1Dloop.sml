@@ -17,23 +17,23 @@ open primitives
 (* dump routines for debugging *)
 fun dump_dvector v vstr =
     FOR (0,dsizex(v))
-	(fn i => fn count =>
-	    (print(vstr^"["^Int.toString(i)^"]="^Int.toString(dsub(v,i))^"\n"); dsub(v,i)))
-	0
+        (fn i => fn count =>
+            (print(vstr^"["^Int.toString(i)^"]="^Int.toString(dsub(v,i))^"\n"); dsub(v,i)))
+        0
 
 (* when dvector has a boolean value, ick *)
 fun dump_bvector v vstr =
     FOR (0,dsizex(v))
-	(fn i => fn count =>
-	    (print(vstr^"["^Int.toString(i)^"]="^Bool.toString(dsub(v,i))^"\n"); dsub(v,i)))
-	false
+        (fn i => fn count =>
+            (print(vstr^"["^Int.toString(i)^"]="^Bool.toString(dsub(v,i))^"\n"); dsub(v,i)))
+        false
 
 
 fun dump_ivector v vstr =
     FOR (0,isizex(v))
-	(fn i => fn count =>
-	    (print(vstr^"["^Int.toString(i)^"]="^Int.toString(isub(v,i))^"\n"); isub(v,i)))
-	0
+        (fn i => fn count =>
+            (print(vstr^"["^Int.toString(i)^"]="^Int.toString(isub(v,i))^"\n"); isub(v,i)))
+        0
 
 
 (******************************************************************************)
@@ -129,40 +129,40 @@ fun cpack_inspector (E) =
 
         (* pack y into dinv, count is current count of packed vals *)
         fun pack (dinv,visited,count,y) =
-	    if not( dsub(visited,y) )
-	    then ( iupdate(dinv,count,y), dupdate(visited, y, true), count+1 )
+            if not( dsub(visited,y) )
+            then ( iupdate(dinv,count,y), dupdate(visited, y, true), count+1 )
             else ( dinv, visited, count )
 
         (* use the relation to pack values of y as seen 
          * with in order x values *)
         val (dinv,visited,count) = 
-	    RFOR X 
-		 (fn (x,y) => fn (dinv,visited,count) => 
-		     pack(dinv,visited,count,y))
+            RFOR X 
+                 (fn (x,y) => fn (dinv,visited,count) => 
+                     pack(dinv,visited,count,y))
                  E
-		 (empty_iv(rsizey(E),rsizey(E)), visited, count)
+                 (empty_iv(rsizey(E),rsizey(E)), visited, count)
 
         (* do cleanup on dinv to ensure all y's in relation have 
          * been ordered in dinv *)
-	val (dinv,visited,count) =	 
+        val (dinv,visited,count) =       
             FOR (0,rsizey(E))
-		(fn y => fn (dinv,visited,count) => pack(dinv,visited,count,y))
-		(dinv,visited,count)
+                (fn y => fn (dinv,visited,count) => pack(dinv,visited,count,y))
+                (dinv,visited,count)
     in
-	dinv
+        dinv
     end
 
 (* N is number of iterations, M is size of dataspaces *)
 fun codevariant1 (B,C,f,g,N,M) =
     let
-	val E = construct_explicit_relation(M,N,f,g)
-	val dinv = cpack_inspector(E)
+        val E = construct_explicit_relation(M,N,f,g)
+        val dinv = cpack_inspector(E)
     in
 
-	FOR (0,N)
+        FOR (0,N)
             (fn j => fn B => 
                 let val i = isub(dinv,j) in
-	            dupdate(B, i, dsub(C, isub(f,i)) + dsub(C, isub(g,i)))
+                    dupdate(B, i, dsub(C, isub(f,i)) + dsub(C, isub(g,i)))
                 end )
             B
     end
@@ -179,21 +179,21 @@ val g = list_to_ivector [4,3,2,1,0]
 val C = list_to_dvector [10,20,30,40,50]
 (*
 val test_org = dvector_to_list(orgcode (empty_dv(isizex(f),0),C,f,g,5)) 
-	       = [70,70,70,70,20]
+               = [70,70,70,70,20]
 
 val er_test1 = mrel_to_list(construct_explicit_relation(5,5,f,g))
 *)
 val inspec_test1 = 
     ivector_to_list(cpack_inspector( 
-			 construct_explicit_relation(5,5,f,g)))
+                         construct_explicit_relation(5,5,f,g)))
     = [4,0,3,1,2]
 (*
 val variant1_out = dvector_to_list(
-	codevariant1(empty_dv(isizex(f),0),C,f,g,5,5))
+        codevariant1(empty_dv(isizex(f),0),C,f,g,5,5))
 *)
 val variant1_test1 = dvector_to_list(orgcode(empty_dv(isizex(f),0),C,f,g,5)) 
                      = dvector_to_list(
-			 codevariant1(empty_dv(isizex(f),0),C,f,g,5,5))
+                         codevariant1(empty_dv(isizex(f),0),C,f,g,5,5))
 
 (* Test where packing needs to do a cleanup pass *)
 (* Well no because output of original code doesn't depend on index 2
@@ -206,12 +206,12 @@ val C = list_to_dvector [10,20,30,40,50]
 
 val variant1_test2 = dvector_to_list(orgcode(empty_dv(isizex(f),0),C,f,g,5)) 
                      = dvector_to_list(
-			 codevariant1(empty_dv(isizex(f),0),C,f,g,5,5))
+                         codevariant1(empty_dv(isizex(f),0),C,f,g,5,5))
 
 (* What about the output from the inspector? *)
 val inspec_test2 = 
     ivector_to_list(cpack_inspector( 
-			 construct_explicit_relation(5,5,f,g)))
+                         construct_explicit_relation(5,5,f,g)))
     = [4,0,1,2,3]
 
 (* Test 3: Another example.  Now N=3 and M=5.  C can stay the same. *)
@@ -230,9 +230,9 @@ val inspec_test3 =
     ivector_to_list(cpack_inspector(construct_explicit_relation(5,3,fsz3,gsz3)))
 *)
 val variant1_test3 = dvector_to_list(
-	                 orgcode(empty_dv(isizex(fsz3),0),C,fsz3,gsz3,3)) 
-		     = dvector_to_list(
-			 codevariant1(empty_dv(isizex(fsz3),0),C,fsz3,gsz3,3,5))
+                         orgcode(empty_dv(isizex(fsz3),0),C,fsz3,gsz3,3)) 
+                     = dvector_to_list(
+                         codevariant1(empty_dv(isizex(fsz3),0),C,fsz3,gsz3,3,5))
 
 
 
@@ -246,7 +246,7 @@ val variant1_test3 = dvector_to_list(
 fun orgcode_with_deps (A,f,g,h,N) =
     FOR (0,N)
         (fn i => fn A => dupdate(A, isub(f,i), 
-				 dsub(A, isub(g,i)) + dsub(A, isub(h,i))))
+                                 dsub(A, isub(g,i)) + dsub(A, isub(h,i))))
         A
 
 (*
@@ -278,13 +278,13 @@ fun orgcode_with_deps (A,f,g,h,N) =
 (* construct_R_A creates the read access relation for A *)
 fun construct_R_A(N,M,g,h) = 
     FOR (0,N)
-	(fn i => fn E => r_update(r_update(E,i,isub(g,i)), i, isub(h,i)))
+        (fn i => fn E => r_update(r_update(E,i,isub(g,i)), i, isub(h,i)))
         (empty_r (N,M))
 
 (* construct_W_A creates the write access relation for A *)
 fun construct_W_A(N,M,f) = 
     FOR (0,N)
-	(fn i => fn E => r_update(E,i,isub(f,i)))
+        (fn i => fn E => r_update(E,i,isub(f,i)))
         (empty_r (N,M))
 
 (* construct_Deps creates Deps.*)
@@ -292,19 +292,19 @@ fun construct_Deps (N,R_A,W_A) =
     (* finds (i1,i2) st i1<i2 and (i1,y) in rel1 and (i2,y) in rel2 *)
     (* puts those pairs into acc relation and returns it *)
     let fun join_idx(rel1,rel2,acc) =
-	    RFOR X
-		 (fn (i1,y1) => fn (Deps) =>
-		     RFOR X
-			  (fn (i2,y2) => fn (Deps) =>
-			      if (i1<i2 andalso y1=y2) 
-			      then r_update(Deps, i1,i2)
-			      else Deps )
-			  rel2
-			  Deps)
-		 rel1
-		 acc
+            RFOR X
+                 (fn (i1,y1) => fn (Deps) =>
+                     RFOR X
+                          (fn (i2,y2) => fn (Deps) =>
+                              if (i1<i2 andalso y1=y2) 
+                              then r_update(Deps, i1,i2)
+                              else Deps )
+                          rel2
+                          Deps)
+                 rel1
+                 acc
     in
-	join_idx(W_A,W_A,join_idx(W_A,R_A,join_idx(R_A,W_A,empty_r(N,N))))
+        join_idx(W_A,W_A,join_idx(W_A,R_A,join_idx(R_A,W_A,empty_r(N,N))))
     end
 
 (******************************************************************************)
@@ -324,57 +324,57 @@ fun construct_Deps (N,R_A,W_A) =
 fun topological_inspector(deps) =
 (*
     let
-	(* determine number of predecessors in deps graph for each iteration *)
-	val num_preds =
-	    RFOR X
-		 (fn (x,y) => fn num_preds =>
-		     dupdate(num_preds,y,dsub(num_preds,y)+1))
-		 deps
-		 (empty_dv(rsizey(deps),0))
+        (* determine number of predecessors in deps graph for each iteration *)
+        val num_preds =
+            RFOR X
+                 (fn (x,y) => fn num_preds =>
+                     dupdate(num_preds,y,dsub(num_preds,y)+1))
+                 deps
+                 (empty_dv(rsizey(deps),0))
 
-	(* find those iterations with no predecessor and put them in queue *)
-	val queue =
-	    FOR (0,dsizex(num_preds))
-		(fn y => fn queue =>
-		    if dsub(num_preds,y)=0
-		    then y::queue
-		    else queue)
-		[]
+        (* find those iterations with no predecessor and put them in queue *)
+        val queue =
+            FOR (0,dsizex(num_preds))
+                (fn y => fn queue =>
+                    if dsub(num_preds,y)=0
+                    then y::queue
+                    else queue)
+                []
 
-	(* pack items in the queue into dinv with BFS on deps *)
-	fun BFS (queue,num_preds,dinv,visited,count) =
-	    case queue of
-		[]    => dinv
-	     |  x::xs => 
-		let
-		    (* determine which of x's successors in deps are ready
-		     * and decrement their predecessor count *)
-		    val (ready_kids,num_preds) =
-			foldl (fn (y,(ready_kids,num_preds)) =>
-				  let val num_preds =
-					  dupdate(num_preds,y,dsub(num_preds,y)-1)
-				  in
-				      if dsub(num_preds,y)=0 
-					 andalso not (dsub(visited,y))
-				      then (y::ready_kids,num_preds)
-				      else (ready_kids,num_preds)
-				  end)
-			      ([],num_preds)
-			      (mrel_at_x deps x)
-		in
-		    (* packing x into dinv and then calling BFS on rest of queue *)
-		    (* Assuming that there are no self edges in deps, thus
+        (* pack items in the queue into dinv with BFS on deps *)
+        fun BFS (queue,num_preds,dinv,visited,count) =
+            case queue of
+                []    => dinv
+             |  x::xs => 
+                let
+                    (* determine which of x's successors in deps are ready
+                     * and decrement their predecessor count *)
+                    val (ready_kids,num_preds) =
+                        foldl (fn (y,(ready_kids,num_preds)) =>
+                                  let val num_preds =
+                                          dupdate(num_preds,y,dsub(num_preds,y)-1)
+                                  in
+                                      if dsub(num_preds,y)=0 
+                                         andalso not (dsub(visited,y))
+                                      then (y::ready_kids,num_preds)
+                                      else (ready_kids,num_preds)
+                                  end)
+                              ([],num_preds)
+                              (mrel_at_x deps x)
+                in
+                    (* packing x into dinv and then calling BFS on rest of queue *)
+                    (* Assuming that there are no self edges in deps, thus
                      * visited not updated until here *)
-		    BFS(xs@ready_kids,num_preds,
-			iupdate(dinv,count,x),
-			dupdate(visited,x,true),
-			count+1)
-		end
+                    BFS(xs@ready_kids,num_preds,
+                        iupdate(dinv,count,x),
+                        dupdate(visited,x,true),
+                        count+1)
+                end
     in
-	BFS ( queue, num_preds, 
-	      empty_iv(rsizey(deps), rsizey(deps)), (* init dinv *)
-	      empty_dv(rsizey(deps), false), (* init visited *)
-	      0 )
+        BFS ( queue, num_preds, 
+              empty_iv(rsizey(deps), rsizey(deps)), (* init dinv *)
+              empty_dv(rsizey(deps), false), (* init visited *)
+              0 )
     end
 *)
     let
@@ -382,53 +382,53 @@ fun topological_inspector(deps) =
          * reduction so can't pack as we look,
          * could check visited, but have to recheck that in pack_wavefront anyway *)
         fun find_wavefront ( dinv, visited, count ) =
-	    RFOR X
-		 (fn (i1,i2) => fn (ready) =>
-		     (* if predecessor not visited then not ready *)
-		     dupdate(ready,i2,dsub(visited, i1) andalso dsub(ready,i2)))
-		 deps
-		 (empty_dv(rsizey(deps),true)) (* initially all ready *)
+            RFOR X
+                 (fn (i1,i2) => fn (ready) =>
+                     (* if predecessor not visited then not ready *)
+                     dupdate(ready,i2,dsub(visited, i1) andalso dsub(ready,i2)))
+                 deps
+                 (empty_dv(rsizey(deps),true)) (* initially all ready *)
 
-	(* recursively pack all wavefronts  *)
-	fun pack_wavefront ( dinv, visited, count ) =
-	    if count >= rsizey(deps)
-	    then dinv
+        (* recursively pack all wavefronts  *)
+        fun pack_wavefront ( dinv, visited, count ) =
+            if count >= rsizey(deps)
+            then dinv
             else
-		let val ready = find_wavefront( dinv, visited, count )
-		    (* have to check if visited here because can't assume
+                let val ready = find_wavefront( dinv, visited, count )
+                    (* have to check if visited here because can't assume
                      * any (v,i) entries in deps *)
-		    val (dinv,visited,count) =
-			FOR (0,dsizex(ready))
-			    (fn i => fn (dinv, visited, count ) =>
-				if dsub(ready,i) andalso not (dsub(visited,i))
-				then (iupdate(dinv,count,i),
-				      dupdate(visited,i,true),
-				      count+1)
-				else (dinv,visited,count))
-			    (dinv,visited,count)
-		in
-		    pack_wavefront( dinv, visited, count )
-		end
+                    val (dinv,visited,count) =
+                        FOR (0,dsizex(ready))
+                            (fn i => fn (dinv, visited, count ) =>
+                                if dsub(ready,i) andalso not (dsub(visited,i))
+                                then (iupdate(dinv,count,i),
+                                      dupdate(visited,i,true),
+                                      count+1)
+                                else (dinv,visited,count))
+                            (dinv,visited,count)
+                in
+                    pack_wavefront( dinv, visited, count )
+                end
 
     in
         (* initial dinv, visited, and count *)
-	pack_wavefront ( empty_iv(rsizex(deps),rsizex(deps)), 
-			 empty_dv(rsizex(deps),false), 
-			 0 )
+        pack_wavefront ( empty_iv(rsizex(deps),rsizex(deps)), 
+                         empty_dv(rsizex(deps),false), 
+                         0 )
     end
 
 (* N is number of iterations, M is size of dataspaces *)
 fun codevariant2 (A,f,g,h,N,M) =
     let
-	val deps = construct_Deps(N,construct_R_A(N,M,g,h),construct_W_A(N,M,f))
-	val dinv = topological_inspector(deps)
+        val deps = construct_Deps(N,construct_R_A(N,M,g,h),construct_W_A(N,M,f))
+        val dinv = topological_inspector(deps)
     in
 
-	FOR (0,N)
+        FOR (0,N)
             (fn j => fn A => 
                 let val i = isub(dinv,j) in
-		    dupdate(A, isub(f,i), 
-			    dsub(A, isub(g,i)) + dsub(A, isub(h,i)))
+                    dupdate(A, isub(f,i), 
+                            dsub(A, isub(g,i)) + dsub(A, isub(h,i)))
                 end )
             A
     end
@@ -469,126 +469,164 @@ fun codevariant2 (A,f,g,h,N,M) =
 fun fast_top_inspector(R_A,W_A) =
     (* assuming R_A and W_A have same domains and same ranges *)
     let
-	(* wavefront number for iteration i *)
-	val wave = empty_dv(rsizex(R_A),rsizex(R_A)-1)
+        (* wavefront number for iteration i *)
+        val wave = empty_dv(rsizex(R_A),rsizex(R_A)-1)
 
-	(*  last iteration to write to this data location *)
+        (*  last iteration to write to this data location *)
         val lw_iter = empty_dv(rsizey(R_A),~1)
 
-	(*  last iteration to read from this data location *)
+        (*  last iteration to read from this data location *)
         val lr_iter = empty_dv(rsizey(R_A),~1)
 
-        (* i is iteration *)
-	fun handle_reads (wave,lw_iter,lr_iter) i =
-	    foldl (fn (y,(wave,lr_iter)) =>
-		      (* i reading loc already written to in i *)
-		      if dsub(lw_iter,y)=i	    
-		      (* just update lr_iter *)
-		      then (wave,dupdate(lr_iter,y,i))
-		      (* wave[i] = wave[lw_iter[y]] + 1 *)
-		      else (dupdate(wave,i,dsub(wave,dsub(lw_iter,y)+1)),
-			    dupdate(lr_iter,y,i)))
-		  (wave,lr_iter)
+        (* i is iteration, y is data location *)
+        fun handle_read i y (wave,lw_iter,lr_iter) =
+            (* i reading loc already written to in i *)
+            if dsub(lw_iter,y)=i            
+            (* just update lr_iter *)
+            then (wave,lw_iter,dupdate(lr_iter,y,i))
+            (* wave[i] = wave[lw_iter[y]] + 1 *)
+            else (dupdate(wave,i,dsub(wave,dsub(lw_iter,y)+1)),
+		  lw_iter,
+		  dupdate(lr_iter,y,i))
 
-        (* i is iteration *)
-	fun handle_writes (wave,lw_iter,lr_iter) i =
-	    foldl (fn (y,(wave,lw_iter)) =>
-		      (* i writing loc already read or written to in i *)
-		      if dsub(lw_iter,y)=i orelse dsub(lr_iter,y)=i	    
-		      (* just update lw_iter *)
-		      then (wave, dupdate(lw_iter,y,i))
-		      (*  wave[i]=max(wave[lw_iter[y]]+1,wave[lr_iter[y]]+1) *)
-		      else 
-			  let 
-			      val write_wave = if dsub(lw_iter,y)>=0
-					       then dsub(wave,dsub(lw_iter,y))
-					       else ~1
-			      val read_wave = if dsub(lr_iter,y)>=0
-					      then dsub(wave,dsub(lr_iter,y))
-					      else ~1
-			      val w = if (write_wave+1) > (read_wave+1)
-				      then (write_wave+1)
-				      else (read_wave+1)
-			  in
-			      (dupdate(wave,i,w), dupdate(lw_iter,y,i))
-			  end)
-		  (wave,lw_iter)
+(*      fun handle_reads (wave,lw_iter,lr_iter) i =
+            foldl (fn (y,(wave,lr_iter)) =>
+                      (* i reading loc already written to in i *)
+                      if dsub(lw_iter,y)=i          
+                      (* just update lr_iter *)
+                      then (wave,dupdate(lr_iter,y,i))
+                      (* wave[i] = wave[lw_iter[y]] + 1 *)
+                      else (dupdate(wave,i,dsub(wave,dsub(lw_iter,y)+1)),
+                            dupdate(lr_iter,y,i)))
+                  (wave,lr_iter)
+*)
+        (* i is iteration, y is data location *)
+        fun handle_write i y (wave,lw_iter,lr_iter) =
+            (* i writing loc already read or written to in i *)
+            if dsub(lw_iter,y)=i orelse dsub(lr_iter,y)=i         
+            (* just update lw_iter *)
+            then (wave, dupdate(lw_iter,y,i), lr_iter)
+            (*  wave[i]=max(wave[lw_iter[y]]+1,wave[lr_iter[y]]+1) *)
+            else 
+                let 
+                    val write_wave = if dsub(lw_iter,y)>=0
+                                     then dsub(wave,dsub(lw_iter,y))
+                                     else ~1
+                    val read_wave = if dsub(lr_iter,y)>=0
+                                    then dsub(wave,dsub(lr_iter,y))
+                                    else ~1
+                    val w = if (write_wave+1) > (read_wave+1)
+                            then (write_wave+1)
+                            else (read_wave+1)
+                in
+                    (dupdate(wave,i,w), dupdate(lw_iter,y,i), lr_iter)
+                end
 
+(*        fun handle_writes (wave,lw_iter,lr_iter) i =
+            foldl (fn (y,(wave,lw_iter)) =>
+                      (* i writing loc already read or written to in i *)
+                      if dsub(lw_iter,y)=i orelse dsub(lr_iter,y)=i         
+                      (* just update lw_iter *)
+                      then (wave, dupdate(lw_iter,y,i))
+                      (*  wave[i]=max(wave[lw_iter[y]]+1,wave[lr_iter[y]]+1) *)
+                      else 
+                          let 
+                              val write_wave = if dsub(lw_iter,y)>=0
+                                               then dsub(wave,dsub(lw_iter,y))
+                                               else ~1
+                              val read_wave = if dsub(lr_iter,y)>=0
+                                              then dsub(wave,dsub(lr_iter,y))
+                                              else ~1
+                              val w = if (write_wave+1) > (read_wave+1)
+                                      then (write_wave+1)
+                                      else (read_wave+1)
+                          in
+                              (dupdate(wave,i,w), dupdate(lw_iter,y,i))
+                          end)
+                  (wave,lw_iter)
+*)
         (* assign wavefront numbers to iterations *)
         fun find_waves (wave,lw_iter,lr_iter) =
             (* NOTE, can't use RFORX, have to visit both R_A and W_A *)
-	    FOR (0,rsizex(R_A)) 
-		(fn i => fn (wave,lw_iter,lr_iter) =>
-		    let
-			val (wave,lr_iter) =
-			    handle_reads (wave,lw_iter,lr_iter) 
-					 i 
-					 (mrel_at_x R_A i)
-			val (wave,lw_iter) =
-			    handle_writes (wave,lw_iter,lr_iter) 
-					  i 
-					  (mrel_at_x W_A i)
-		    in
-			(wave,lw_iter,lr_iter)
-		    end)
-		(wave,lw_iter,lr_iter)
+            FOR (0,rsizex(R_A))
+                (fn i => fn (wave,lw_iter,lr_iter) =>
+		    RFOR_AT_X (handle_write i) W_A i
+			      (RFOR_AT_X (handle_read i) R_A i
+			                 (wave,lw_iter,lr_iter)))
+
+(*
+                (fn i => fn (wave,lw_iter,lr_iter) =>
+                    let
+                        val (wave,lr_iter) =
+                            handle_reads (wave,lw_iter,lr_iter) 
+                                         i 
+                                         (mrel_at_x R_A i)
+                        val (wave,lw_iter) =
+                            handle_writes (wave,lw_iter,lr_iter) 
+                                          i 
+                                          (mrel_at_x W_A i)
+                    in
+                        (wave,lw_iter,lr_iter)
+                    end)
+*)
+                (wave,lw_iter,lr_iter)
 
         (* Compute the wave number for each iteration *)
         val (wave,_,_) = find_waves(wave,lw_iter,lr_iter)
 
         (* Compute the maximum wave value *)
         val max_wave =
-	    FOR (0,dsizex(wave))
-		(fn w => fn (curr_max) =>
-		    if dsub(wave,w)>curr_max 
-		    then dsub(wave,w) 
-		    else curr_max)
-		0
+            FOR (0,dsizex(wave))
+                (fn w => fn (curr_max) =>
+                    if dsub(wave,w)>curr_max 
+                    then dsub(wave,w) 
+                    else curr_max)
+                0
 
-	(* pack all iterations based on their wave number
+        (* pack all iterations based on their wave number
            and return dinv, inverse of loop permutation *)
-	fun pack_waves ( dinv, wave ) =
-	    let
-		(* iterate over wave and count how many iters per wave *)
-		val wcount =
-		    FOR (0,dsizex(wave))
-			(fn i => fn (wcount) =>
-			    let val w = dsub(wave,i)
-			    in dupdate(wcount,w,dsub(wcount,w)+1)
-			    end)
-			(empty_dv (max_wave+1,0))
+        fun pack_waves ( dinv, wave ) =
+            let
+                (* iterate over wave and count how many iters per wave *)
+                val wcount =
+                    FOR (0,dsizex(wave))
+                        (fn i => fn (wcount) =>
+                            let val w = dsub(wave,i)
+                            in dupdate(wcount,w,dsub(wcount,w)+1)
+                            end)
+                        (empty_dv (max_wave+1,0))
 
-		(*val debug = dump_dvector wcount "wcount"
-		val debug = dump_dvector wave "wave"*)
+                (*val debug = dump_dvector wcount "wcount"
+                val debug = dump_dvector wave "wave"*)
 
                 (* determine where to start putting iterations for each wave *)
-		val wstart =
-		    FOR (1,dsizex(wcount))
-			(fn i => fn wstart =>
-			    dupdate(wstart,i,
-				    dsub(wstart,i-1)+dsub(wcount,i-1)))
-			(empty_dv (dsizex(wcount),0))
+                val wstart =
+                    FOR (1,dsizex(wcount))
+                        (fn i => fn wstart =>
+                            dupdate(wstart,i,
+                                    dsub(wstart,i-1)+dsub(wcount,i-1)))
+                        (empty_dv (dsizex(wcount),0))
 
-		(*val debug = dump_dvector wstart "wstart"*)
+                (*val debug = dump_dvector wstart "wstart"*)
 
-		(* use wavestart and another pass over wave to create dinv *)
-		val (dinv,wcount) =
-		    FOR (0,dsizex(wave))
-			(fn i => fn (dinv,wstart) =>
-			    let val w = dsub(wave,i)
-				val j = dsub(wstart,w)
-			    in
-				(iupdate(dinv,j,i), dupdate(wstart,w,j+1))
-			    end)
-			(dinv, wstart)
+                (* use wavestart and another pass over wave to create dinv *)
+                val (dinv,wcount) =
+                    FOR (0,dsizex(wave))
+                        (fn i => fn (dinv,wstart) =>
+                            let val w = dsub(wave,i)
+                                val j = dsub(wstart,w)
+                            in
+                                (iupdate(dinv,j,i), dupdate(wstart,w,j+1))
+                            end)
+                        (dinv, wstart)
 
-		(*val debug = dump_ivector dinv "dinv"*)
-	    in
-		dinv
-	    end
+                (*val debug = dump_ivector dinv "dinv"*)
+            in
+                dinv
+            end
 
     in
-	pack_waves ( empty_iv(rsizex(R_A),0),       (* init dinv *)
+        pack_waves ( empty_iv(rsizex(R_A),0),       (* init dinv *)
                      wave )                         (* wave number per iter *)
     end
 
@@ -599,16 +637,16 @@ fun fast_top_inspector(R_A,W_A) =
  *)
 fun codevariant3 (A,f,g,h,N,M) =
     let
-	val R_A = construct_R_A(N,M,g,h)
-	val W_A = construct_W_A(N,M,f)
-	val dinv = fast_top_inspector(R_A,W_A)
+        val R_A = construct_R_A(N,M,g,h)
+        val W_A = construct_W_A(N,M,f)
+        val dinv = fast_top_inspector(R_A,W_A)
     in
 
-	FOR (0,N)
+        FOR (0,N)
             (fn j => fn A => 
                 let val i = isub(dinv,j) in
-		    dupdate(A, isub(f,i), 
-			    dsub(A, isub(g,i)) + dsub(A, isub(h,i)))
+                    dupdate(A, isub(f,i), 
+                            dsub(A, isub(g,i)) + dsub(A, isub(h,i)))
                 end )
             A
     end
@@ -654,7 +692,7 @@ val test_Deps2 = mrel_to_list(construct_Deps(N,R_A2,W_A2))
 (* Now let's do the actual computation *)
 val A = list_to_dvector [10,20,30,40,50]
 val test_org_with_deps = dvector_to_list(orgcode_with_deps(A,f,g,h,N)) 
-	       = [10,60,80,40,50]
+               = [10,60,80,40,50]
 
 (* testing the topological inspectors *)
 val top_test1 = 
