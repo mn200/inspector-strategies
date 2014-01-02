@@ -489,17 +489,6 @@ fun fast_top_inspector(R_A,W_A) =
 		  lw_iter,
 		  dupdate(lr_iter,y,i))
 
-(*      fun handle_reads (wave,lw_iter,lr_iter) i =
-            foldl (fn (y,(wave,lr_iter)) =>
-                      (* i reading loc already written to in i *)
-                      if dsub(lw_iter,y)=i          
-                      (* just update lr_iter *)
-                      then (wave,dupdate(lr_iter,y,i))
-                      (* wave[i] = wave[lw_iter[y]] + 1 *)
-                      else (dupdate(wave,i,dsub(wave,dsub(lw_iter,y)+1)),
-                            dupdate(lr_iter,y,i)))
-                  (wave,lr_iter)
-*)
         (* i is iteration, y is data location *)
         fun handle_write i y (wave,lw_iter,lr_iter) =
             (* i writing loc already read or written to in i *)
@@ -522,29 +511,6 @@ fun fast_top_inspector(R_A,W_A) =
                     (dupdate(wave,i,w), dupdate(lw_iter,y,i), lr_iter)
                 end
 
-(*        fun handle_writes (wave,lw_iter,lr_iter) i =
-            foldl (fn (y,(wave,lw_iter)) =>
-                      (* i writing loc already read or written to in i *)
-                      if dsub(lw_iter,y)=i orelse dsub(lr_iter,y)=i         
-                      (* just update lw_iter *)
-                      then (wave, dupdate(lw_iter,y,i))
-                      (*  wave[i]=max(wave[lw_iter[y]]+1,wave[lr_iter[y]]+1) *)
-                      else 
-                          let 
-                              val write_wave = if dsub(lw_iter,y)>=0
-                                               then dsub(wave,dsub(lw_iter,y))
-                                               else ~1
-                              val read_wave = if dsub(lr_iter,y)>=0
-                                              then dsub(wave,dsub(lr_iter,y))
-                                              else ~1
-                              val w = if (write_wave+1) > (read_wave+1)
-                                      then (write_wave+1)
-                                      else (read_wave+1)
-                          in
-                              (dupdate(wave,i,w), dupdate(lw_iter,y,i))
-                          end)
-                  (wave,lw_iter)
-*)
         (* assign wavefront numbers to iterations *)
         fun find_waves (wave,lw_iter,lr_iter) =
             (* NOTE, can't use RFORX, have to visit both R_A and W_A *)
@@ -553,22 +519,6 @@ fun fast_top_inspector(R_A,W_A) =
 		    RFOR_AT_X (handle_write i) W_A i
 			      (RFOR_AT_X (handle_read i) R_A i
 			                 (wave,lw_iter,lr_iter)))
-
-(*
-                (fn i => fn (wave,lw_iter,lr_iter) =>
-                    let
-                        val (wave,lr_iter) =
-                            handle_reads (wave,lw_iter,lr_iter) 
-                                         i 
-                                         (mrel_at_x R_A i)
-                        val (wave,lw_iter) =
-                            handle_writes (wave,lw_iter,lr_iter) 
-                                          i 
-                                          (mrel_at_x W_A i)
-                    in
-                        (wave,lw_iter,lr_iter)
-                    end)
-*)
                 (wave,lw_iter,lr_iter)
 
         (* Compute the wave number for each iteration *)
