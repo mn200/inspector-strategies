@@ -45,8 +45,7 @@ sig
   val ivector_to_list : ivector -> int list
   val list_to_mrel : (int*int) -> (int * int) list -> mrelation
   val mrel_to_list : mrelation -> (int * int) list
-(*  val mrel_at_x : mrelation -> int -> int list *)
-  val mrel_at_y : mrelation -> int -> int list
+(*  val mrel_at_y : mrelation -> int -> int list *)
 
 
   datatype direction = X | Y

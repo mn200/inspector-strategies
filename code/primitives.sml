@@ -90,28 +90,18 @@ struct
 	  (fn y => fn acc => if mf(x,y) then f y acc else acc) 
 	  acc
 
-  fun mrel_at_y (mf, xsz, ysz) y =
-      List.rev
-          (FOR(0,xsz) (fn x => fn l => if mf(x,y) then x::l else l) [])
+  fun RFOR_AT_Y f (mf, xsz, ysz) y acc =
+      FOR (0,xsz) 
+	  (fn x => fn acc => if mf(x,y) then f x acc else acc) 
+	  acc
 
   fun RFOR dir f mrel acc =
       case dir of
 	  X => FOR (0, rsizex(mrel))
 		   (fn x => RFOR_AT_X (fn y => f(x,y)) mrel x)
-(*
-		   (fn x => fn acc =>
-		       let val row = mrel_at_x mrel x
-		       in
-			   foldl (fn(y,acc) => f(x,y) acc) acc row
-		       end)
-*)
 		   acc
 	| Y => FOR (0,rsizey(mrel))
-                   (fn y => fn acc => 
-		       let val col = mrel_at_y mrel y
-		       in
-			   foldl (fn(x,acc) => f(x,y) acc) acc col
-		       end)
+		   (fn y => RFOR_AT_Y (fn x => f(x,y)) mrel y)
 		   acc
 
 
