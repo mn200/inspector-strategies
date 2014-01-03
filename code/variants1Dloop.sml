@@ -536,43 +536,23 @@ fun fast_top_inspector(R_A,W_A) =
          * and return dinv, inverse of loop permutation *)
         fun pack_waves_simple ( dinv, wave ) =
             let
-                (* iterate over wave and count how many iters per wave *)
-                val wcount =
-                    FOR (0,dsizex(wave))
-                        (fn i => fn (wcount) =>
-                            let val w = dsub(wave,i)
-                            in dupdate(wcount,w,dsub(wcount,w)+1)
-                            end)
-                        (empty_dv (max_wave+1,0))
+		(* change wave to ivector *)
+		val iwave = intdvector_to_ivector (wave,max_wave+1)
 
-                (*val debug = dump_dvector wcount "wcount"
-                val debug = dump_dvector wave "wave"*)
-
-                (* determine where to start putting iterations for each wave *)
-                val wstart =
-                    FOR (1,dsizex(wcount))
-                        (fn i => fn wstart =>
-                            dupdate(wstart,i,
-                                    dsub(wstart,i-1)+dsub(wcount,i-1)))
-                        (empty_dv (dsizex(wcount),0))
-
-                (*val debug = dump_dvector wstart "wstart"*)
-
-                (* use wavestart and another pass over wave to create dinv *)
-                val (dinv,wcount) =
-                    FOR (0,dsizex(wave))
-                        (fn i => fn (dinv,wstart) =>
-                            let val w = dsub(wave,i)
-                                val j = dsub(wstart,w)
-                            in
-                                (iupdate(dinv,j,i), dupdate(wstart,w,j+1))
-                            end)
-                        (dinv, wstart)
-
-                (*val debug = dump_ivector dinv "dinv"*)
+		(* change wave ivector to an mrel *)
+		val rwave = ivector_to_mrel iwave
+	   
+                (* iterate through relation in order of waves
+                 * and pack iterations as we see them into dinv *)
+                val (dinv,count) = RFOR Y
+					(fn (i,w) => fn (dinv,count) =>
+					    (iupdate(dinv,count,i), count+1))
+					rwave
+					(dinv,0)	 
             in
-                dinv
-            end
+		dinv
+	    end
+
 
         fun pack_waves_fast ( dinv, wave ) =
             let

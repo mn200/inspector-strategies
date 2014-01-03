@@ -52,6 +52,11 @@ struct
   fun r_update ((rf, xsz, ysz), x, y) =
       (fnupdate rf (x,y) true, Int.max(xsz,x+1), Int.max(ysz,y+1))
 
+  fun intdvector_to_ivector (dvec,szy) =
+      FOR (0,dsizex(dvec))
+	  (fn x => fn ivec => iupdate (ivec,x,dsub(dvec,x)))
+	  (empty_iv (dsizex(dvec),szy))
+
   fun ivector_to_mrel ivec =
       FOR (0,isizex(ivec))
 	  (fn x => fn mrel => r_update (mrel,x,isub(ivec,x)))

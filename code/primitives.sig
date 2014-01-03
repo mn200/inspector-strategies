@@ -26,7 +26,8 @@ sig
   (* created relation should include old relation union new pair *)
   val r_update : mrelation * int * int -> mrelation
 
-  (* converting an ivector into an mrelation *)
+  (* needed conversions *)
+  val intdvector_to_ivector : int dvector * int -> ivector
   val ivector_to_mrel : ivector -> mrelation
 
   (* index into vectors or relation *)
