@@ -26,6 +26,9 @@ sig
   (* created relation should include old relation union new pair *)
   val r_update : mrelation * int * int -> mrelation
 
+  (* converting an ivector into an mrelation *)
+  val ivector_to_mrel : ivector -> mrelation
+
   (* index into vectors or relation *)
   val isub : ivector * int -> int
   val dsub : 'a dvector * int -> 'a
@@ -45,8 +48,6 @@ sig
   val ivector_to_list : ivector -> int list
   val list_to_mrel : (int*int) -> (int * int) list -> mrelation
   val mrel_to_list : mrelation -> (int * int) list
-(*  val mrel_at_y : mrelation -> int -> int list *)
-
 
   datatype direction = X | Y
 
@@ -64,6 +65,13 @@ sig
     x.  f is the body of the loop and modifies the accumulator.
   *) 
   val RFOR_AT_X : (int -> 'a -> 'a) -> mrelation -> int -> 'a -> 'a 
+
+ (* RFOR_AT_Y f mrel y acc
+
+    is a functional to loop over all x's associated with the given
+    y.  f is the body of the loop and modifies the accumulator.
+  *) 
+  val RFOR_AT_Y : (int -> 'a -> 'a) -> mrelation -> int -> 'a -> 'a 
 
   (* FOR (lo, hi) f acc
 

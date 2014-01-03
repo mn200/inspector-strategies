@@ -22,6 +22,12 @@ struct
 		 else raise Fail "index out of bounds",
        N, M)
 
+  fun dsizex ((f,xsz) : 'a dvector) = xsz
+  fun isizex ((f,xsz,ysz) : ivector) = xsz
+  fun isizey ((f,xsz,ysz) : ivector) = ysz
+  fun rsizex ((rf,xsz,ysz) : mrelation) = xsz
+  fun rsizey ((rf,xsz,ysz) : mrelation) = ysz
+
   fun fnsub (f, i, xsz) =
       if (0<=i andalso i < xsz) then f i
       else raise Fail "indexing out of bounds"
@@ -46,11 +52,10 @@ struct
   fun r_update ((rf, xsz, ysz), x, y) =
       (fnupdate rf (x,y) true, Int.max(xsz,x+1), Int.max(ysz,y+1))
 
-  fun dsizex ((f,xsz) : 'a dvector) = xsz
-  fun isizex ((f,xsz,ysz) : ivector) = xsz
-  fun isizey ((f,xsz,ysz) : ivector) = ysz
-  fun rsizex ((rf,xsz,ysz) : mrelation) = xsz
-  fun rsizey ((rf,xsz,ysz) : mrelation) = ysz
+  fun ivector_to_mrel ivec =
+      FOR (0,isizex(ivec))
+	  (fn x => fn mrel => r_update (mrel,x,isub(ivec,x)))
+	  (empty_r (isizex(ivec),isizey(ivec)))
 
   fun list_to_dvector l =
       ((fn i => Vector.sub(Vector.fromList l,i)), length l)
