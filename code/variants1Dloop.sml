@@ -622,6 +622,67 @@ fun codevariant3 (A,f,g,h,N,M) =
             A
     end
 
+(******************************************************************************)
+(* Variant 4, Reordering the data
+ *
+ * Transformation specification
+ *     R = { A[x] -> A[y] | y=s(x) } is data transformation specification
+ *)
+
+fun reorder_data(A,sinv) =
+    FOR (0,dsizex(A))
+	(fn x => fn Aprime =>
+	    dupdate(Aprime, x, dsub(A, isub(sinv,x))))
+	(empty_dv(dsizex(A),dsub(A,0)))
+
+fun data_permute_inspector(R_A,W_A,A) =
+    let
+	(* constructs relation for how iterations access data,
+         *     c2d = {[i]->[x] | (i,x) in R_A \/ (i,x) in W_A} 
+         * Would be nice to have a union operation for mrels here *)
+	val c2d = RFOR X
+		       (fn (i,x) => fn c2d =>
+			   r_update(c2d, i, x))
+		       R_A
+		       (RFOR X
+			     (fn (i,x) => fn c2d =>
+				 r_update(c2d,i,x))
+			     W_A
+			     (empty_r(rsizex(R_A),rsizex(W_A))))
+
+	val sinv = cpack_inspector(c2d)
+
+	val Aprime = reorder_data(A,sinv)
+    in
+	(Aprime,sinv)
+    end
+
+(* Reorders the given data array back to its original order *)
+(* Parameters are the reordered data array and the inverse of the reordering. *)
+fun post_computation_inspector (Aprime,sinv) =
+    FOR (0,dsizex(Aprime))
+	(fn x => fn A =>
+	    dupdate(A,x,dsub(Aprime,isub(sinv,x))))
+	(empty_dv (dsizex(Aprime),dsub(Aprime,0)))
+
+(* N is number of iterations, M is size of dataspaces *)
+fun codevariant4 (A,f,g,h,N,M) =
+    let
+        val R_A = construct_R_A(N,M,g,h)
+        val W_A = construct_W_A(N,M,f)
+        val (Aprime,sinv) = data_permute_inspector(R_A,W_A,A)
+    
+        val Aprime =
+            FOR (0,N)
+		(fn i => fn Aprime => 
+		    dupdate(Aprime, isub(f,i), 
+			    dsub(Aprime, isub(g,i)) + dsub(Aprime, isub(h,i))))
+		Aprime
+    in
+	(* results provided in the original A order *)
+	post_computation_inspector(Aprime,sinv)
+    end
+
 
 (******************************************************************************)
 (******************************************************************************)
@@ -700,3 +761,6 @@ val variant2_test2 = dvector_to_list(orgcode_with_deps(A,f,g,h,N))
 
 val variant3_test2 = dvector_to_list(orgcode_with_deps(A,f,g,h,N)) 
                      = dvector_to_list(codevariant3(A,f,g,h,N,M))
+
+val variant4_test2 = dvector_to_list(orgcode_with_deps(A,f,g,h,N)) 
+                     = dvector_to_list(codevariant4(A,f,g,h,N,M))
