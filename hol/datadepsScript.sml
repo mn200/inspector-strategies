@@ -1,6 +1,8 @@
 open HolKernel Parse boolLib bossLib;
-open primitivesTheory
+open primitivesTheory forLoopTheory pred_setTheory
 open lcsymtacs
+
+fun asimp thl = asm_simp_tac (srw_ss() ++ ARITH_ss) thl
 
 val _ = new_theory "datadeps";
 
@@ -61,6 +63,85 @@ val ddepR_acyclic = store_thm(
   ``∀i. ¬(ddepR wf rfs)⁺ i i``,
   rpt strip_tac >> imp_res_tac ddepR_TC_LT >> fs[]);
 val _ = export_rewrites ["ddepR_acyclic"]
+
+val vsz_eval = store_thm(
+  "vsz_eval",
+  ``vsz (eval wf rfs body i A) = vsz A``,
+  simp[eval_def]);
+val _ = export_rewrites ["vsz_eval"]
+
+val vsz_eval_FOR = store_thm(
+  "vsz_eval_FOR",
+  ``vsz (FOR (lo,hi) (eval wf rfs body) A) = vsz A``,
+  DEEP_INTRO_TAC FOR_RULE >> qexists_tac `λi A'. vsz A' = vsz A` >>
+  simp[]);
+val _ = export_rewrites ["vsz_eval_FOR"]
+
+val vsub_eval_out_range_FOR = store_thm(
+  "vsub_eval_out_range_FOR",
+  ``(∀j. lo ≤ j ∧ j < hi ⇒ wf j ≠ i) ⇒ FOR (lo,hi) (eval wf rfs body) A ' i = A ' i``,
+  strip_tac >> DEEP_INTRO_TAC FOR_RULE >>
+  qexists_tac `λj a. a ' i = A ' i` >> simp[eval_def] >>
+  simp[update_sub]);
+
+(* now convinced that this approach, based on what was done for
+"simple" loops, can't work because it's hard to imagine using it
+anything about the contents of the array part-way through the loop. In
+the simple case, a given index had either been written or had not.
+Here, depending on the wf array/function, an array cell may be written
+multiple times.
+
+val correct0 = prove(
+  ``BIJ δ (count N) (count N) ∧ Abbrev (γ = LINV δ (count N)) ∧
+    (∀j. j < N ⇒ wf j < N) ∧
+    (final = FOR (0,N) (eval wf rfs body) A1) ∧
+    (∀i0 i. ddepR wf rfs i0 i ==> δ i0 < δ i) ⇒
+    ∀m n A2.
+      (vsz A1 = vsz A2) ∧ N ≤ vsz A1 ∧
+      (m = N - n) ∧ n ≤ N ∧
+      (∀i. A2 ' i = if i ∈ IMAGE δ (count n) then vsub final i
+                    else vsub A1 i)
+     ⇒
+      (FOR (n, N) (eval (wf o γ) (MAP (λf. f o γ) rfs) body) A2 = final)``,
+  strip_tac >> Induct >| [
+    rpt strip_tac >> `N = n` by decide_tac >>
+    qpat_assum `0 = N - n` kall_tac >>
+    srw_tac[ARITH_ss][] >>
+    srw_tac[ARITH_ss][vector_EQ] >>
+    Cases_on `i < N`
+    >- (`∃j. j < N ∧ (i = δ j)`
+          by metis_tac[BIJ_DEF, IN_COUNT, SURJ_DEF] >>
+        rw[] >> metis_tac[]) >>
+    metis_tac[vsub_eval_out_range_FOR],
+
+    rpt strip_tac >> ONCE_REWRITE_TAC [FOR_def] >>
+    srw_tac[ARITH_ss][] >> fs[AND_IMP_INTRO] >>
+    first_x_assum match_mp_tac >> asimp[] >>
+    `n < N` by decide_tac >>
+    qx_gen_tac `i` >>
+    `∀i. i < N ⇒ γ i < N`
+      by (simp[Abbr`γ`] >> imp_res_tac BIJ_LINV_BIJ >>
+          metis_tac[BIJ_DEF, SURJ_DEF, IN_COUNT]) >>
+    reverse (Cases_on `i < N`)
+    >- (`FOR (0,N) (eval wf rfs body) A1 ' i = A1 ' i`
+          by metis_tac[vsub_eval_out_range_FOR] >>
+        simp[] >>
+        `A2 ' i = A1 ' i` by simp[] >>
+        `i ≠ wf (γ n)` suffices_by
+          simp[eval_def, update_sub] >>
+        metis_tac[]) >>
+    Cases_on `i = wf (γ n)`
+
+
+    simp_tac (srw_ss()) [eval_def]
+
+Cases_on `i = n` >| [
+      pop_assum SUBST_ALL_TAC >>
+      `n < N` by decide_tac >>
+      `δ n < N` by metis_tac[BIJ_DEF, IN_COUNT, SURJ_DEF] >>
+      simp_tac (srw_ss())[eval_def]
+*)
+
 
 (*
 val correctness = store_thm(
