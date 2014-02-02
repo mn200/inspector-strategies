@@ -652,8 +652,6 @@ fun data_permute_inspector(R_A,W_A,A) =
 
 	val sinv = cpack_inspector(c2d)
 
-        val debug = dump_ivector sinv "sinv"
-
         (* need routine for doing inverse of an ivector *)
         val s = FOR (0,isizex(sinv))
                     (fn i => fn s =>
@@ -661,8 +659,6 @@ fun data_permute_inspector(R_A,W_A,A) =
                     (empty_iv (isizey(sinv),isizex(sinv)))
 
 	val Aprime = reorder_data(A,sinv)
-
-        val debug = dump_ivector s "s"
 
     in
 	(Aprime,s)
@@ -680,14 +676,9 @@ fun post_computation_inspector (Aprime,s) =
 (* N is number of iterations, M is size of dataspaces *)
 fun codevariant4 (A,f,g,h,N,M) =
     let
-        val debug = dump_ivector f "f"
-        val debug = dump_ivector g "g"
-        val debug = dump_ivector h "h"
         val R_A = construct_R_A(N,M,g,h)
         val W_A = construct_W_A(N,M,f)
-        val debug = dump_dvector A "A before"
         val (Aprime,s) = data_permute_inspector(R_A,W_A,A)
-        val debug = dump_dvector Aprime "Aprime before"
     
         val Aprime =
             FOR (0,N)
@@ -696,11 +687,9 @@ fun codevariant4 (A,f,g,h,N,M) =
 			    dsub(Aprime, isub(s, isub(g,i))) 
                             + dsub(Aprime, isub(s, isub(h,i)))))
 		Aprime
-        val debug = dump_dvector Aprime "Aprime after"
 
 	(* results provided in the original A order *)
 	val A = post_computation_inspector(Aprime,s)
-        val debug = dump_dvector A "A after"
 
     in
         A
