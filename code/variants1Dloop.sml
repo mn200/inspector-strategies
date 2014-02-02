@@ -652,35 +652,58 @@ fun data_permute_inspector(R_A,W_A,A) =
 
 	val sinv = cpack_inspector(c2d)
 
+        val debug = dump_ivector sinv "sinv"
+
+        (* need routine for doing inverse of an ivector *)
+        val s = FOR (0,isizex(sinv))
+                    (fn i => fn s =>
+                        iupdate (s, isub(sinv,i), i))
+                    (empty_iv (isizey(sinv),isizex(sinv)))
+
 	val Aprime = reorder_data(A,sinv)
+
+        val debug = dump_ivector s "s"
+
     in
-	(Aprime,sinv)
+	(Aprime,s)
     end
 
 (* Reorders the given data array back to its original order *)
-(* Parameters are the reordered data array and the inverse of the reordering. *)
-fun post_computation_inspector (Aprime,sinv) =
+(* Parameters are the reordered data array and the reordering. *)
+(* s is old2new mapping. *)
+fun post_computation_inspector (Aprime,s) =
     FOR (0,dsizex(Aprime))
 	(fn x => fn A =>
-	    dupdate(A,x,dsub(Aprime,isub(sinv,x))))
+	    dupdate(A,x,dsub(Aprime,isub(s,x))))
 	(empty_dv (dsizex(Aprime),dsub(Aprime,0)))
 
 (* N is number of iterations, M is size of dataspaces *)
 fun codevariant4 (A,f,g,h,N,M) =
     let
+        val debug = dump_ivector f "f"
+        val debug = dump_ivector g "g"
+        val debug = dump_ivector h "h"
         val R_A = construct_R_A(N,M,g,h)
         val W_A = construct_W_A(N,M,f)
-        val (Aprime,sinv) = data_permute_inspector(R_A,W_A,A)
+        val debug = dump_dvector A "A before"
+        val (Aprime,s) = data_permute_inspector(R_A,W_A,A)
+        val debug = dump_dvector Aprime "Aprime before"
     
         val Aprime =
             FOR (0,N)
-		(fn i => fn Aprime => 
-		    dupdate(Aprime, isub(f,i), 
-			    dsub(Aprime, isub(g,i)) + dsub(Aprime, isub(h,i))))
+		(fn i => fn Aprime =>
+                    dupdate(Aprime, isub(s,isub(f,i)), 
+			    dsub(Aprime, isub(s, isub(g,i))) 
+                            + dsub(Aprime, isub(s, isub(h,i)))))
 		Aprime
-    in
+        val debug = dump_dvector Aprime "Aprime after"
+
 	(* results provided in the original A order *)
-	post_computation_inspector(Aprime,sinv)
+	val A = post_computation_inspector(Aprime,s)
+        val debug = dump_dvector A "A after"
+
+    in
+        A
     end
 
 
