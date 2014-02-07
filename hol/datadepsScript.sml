@@ -11,6 +11,41 @@ val eval_def = Define`
     update A (Wf i) (vf i (MAP (λf. vsub A (f i)) Rs))
 `;
 
+val _ = type_abbrev("action", ``:num # num list # ('a list -> 'a)``)
+
+val apply_action_def = Define`
+  apply_action ((w,rs,f) : 'a action) (A:'a mvector) =
+    update A w (f (MAP (vsub A) rs))
+`;
+
+val touches_def = Define`
+  touches (w1,rs1,f1) (w2,rs2,f2) ⇔
+     w1 = w2 ∨ MEM w1 rs2 ∨ MEM w2 rs1
+`;
+
+val touches_SYM = store_thm(
+  "touches_SYM",
+  ``touches a1 a2 ⇒ touches a2 a1``,
+  map_every qid_spec_tac [`a1`, `a2`] >>
+  simp[pairTheory.FORALL_PROD, touches_def] >>
+  rpt strip_tac >> simp[]);
+
+val wfG_def = Define`
+  wfG (els,R) ⇔
+      (∀a1 a2. R a1 a2 ⇒ touches a1 a2 ∧ a1 ∈ els ∧ a2 ∈ els) ∧
+      ∀a1 a2. a1 ∈ els ∧ a2 ∈ els ∧ touches a1 a2 ⇒ (¬R a1 a2 ⇔ R a2 a1) ∧
+      ∀a1 a2. a1 ∈ els ∧ a2 ∈ els ∧ R⁺ a1 a2 ⇒ ¬R⁺ a2 a1
+`;
+
+val (evalG_rules,evalG_ind,evalG_cases) = Hol_reln`
+  (∀A R. evalG A (∅, R) A) ∧
+  (∀a as A0 A R.
+      (∀a'. a' ∈ as ⇒ ¬touches a a') ∧ a ∉ as ∧
+      evalG (apply_action a A0) (as, R) A ⇒
+      evalG A0 (a INSERT as, R)
+
+
+
 val example_t =
   ``FOR (0,N)
       (eval (vsub (f : num mvector))
