@@ -37,19 +37,6 @@ fun dump_ivector v vstr =
 
 
 (******************************************************************************)
-(* Some testing for primitives *)
-val iupdate_test1 =
-    ivector_to_list( iupdate( empty_iv(3,7), 2, 42)) = [0,0,42]
-
-val dupdate_test1 =
-    dvector_to_list( dupdate( empty_dv(3,false), 1, true)) = [false,true,false]
-
-
-
-
-
-
-(******************************************************************************)
 (* Original Code in C
  *
  * for (i=0; i<N; i++) {
@@ -166,74 +153,6 @@ fun codevariant1 (B,C,f,g,N,M) =
                 end )
             B
     end
-
-(******************************************************************************)
-(******************************************************************************)
-(***** Testing for the original loop with no deps and all of the variants *****)
-(* Using the origcode requires initializing B, C, f, g, and N with values. *)
-
-val f = list_to_ivector [1,2,3,4,0]
-
-val g = list_to_ivector [4,3,2,1,0]
-
-val C = list_to_dvector [10,20,30,40,50]
-(*
-val test_org = dvector_to_list(orgcode (empty_dv(isizex(f),0),C,f,g,5)) 
-               = [70,70,70,70,20]
-
-val er_test1 = mrel_to_list(construct_explicit_relation(5,5,f,g))
-*)
-val inspec_test1 = 
-    ivector_to_list(cpack_inspector( 
-                         construct_explicit_relation(5,5,f,g)))
-    = [4,0,3,1,2]
-(*
-val variant1_out = dvector_to_list(
-        codevariant1(empty_dv(isizex(f),0),C,f,g,5,5))
-*)
-val variant1_test1 = dvector_to_list(orgcode(empty_dv(isizex(f),0),C,f,g,5)) 
-                     = dvector_to_list(
-                         codevariant1(empty_dv(isizex(f),0),C,f,g,5,5))
-
-(* Test where packing needs to do a cleanup pass *)
-(* Well no because output of original code doesn't depend on index 2
- * if it just isn't there *)
-val f = list_to_ivector [1,1,3,3,0]
-
-val g = list_to_ivector [4,4,1,1,0]
-
-val C = list_to_dvector [10,20,30,40,50]
-
-val variant1_test2 = dvector_to_list(orgcode(empty_dv(isizex(f),0),C,f,g,5)) 
-                     = dvector_to_list(
-                         codevariant1(empty_dv(isizex(f),0),C,f,g,5,5))
-
-(* What about the output from the inspector? *)
-val inspec_test2 = 
-    ivector_to_list(cpack_inspector( 
-                         construct_explicit_relation(5,5,f,g)))
-    = [4,0,1,2,3]
-
-(* Test 3: Another example.  Now N=3 and M=5.  C can stay the same. *)
-val fsz3 =  list_to_ivector [0,4,3]
-val gsz3 =  list_to_ivector [1,4,2]
-(*
-val er_test3 = 
-    mrel_to_list ( construct_explicit_relation(5,3,fsz3,gsz3) )
-    =  [(4,1),(3,2),(2,2),(1,0),(0,0)]
-*)
-(* Used for debugging. *)
-(*val E = construct_explicit_relation(5,3,fsz3,gsz3);
-val xsize = rsizex(E);
-val ysize = rsizey(E);
-val inspec_test3 = 
-    ivector_to_list(cpack_inspector(construct_explicit_relation(5,3,fsz3,gsz3)))
-*)
-val variant1_test3 = dvector_to_list(
-                         orgcode(empty_dv(isizex(fsz3),0),C,fsz3,gsz3,3)) 
-                     = dvector_to_list(
-                         codevariant1(empty_dv(isizex(fsz3),0),C,fsz3,gsz3,3,5))
-
 
 
 (******************************************************************************)
@@ -452,17 +371,17 @@ fun codevariant2 (A,f,g,h,N,M) =
  *     logic
  *         Visit read and write access relation pairs (i,y) in order of 
  *         iterations i.
- *             For read, either
- *                 i is reading from location already written to in i
- *                     thus can be in same wavefront as wave[i], update lr_iter
- *                 i is reading from location written to by a previous iteration
- *                     thus wave[i] = wave[lw_iter[y]] + 1, update lr_iter
- *             For write, either
- *                 i is writing to a location already read or written to in i
- *                     thus can be in same wavefront as wave[i], update lw_iter[y]
- *                 i is writing to loc read or written by a prev iteration
- *                     thus wave[i]=max(wave[lw_iter[y]]+1,wave[lr_iter[y]]+1)
- *                          lw_iter[y]=i
+ *           For read, either
+ *             i is reading from location already written to in i
+ *               thus can be in same wavefront as wave[i], update lr_iter
+ *             i is reading from location written to by a previous iteration
+ *               thus wave[i] = wave[lw_iter[y]] + 1, update lr_iter
+ *           For write, either
+ *             i is writing to a location already read or written to in i
+ *               thus can be in same wavefront as wave[i], update lw_iter[y]
+ *             i is writing to loc read or written by a prev iteration
+ *               thus wave[i]=max(wave[lw_iter[y]]+1,wave[lr_iter[y]]+1)
+ *                    lw_iter[y]=i
  *         Then do counting sort on iterations based on wave numbers.
  *)
 fun fast_top_inspector(R_A,W_A) =
@@ -485,8 +404,8 @@ fun fast_top_inspector(R_A,W_A) =
             then (wave,lw_iter,dupdate(lr_iter,y,i))
             (* wave[i] = wave[lw_iter[y]] + 1 *)
             else (dupdate(wave,i,dsub(wave,dsub(lw_iter,y)+1)),
-		  lw_iter,
-		  dupdate(lr_iter,y,i))
+                  lw_iter,
+                  dupdate(lr_iter,y,i))
 
         (* i is iteration, y is data location *)
         fun handle_write i y (wave,lw_iter,lr_iter) =
@@ -515,9 +434,9 @@ fun fast_top_inspector(R_A,W_A) =
             (* NOTE, can't use RFORX, have to visit both R_A and W_A *)
             FOR (0,rsizex(R_A))
                 (fn i => fn (wave,lw_iter,lr_iter) =>
-		    RFOR_AT_X (handle_write i) W_A i
-			      (RFOR_AT_X (handle_read i) R_A i
-			                 (wave,lw_iter,lr_iter)))
+                    RFOR_AT_X (handle_write i) W_A i
+                              (RFOR_AT_X (handle_read i) R_A i
+                                         (wave,lw_iter,lr_iter)))
                 (wave,lw_iter,lr_iter)
 
         (* Compute the wave number for each iteration *)
@@ -536,22 +455,22 @@ fun fast_top_inspector(R_A,W_A) =
          * and return dinv, inverse of loop permutation *)
         fun pack_waves_simple ( dinv, wave ) =
             let
-		(* change wave to ivector *)
-		val iwave = intdvector_to_ivector (wave,max_wave+1)
+                (* change wave to ivector *)
+                val iwave = intdvector_to_ivector (wave,max_wave+1)
 
-		(* change wave ivector to an mrel *)
-		val rwave = ivector_to_mrel iwave
-	   
+                (* change wave ivector to an mrel *)
+                val rwave = ivector_to_mrel iwave
+       
                 (* iterate through relation in order of waves
                  * and pack iterations as we see them into dinv *)
                 val (dinv,count) = RFOR Y
-					(fn (i,w) => fn (dinv,count) =>
-					    (iupdate(dinv,count,i), count+1))
-					rwave
-					(dinv,0)	 
+                    (fn (i,w) => fn (dinv,count) =>
+                        (iupdate(dinv,count,i), count+1))
+                    rwave
+                    (dinv,0)     
             in
-		dinv
-	    end
+                dinv
+            end
 
 
         fun pack_waves_fast ( dinv, wave ) =
@@ -565,9 +484,6 @@ fun fast_top_inspector(R_A,W_A) =
                             end)
                         (empty_dv (max_wave+1,0))
 
-                (*val debug = dump_dvector wcount "wcount"
-                val debug = dump_dvector wave "wave"*)
-
                 (* determine where to start putting iterations for each wave *)
                 val wstart =
                     FOR (1,dsizex(wcount))
@@ -575,8 +491,6 @@ fun fast_top_inspector(R_A,W_A) =
                             dupdate(wstart,i,
                                     dsub(wstart,i-1)+dsub(wcount,i-1)))
                         (empty_dv (dsizex(wcount),0))
-
-                (*val debug = dump_dvector wstart "wstart"*)
 
                 (* use wavestart and another pass over wave to create dinv *)
                 val (dinv,wcount) =
@@ -589,7 +503,6 @@ fun fast_top_inspector(R_A,W_A) =
                             end)
                         (dinv, wstart)
 
-                (*val debug = dump_ivector dinv "dinv"*)
             in
                 dinv
             end
@@ -598,7 +511,7 @@ fun fast_top_inspector(R_A,W_A) =
 (*        pack_waves_fast ( empty_iv(rsizex(R_A),0),    (* init dinv *)
                           wave )                      (* wave number per iter *)
 *)
-	pack_waves_simple ( empty_iv(rsizex(R_A),0), wave )
+        pack_waves_simple ( empty_iv(rsizex(R_A),0), wave )
     end
 
 (* N is number of iterations, M is size of dataspaces *)
@@ -612,7 +525,6 @@ fun codevariant3 (A,f,g,h,N,M) =
         val W_A = construct_W_A(N,M,f)
         val dinv = fast_top_inspector(R_A,W_A)
     in
-
         FOR (0,N)
             (fn j => fn A => 
                 let val i = isub(dinv,j) in
@@ -631,26 +543,23 @@ fun codevariant3 (A,f,g,h,N,M) =
 
 fun reorder_data(A,sinv) =
     FOR (0,dsizex(A))
-	(fn x => fn Aprime =>
-	    dupdate(Aprime, x, dsub(A, isub(sinv,x))))
-	(empty_dv(dsizex(A),dsub(A,0)))
+        (fn x => fn Aprime => dupdate(Aprime, x, dsub(A, isub(sinv,x))))
+        (empty_dv(dsizex(A),dsub(A,0)))
 
 fun data_permute_inspector(R_A,W_A,A) =
     let
-	(* constructs relation for how iterations access data,
-         *     c2d = {[i]->[x] | (i,x) in R_A \/ (i,x) in W_A} 
-         * Would be nice to have a union operation for mrels here *)
-	val c2d = RFOR X
-		       (fn (i,x) => fn c2d =>
-			   r_update(c2d, i, x))
-		       R_A
-		       (RFOR X
-			     (fn (i,x) => fn c2d =>
-				 r_update(c2d,i,x))
-			     W_A
-			     (empty_r(rsizex(R_A),rsizex(W_A))))
+    (* constructs relation for how iterations access data,
+     *     c2d = {[i]->[x] | (i,x) in R_A \/ (i,x) in W_A}
+     * Would be nice to have a union operation for mrels here *)
+        val c2d = RFOR X
+                       (fn (i,x) => fn c2d => r_update(c2d, i, x))
+                       R_A
+                       (RFOR X
+                             (fn (i,x) => fn c2d => r_update(c2d,i,x))
+                             W_A
+                             (empty_r(rsizex(R_A),rsizex(W_A))))
 
-	val sinv = cpack_inspector(c2d)
+        val sinv = cpack_inspector(c2d)
 
         (* need routine for doing inverse of an ivector *)
         val s = FOR (0,isizex(sinv))
@@ -658,10 +567,10 @@ fun data_permute_inspector(R_A,W_A,A) =
                         iupdate (s, isub(sinv,i), i))
                     (empty_iv (isizey(sinv),isizex(sinv)))
 
-	val Aprime = reorder_data(A,sinv)
+        val Aprime = reorder_data(A,sinv)
 
     in
-	(Aprime,s)
+        (Aprime,s)
     end
 
 (* Reorders the given data array back to its original order *)
@@ -669,9 +578,9 @@ fun data_permute_inspector(R_A,W_A,A) =
 (* s is old2new mapping. *)
 fun post_computation_inspector (Aprime,s) =
     FOR (0,dsizex(Aprime))
-	(fn x => fn A =>
-	    dupdate(A,x,dsub(Aprime,isub(s,x))))
-	(empty_dv (dsizex(Aprime),dsub(Aprime,0)))
+        (fn x => fn A =>
+            dupdate(A,x,dsub(Aprime,isub(s,x))))
+        (empty_dv (dsizex(Aprime),dsub(Aprime,0)))
 
 (* N is number of iterations, M is size of dataspaces *)
 fun codevariant4 (A,f,g,h,N,M) =
@@ -682,97 +591,17 @@ fun codevariant4 (A,f,g,h,N,M) =
     
         val Aprime =
             FOR (0,N)
-		(fn i => fn Aprime =>
+                (fn i => fn Aprime =>
                     dupdate(Aprime, isub(s,isub(f,i)), 
-			    dsub(Aprime, isub(s, isub(g,i))) 
+                            dsub(Aprime, isub(s, isub(g,i))) 
                             + dsub(Aprime, isub(s, isub(h,i)))))
-		Aprime
+                Aprime
 
-	(* results provided in the original A order *)
-	val A = post_computation_inspector(Aprime,s)
+        (* results provided in the original A order *)
+        val A = post_computation_inspector(Aprime,s)
 
     in
         A
     end
 
 
-(******************************************************************************)
-(******************************************************************************)
-(***** Testing for the original loop with deps and all of the variants *****)
-(* Original Code in C for loop with deps
- *
- *   for (i=0; i<N; i++) {
- *     A[ f[i] ] =  A[ g[i] ] + A[ h[i] ];
- *   }
- *)
-
-val N = 5
-val M = 5
-val f = list_to_ivector [1,2,1,4,0] (* writes *)
-val g = list_to_ivector [4,3,2,1,0] (* reads *)
-val h = list_to_ivector [0,1,2,3,4] (* reads *)
-(* Deps should have
- *      anti: (0,3),(0,4),(1,2)
- *      flow: (0,1),(1,2),(2,3),(3,4),(0,3)
- *      output: (0,2)
- *)
-val R_A = construct_R_A(N,M,g,h)
-val test_R_A = mrel_to_list( R_A )
-val W_A = construct_W_A(N,M,f)
-val test_W_A = mrel_to_list( W_A )
-val test_Deps = mrel_to_list(construct_Deps(N,R_A,W_A))
-
-(* Of course above example results in a full order. *)
-(* Here is an example that doesn't. *)
-val f = list_to_ivector [1,2,1,2,1] (* writes *)
-val g = list_to_ivector [4,3,4,3,4] (* reads *)
-val h = list_to_ivector [0,3,0,3,0] (* reads *)
-val R_A2 = construct_R_A(N,M,g,h)
-val test_R_A2 = mrel_to_list( R_A2 )
-val W_A2 = construct_W_A(N,M,f)
-val test_W_A2 = mrel_to_list( W_A2 )
-val test_Deps2 = mrel_to_list(construct_Deps(N,R_A2,W_A2))
-
-(* Now let's do the actual computation *)
-val A = list_to_dvector [10,20,30,40,50]
-val test_org_with_deps = dvector_to_list(orgcode_with_deps(A,f,g,h,N)) 
-               = [10,60,80,40,50]
-
-(* testing the topological inspectors *)
-val top_test1 = 
-    ivector_to_list(topological_inspector(construct_Deps(N,R_A2,W_A2)))
-    = [0,1,2,3,4]
-
-val fast_top_test1 =
-    ivector_to_list(fast_top_inspector(R_A2,W_A2))
-    = [0,1,2,3,4]
-
-(* above example results in permutation equal to original order *)
-(* here is another example where should get 0,3,1,4,2 *)
-val f = list_to_ivector [1,1,1,2,2] (* writes *)
-val g = list_to_ivector [4,3,4,3,4] (* reads *)
-val h = list_to_ivector [0,3,0,3,0] (* reads *)
-val R_A2 = construct_R_A(N,M,g,h)
-val test_R_A2 = mrel_to_list( R_A2 )
-val W_A2 = construct_W_A(N,M,f)
-val test_W_A2 = mrel_to_list( W_A2 )
-val test_Deps2 = mrel_to_list(construct_Deps(N,R_A2,W_A2))
-
-val top_test2 = 
-    ivector_to_list(topological_inspector(construct_Deps(N,R_A2,W_A2)))
-    (*= [0,3,1,4,2]*)
-
-val fast_top_test2 =
-    ivector_to_list(fast_top_inspector(R_A2,W_A2))
-    = [0,3,1,4,2]
-
-val variant2_out = dvector_to_list(codevariant2(A,f,g,h,N,M))
-
-val variant2_test2 = dvector_to_list(orgcode_with_deps(A,f,g,h,N)) 
-                     = dvector_to_list(codevariant2(A,f,g,h,N,M))
-
-val variant3_test2 = dvector_to_list(orgcode_with_deps(A,f,g,h,N)) 
-                     = dvector_to_list(codevariant3(A,f,g,h,N,M))
-
-val variant4_test2 = dvector_to_list(orgcode_with_deps(A,f,g,h,N)) 
-                     = dvector_to_list(codevariant4(A,f,g,h,N,M))
