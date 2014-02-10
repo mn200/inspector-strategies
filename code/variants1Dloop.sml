@@ -614,6 +614,63 @@ fun codevariant4 (A,f,g,h,N,M) =
  *    data_reord: reordering the data being accessed by a loop
  *)
 
+(* Pack all iterations based on their wave number and return dinv,
+ * inverse of loop permutation. *)
+(* wave - ivector with mapping of iterations to wave fronts *)
+fun pack_waves_simple wave =
+    let
+        (* change wave ivector to an mrel *)
+        val rwave = ivector_to_mrel wave
+       
+        (* iterate through relation in order of waves
+         * and pack iterations as we see them into dinv *)
+        val (dinv,count) = RFOR Y
+                                (fn (i,w) => fn (dinv,count) =>
+                                    (iupdate(dinv,count,i), count+1))
+                                rwave
+                                (empty_iv(isizex(wave),isizey(wave)),0)
+    in
+        dinv
+    end
+
+(* Instead of creating an mrel and iterating over it in Y order,
+ * this routine counts up number of iterations in each wave and
+ * then sorts them this way.  Basically this is a counting sort. *)
+fun pack_waves_fast wave =
+    let
+        (* iterate over wave and count how many iters per wave *)
+        val wcount =
+            FOR (0,isizex(wave))
+                (fn i => fn (wcount) =>
+                    let val w = isub(wave,i)
+                    in dupdate(wcount,w,dsub(wcount,w)+1)
+                    end)
+                (empty_dv (isizey(wave),0))
+
+        (* determine where to start putting iterations for each wave *)
+        val wstart =
+            FOR (1,dsizex(wcount))
+                (fn i => fn wstart =>
+                    dupdate(wstart,i,
+                            dsub(wstart,i-1)+dsub(wcount,i-1)))
+                (empty_dv (dsizex(wcount),0))
+
+        (* use wavestart and another pass over wave to create dinv *)
+        val (dinv,wcount) =
+            FOR (0,isizex(wave))
+                (fn i => fn (dinv,wstart) =>
+                    let val w = isub(wave,i)
+                        val j = dsub(wstart,w)
+                    in
+                        (iupdate(dinv,j,i), dupdate(wstart,w,j+1))
+                    end)
+                (empty_iv(isizex(wave),isizey(wave)), wstart)
+
+    in
+        dinv
+    end
+
+
 (* Iteration Reordering, DOACROSS Loop *)
 (* Input:
  *     R_A is the read access relation.

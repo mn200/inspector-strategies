@@ -186,9 +186,24 @@ val no_reord = fn _ =>
                       (fn i => fn dinv => iupdate (dinv, i, i) )
                       (empty_iv(N,N))
 
+(* Both the wavefront function and reordering function do nothing interesting *)
 val doacross_reord_test1 = dvector_to_list(orgcode_with_deps(A,f,g,h,N)) 
                            = dvector_to_list(
                                codevariant_doacross_reord(A,f,g,h,N,M,
                                                           single_wave,
                                                           no_reord))
+
+(* Using simple pack routine even though all iteration just put in same wave. *)
+val doacross_reord_test2 = dvector_to_list(orgcode_with_deps(A,f,g,h,N)) 
+                           = dvector_to_list(
+                               codevariant_doacross_reord(A,f,g,h,N,M,
+                                                          single_wave,
+                                                          pack_waves_simple))
+
+(* Using count sort pack routine.  All iters still in one wave. *)
+val doacross_reord_test3 = dvector_to_list(orgcode_with_deps(A,f,g,h,N)) 
+                           = dvector_to_list(
+                               codevariant_doacross_reord(A,f,g,h,N,M,
+                                                          single_wave,
+                                                          pack_waves_fast))
 
