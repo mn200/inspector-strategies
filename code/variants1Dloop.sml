@@ -534,6 +534,7 @@ fun codevariant3 (A,f,g,h,N,M) =
             A
     end
 
+
 (******************************************************************************)
 (* Variant 4, Reordering the data
  *
@@ -604,4 +605,39 @@ fun codevariant4 (A,f,g,h,N,M) =
         A
     end
 
+(**************************************************************************)
+(* Refactoring numbered variants above into three cases that can be
+ * parameterized with different inspector reordering heuristics.
+ *
+ *    dopar_reord: permuting the iterations in a parallel loop
+ *    doacross_reord: permuting the iterations when have loop carried deps
+ *    data_reord: reordering the data being accessed by a loop
+ *)
+
+(* Iteration Reordering, DOACROSS Loop *)
+(* Input:
+ *     R_A is the read access relation.
+ *     W_A is the write access relation.
+ *     wavef is a function that maps iterations to parallel wavefronts.
+ *     packf is a function that packs iterations based on their wavefront.
+ * Output:
+ *     dinv maps new iteration order to old iteration order
+ *)
+fun doacross_reord ( R_A, W_A, wavef, packf ) =
+    packf( wavef( R_A, W_A ) )
+
+fun codevariant_doacross_reord (A,f,g,h,N,M, wavef, packf) =
+    let
+        val R_A = construct_R_A(N,M,g,h)
+        val W_A = construct_W_A(N,M,f)
+        val dinv = doacross_reord(R_A, W_A, wavef, packf)
+    in
+        FOR (0,N)
+            (fn j => fn A => 
+                let val i = isub(dinv,j) in
+                    dupdate(A, isub(f,i), 
+                            dsub(A, isub(g,i)) + dsub(A, isub(h,i)))
+                end )
+            A
+    end
 

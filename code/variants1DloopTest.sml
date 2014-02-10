@@ -157,3 +157,38 @@ val variant3_test2 = dvector_to_list(orgcode_with_deps(A,f,g,h,N))
 
 val variant4_test2 = dvector_to_list(orgcode_with_deps(A,f,g,h,N)) 
                      = dvector_to_list(codevariant4(A,f,g,h,N,M))
+
+
+(******************************************************************************)
+(******************************************************************************)
+(***** Testing for the original loop with deps and all of the variants *****)
+(* Original Code in C for loop with deps
+ *
+ *   for (i=0; i<N; i++) {
+ *     A[ f[i] ] =  A[ g[i] ] + A[ h[i] ];
+ *   }
+ *)
+
+val N = 5
+val M = 5
+val f = list_to_ivector [1,2,1,3,4] (* writes *)
+val g = list_to_ivector [0,0,2,0,0] (* reads *)
+val h = list_to_ivector [0,0,0,0,1] (* reads *)
+(* Deps are
+ *      anti: (0,4), (2,4)
+ *      flow: (1,2)
+ *      output: (0,2)
+ *)
+
+val single_wave = fn (_,_) => empty_iv(N,1)
+val no_reord = fn _ =>
+                  FOR (0,N)
+                      (fn i => fn dinv => iupdate (dinv, i, i) )
+                      (empty_iv(N,N))
+
+val doacross_reord_test1 = dvector_to_list(orgcode_with_deps(A,f,g,h,N)) 
+                           = dvector_to_list(
+                               codevariant_doacross_reord(A,f,g,h,N,M,
+                                                          single_wave,
+                                                          no_reord))
+
