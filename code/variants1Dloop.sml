@@ -618,10 +618,60 @@ fun codevariant4 (A,f,g,h,N,M) =
  * At the end are the general routines themselves.
  *)
 
+(* find_waves_deps
+ *
+ * Maps iterations to parallel wavefronts by creating a partial ordering
+ * of iterations based on dependencies and then finding wavefronts in
+ * that partial ordering.
+ *)
+fun find_waves_deps (R_A : mrelation, W_A : mrelation) =
+    let
+        val deps = construct_Deps(rsizex(R_A),R_A,W_A)
+
+        (* find wavefront of iterations that can executed, 
+         * reduction so can't pack as we look,
+         * could check visited, but must recheck in assign_wavefront anyway *)
+        fun find_wavefront ( visited ) =
+            RFOR X
+                 (fn (i1,i2) => fn (ready) =>
+                     (* if predecessor not visited then not ready *)
+                     dupdate(ready,i2,dsub(visited, i1) andalso dsub(ready,i2)))
+                 deps
+                 (empty_dv(rsizey(deps),true)) (* initially all ready *)
+
+        (* assign all iterations to a wavefront *)
+        fun assign_waves ( wave, visited, iter_count, wave_count ) =
+            if iter_count >= rsizey(deps)
+            then wave (* FIXME efficiency: could pack wave here *)
+            else
+                let val ready = find_wavefront( visited )
+                    (* have to check if visited here because can't assume
+                     * any (v,i) entries in deps *)
+                    val (wave,visited,iter_count,wave_count) =
+                        FOR (0,dsizex(ready))
+                            (fn i => fn (wave,visited,iter_count,wave_count ) =>
+                                if dsub(ready,i) andalso not (dsub(visited,i))
+                                then (iupdate(wave,i,wave_count),
+                                      dupdate(visited,i,true),
+                                      iter_count+1,wave_count)
+                                else (wave,visited,iter_count,wave_count))
+                            (wave,visited,iter_count,wave_count)
+                in
+                    assign_waves( wave, visited, iter_count, wave_count+1 )
+                end
+    in
+        assign_waves( empty_iv(rsizex(R_A),rsizex(R_A)), (* overest of waves*)
+                      empty_dv(rsizex(R_A),false), (* init visited *)
+                      0,  (* initial iteration count *)
+                      0 ) (* initial wave count *)
+    end
+
 (* find_waves_fast
  * 
  * Maps iterations to parallel wavefronts but avoids explicitly constructing
  * the dependence relation.
+ *
+ * FIXME efficiency: not packing wave range down to actual wave count yet
  *
  * Assuming inputs R_A and W_A have same domain and range.
  * Assuming one statement so all reads happen before the single write. 

@@ -215,3 +215,11 @@ val doacross_reord_test4 = dvector_to_list(orgcode_with_deps(A,f,g,h,N))
                                                           find_waves_fast,
                                                           pack_waves_fast))
 
+
+(* Using count sort pack routine.  Finding waves with Deps. *)
+val doacross_reord_test5 = dvector_to_list(orgcode_with_deps(A,f,g,h,N)) 
+                           = dvector_to_list(
+                               codevariant_doacross_reord(A,f,g,h,N,M,
+                                                          find_waves_deps,
+                                                          pack_waves_fast))
+
