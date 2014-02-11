@@ -606,17 +606,120 @@ fun codevariant4 (A,f,g,h,N,M) =
     end
 
 (**************************************************************************)
+(**************************************************************************)
 (* Refactoring numbered variants above into three cases that can be
  * parameterized with different inspector reordering heuristics.
  *
  *    dopar_reord: permuting the iterations in a parallel loop
  *    doacross_reord: permuting the iterations when have loop carried deps
  *    data_reord: reordering the data being accessed by a loop
+ *
+ * Directly below are the various routines these reorderings can use.
+ * At the end are the general routines themselves.
  *)
 
-(* Pack all iterations based on their wave number and return dinv,
- * inverse of loop permutation. *)
-(* wave - ivector with mapping of iterations to wave fronts *)
+(* find_waves_fast
+ * 
+ * Maps iterations to parallel wavefronts but avoids explicitly constructing
+ * the dependence relation.
+ *
+ * Assuming inputs R_A and W_A have same domain and range.
+ * Assuming one statement so all reads happen before the single write. 
+ *
+ * Algorithm Sketch
+ *     data structures
+ *         wave[i] = wavefront for iteration i, init=(numiters-1)
+ *         lw_iter[y] = last iteration to write to this data location
+ *         lr_iter[y] = last iteration to read this data location
+ *     recurrence equations
+ *         wave[i] = max( max_{y st (i,y) in R_A}( wave[lw_iter[y,i]]+1 ),
+ *                        max_{y st (i,y) in W_A}( wave[lw_iter[y,i]]+1 ),
+ *                        max_{y st (i,y) in W_A}( wave[lr_iter[y,i]]+1 ) )
+ *         lw_iter[y,i] = max_{0<j<i}( {j | (j,y) in W_A} ) // scan
+ *         lr_iter[y,i] = max_{0<j<i}( {j | (j,y) in R_A} ) // scan
+ * 
+ * Implementation
+ *     Won't be fast if just implement recurrences directly.
+ *     Is the below an implementation that could derive by doing
+ *     optimizations on the above recurrence equations?
+ *
+ *     Initialize all wave[i] to 0.
+ *     Initialize all last write and last read per data item to -1,
+ *         assuming iteration starts at 0, assuming at least one write
+ *         per iteration.
+ *     Visit iterations i in order.
+ *         max_prev_wave = -1
+ *         For read y
+ *             max_prev_wave = max(max_prev_wave,wave[lw_iter[y]])
+ *             lr_iter[y] = max(lr_iter[y],i)
+ *         For write y, assuming only one
+ *             if read data item in this iteration can still be in same wave.
+ *             if lr_iter[y]==i then max_prev_wave = max_prev_wave
+ *             else max_prev_wave = max(max_prev_wave,
+ *                                      wave[lr_iter[y]],
+ *                                      wave[lw_iter[y]])
+ *             lw_iter[y] = i
+ *         wave[i] = max_prev_wave + 1
+ *)
+fun find_waves_fast (R_A, W_A) =
+    let
+        (* wavefront number for iteration i *)
+        (* initially all put into wave 0 and range is overapproximated *)
+        val wave = empty_iv(rsizex(R_A),rsizex(R_A))
+
+        (*  last iteration to write to this data location *)
+        val lw_iter = empty_dv(rsizey(R_A),~1)
+        (*  last iteration to read from this data location *)
+        val lr_iter = empty_dv(rsizey(R_A),~1)
+
+        (* if indexing wave with -1, then return -1 for value so +1 works *)
+        fun wave_val (wave, idx) =
+            if idx>=0
+            then isub(wave,idx)
+            else ~1
+
+        (* i is iteration, y is data location *)
+        fun handle_read i y (wave,lw_iter,lr_iter,max_prev_wave) =
+            (* lr_iter[y] = max(lr_iter[y],i) *)
+            (* max_prev_wave = max(max_prev_wave,wave[lw_iter[y]]) *)
+            (wave, lw_iter, dupdate(lr_iter,y,i),
+             Int.max(max_prev_wave,wave_val(wave,dsub(lw_iter,y))) )
+
+        (* i is iteration, y is data location *)
+        fun handle_write i y (wave,lw_iter,lr_iter:int dvector, max_prev_wave) =
+            (* update lw_iter[y] to i *)
+            (* if read data item in this iteration can still be in same wave
+             * else need to detect prev wave that i depends on *)
+            (wave, dupdate(lw_iter,y,i), lr_iter,
+             if dsub(lr_iter,y) = i 
+             then max_prev_wave
+             else Int.max(max_prev_wave,
+                          Int.max(wave_val(wave,dsub(lr_iter,y)), 
+                                  wave_val(wave,dsub(lw_iter,y)))) )
+            
+        (* assign wavefront numbers to iterations *)
+        val (wave,_,_,_) =
+            (* NOTE, can't use RFORX, have to visit both R_A and W_A *)
+            FOR (0,rsizex(R_A))
+                (fn i => fn (wave,lw_iter,lr_iter,max_prev_wave) =>
+                    RFOR_AT_X (handle_write i) W_A i
+                              (RFOR_AT_X (handle_read i) R_A i
+                                         (wave,lw_iter,lr_iter,max_prev_wave)))
+                (* init max_prev_wave to -1 *)
+                (wave,lw_iter,lr_iter,~1)
+
+    in
+        wave
+    end
+
+
+(* pack_waves_simple
+ *
+ * Pack all iterations based on their wave number and return dinv,
+ * inverse of loop permutation.
+ *
+ * wave - ivector with mapping of iterations to wave fronts
+ *)
 fun pack_waves_simple wave =
     let
         (* change wave ivector to an mrel *)
