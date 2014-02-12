@@ -910,7 +910,7 @@ fun codevariant_data_reord (A,f,g,h, data_permutef) =
         val (Aprime,s) = data_permutef(R_A,W_A,A)
     
         val Aprime =
-            FOR (0,isizex(f))
+            FOR (0,dsizex(A))
                 (fn i => fn Aprime =>
                     dupdate(Aprime, isub(s,isub(f,i)), 
                             dsub(Aprime, isub(s, isub(g,i))) 

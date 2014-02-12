@@ -173,10 +173,8 @@ val C = list_to_dvector [10,20,30,40,50]
 (**** dopar_reord tests *)
 
 val dopar_reord_test1 =
-    (* had to put 5 for M because f did not use full range,
-       how come things worked for codevariant? *)
     dvector_to_list(
-        orgcode(empty_dv(isizex(f),0),C,f,g,5))
+        orgcode(empty_dv(isizex(f),0),C,f,g,dsizex(C)))
     = dvector_to_list(
         codevariant_dopar_reord(empty_dv(isizex(f),0),C,f,g,cpack_inspector))
 
