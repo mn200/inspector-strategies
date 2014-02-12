@@ -224,10 +224,6 @@ val wfG_evaluate_deterministically = store_thm(
 
 
 
-
-
-
-
 val example_t =
   ``FOR (0,N)
       (eval (vsub (f : num mvector))
@@ -253,14 +249,15 @@ for (int i= 0; i < N; i++)
 
 *)
 
-val _ = overload_on("@@", ``λl x. MAP (combin$C I x) l``)
-val _ = set_fixity "@@" (Infixl 2000)
+val _ = set_mapped_fixity { fixity = Infixl 500, term_name = "FAPPLY",
+                            tok = "<*>" }
+val _ = overload_on ("FAPPLY", ``LIST_APPLY``)
 
 val ddepR_def = Define`
   ddepR wf rfs i0 i ⇔
     i0 < i ∧ (wf i0 = wf i ∨
-              MEM (wf i0) (rfs @@ i) ∨
-              MEM (wf i) (rfs @@ i0))
+              MEM (wf i0) (rfs <*> [i]) ∨
+              MEM (wf i) (rfs <*> [i0]))
 `;
 
 val ddepR_irreflexive = store_thm(
