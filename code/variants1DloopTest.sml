@@ -161,6 +161,26 @@ val variant4_test2 = dvector_to_list(orgcode_with_deps(A,f,g,h,N))
 
 (******************************************************************************)
 (******************************************************************************)
+(***** Testing for the original loop with no deps and all of the variants *****)
+(* Using the origcode requires initializing B, C, f, g, and N with values. *)
+
+val f = list_to_ivector [1,1,3,3,0]
+
+val g = list_to_ivector [4,4,1,1,0]
+
+val C = list_to_dvector [10,20,30,40,50]
+
+(**** dopar_reord tests *)
+
+val dopar_reord_test1 =
+    (* had to put 5 for M because f did not use full range,
+       how come things worked for codevariant? *)
+    dvector_to_list(
+        orgcode(empty_dv(isizex(f),0),C,f,g,5))
+    = dvector_to_list(
+        codevariant_dopar_reord(empty_dv(isizex(f),0),C,f,g,cpack_inspector))
+
+
 (***** Testing for the original loop with deps and all of the variants *****)
 (* Original Code in C for loop with deps
  *
@@ -180,6 +200,8 @@ val h = list_to_ivector [0,0,0,0,1] (* reads *)
  *      output: (0,2)
  *)
 
+
+(**** doacross_reord tests ****)
 val single_wave = fn (_,_) => empty_iv(N,1)
 val no_reord = fn _ =>
                   FOR (0,N)
@@ -223,3 +245,8 @@ val doacross_reord_test5 = dvector_to_list(orgcode_with_deps(A,f,g,h,N))
                                                           find_waves_deps,
                                                           pack_waves_fast))
 
+(**** dota_reord tests ****)
+val data_reord_test1 = dvector_to_list(orgcode_with_deps(A,f,g,h,N)) 
+                       = dvector_to_list(
+                           codevariant_data_reord(A,f,g,h,
+                                                  data_permute_inspector))

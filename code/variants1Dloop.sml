@@ -237,8 +237,9 @@ fun construct_Deps (N,R_A,W_A) =
  * User-defined inspector topsort
  *     Assume dinv is inverse of d and that topological sort is returning dinv.
  *
- * Below there are two versions: BFS based one and pack wavefronts.  They 
- * both work.  I uncommented the one that is shortest.
+ * Below there are two versions: BFS based one and pack wavefronts.
+ * BFS is currently broken.  See refactor later in this file for
+ * find_waves_deps and find_waves_deps_bfs.
  *)
 fun topological_inspector(deps) =
 (*
@@ -823,18 +824,62 @@ fun pack_waves_fast wave =
         dinv
     end
 
+(**************************************************************************)
+(**************************************************************************)
+(* Original Code in C
+ *
+ * for (i=0; i<N; i++) {
+ *     B[i] = C[ f[i] ] + C[ g[i] ];
+ * }
+ *)
+(* Assuming f and g have the same range and domain. *)
+fun construct_R_A_nodeps (f,g) =
+    FOR (0,isizex(f))
+        (fn i => fn R_A => r_update(r_update(R_A,i,isub(f,i)),i, isub(g,i)))
+        (empty_r (isizex(f),isizey(f)))
+
+(* Iteration Reordering, DOPAR Loop *)
+(* Input:
+ *     R_A is the read access relation for the loop, iters->dataidx.
+ *     reordf is a function that returns the inverse of a new ordering
+ *            for the iterations.
+ *     N is number of iterations
+ *     M is number of data locations for B and C arrays.
+ * Output:
+ *     dinv maps new iteration order to old iteration order
+ *)
+fun codevariant_dopar_reord (B,C,f,g, reordf) =
+    let
+        val R_A = construct_R_A_nodeps(f,g)
+        val dinv = reordf(R_A)
+    in
+        FOR (0,isizex(f))
+            (fn j => fn B => 
+                let val i = isub(dinv,j) in
+                    dupdate(B, i, dsub(C, isub(f,i)) + dsub(C, isub(g,i)))
+                end )
+            B
+    end
+
+(**************************************************************************)
+(* Original Code in C for loop with deps
+ *
+ *   for (i=0; i<N; i++) {
+ *     A[ f[i] ] =  A[ g[i] ] + A[ h[i] ];
+ *   }
+ *)
 
 (* Iteration Reordering, DOACROSS Loop *)
-(* Input:
+(*
  *     R_A is the read access relation.
  *     W_A is the write access relation.
  *     wavef is a function that maps iterations to parallel wavefronts.
  *     packf is a function that packs iterations based on their wavefront.
- * Output:
  *     dinv maps new iteration order to old iteration order
  *)
 fun doacross_reord ( R_A, W_A, wavef, packf ) =
     packf( wavef( R_A, W_A ) )
+(* FIXME efficiency: often can merge parts of wavef and packf, but nontrivial*)
 
 fun codevariant_doacross_reord (A,f,g,h,N,M, wavef, packf) =
     let
@@ -851,3 +896,30 @@ fun codevariant_doacross_reord (A,f,g,h,N,M, wavef, packf) =
             A
     end
 
+(* Data Reordering, DOACROSS Loop *)
+(*
+ *     R_A is the read access relation.
+ *     W_A is the write access relation.
+ *     data_permutef is a function that permutes the data given R_A, W_A, and A
+ *)
+fun codevariant_data_reord (A,f,g,h, data_permutef) =
+    let
+        (* assuming f, g, and h have same domain and range *)
+        val R_A = construct_R_A(isizex(f),isizey(f),g,h)
+        val W_A = construct_W_A(isizex(f),isizey(f),f)
+        val (Aprime,s) = data_permutef(R_A,W_A,A)
+    
+        val Aprime =
+            FOR (0,isizex(f))
+                (fn i => fn Aprime =>
+                    dupdate(Aprime, isub(s,isub(f,i)), 
+                            dsub(Aprime, isub(s, isub(g,i))) 
+                            + dsub(Aprime, isub(s, isub(h,i)))))
+                Aprime
+
+        (* results provided in the original A order *)
+        val A =  post_computation_inspector(Aprime,s)
+
+    in
+        A
+    end
