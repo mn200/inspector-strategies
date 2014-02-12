@@ -4,8 +4,14 @@ open lcsymtacs
 
 fun asimp thl = asm_simp_tac (srw_ss() ++ ARITH_ss) thl
 fun dsimp thl = asm_simp_tac (srw_ss() ++ boolSimps.DNF_ss) thl
+fun csimp thl = asm_simp_tac (srw_ss() ++ boolSimps.CONJ_ss) thl
 
 val _ = new_theory "datadeps";
+
+val _ = set_mapped_fixity { fixity = Infixl 500, term_name = "FAPPLY",
+                            tok = "<*>" }
+val _ = overload_on ("FAPPLY", ``LIST_APPLY``)
+
 
 val eval_def = Define`
   eval Wf Rs vf i A =
@@ -61,6 +67,9 @@ val touches_SYM = store_thm(
   "touches_SYM",
   ``touches a1 a2 ⇒ touches a2 a1``,
   simp[touches_def] >> rpt strip_tac >> simp[]);
+
+val _ = type_abbrev ("action_graph",
+                     ``:'a action set # ('a action -> 'a action -> bool)``);
 
 val wfG_def = Define`
   wfG (els,R) ⇔
@@ -222,7 +231,149 @@ val wfG_evaluate_deterministically = store_thm(
         simp[wfG_def] >> metis_tac[]) >>
   match_mp_tac nontouching_actions_commute >> simp[]);
 
+val add_action_def = Define`
+  add_action a (As,R) =
+    (a INSERT As,
+     (λsrc tgt. R src tgt ∨
+                src = a ∧ touches a tgt ∧ tgt ∈ As))
+`;
 
+val mkEAction_def = Define`
+  mkEAction wf rfs body i =
+    <| write := wf i; reads := rfs <*> [i];
+       expr := body i; iter := i |>
+`;
+
+val loop_to_graph_def = tDefine "loop_to_graph" `
+  loop_to_graph (lo,hi) wf rfs body =
+    if lo < hi then
+      add_action (mkEAction wf rfs body lo)
+                 (loop_to_graph (lo+1,hi) wf rfs body)
+    else (∅, REMPTY)
+` (WF_REL_TAC `measure (λp. SND (FST p) - FST (FST p))`)
+
+val eval_apply_action = store_thm(
+  "eval_apply_action",
+  ``eval wf rfs body i = apply_action (mkEAction wf rfs body i)``,
+  simp[eval_def, apply_action_def, FUN_EQ_THM, mkEAction_def] >>
+  rpt gen_tac >>
+  rpt (AP_TERM_TAC ORELSE AP_THM_TAC) >> Induct_on `rfs` >>
+  simp[listTheory.LIST_APPLY_DEF]);
+
+val evalG_I = store_thm(
+  "evalG_I",
+  ``∀A0 A G a As R.
+       G = (a INSERT As,R) ∧ (∀a'. a' ∈ As ⇒ ¬R a' a) ∧ a ∉ As ∧
+       evalG (apply_action a A0) (As, R \\ a) A ⇒
+       evalG A0 G A``,
+  simp[CONJUNCT2 evalG_rules]);
+
+val loop_to_graph_iterations = store_thm(
+  "loop_to_graph_iterations",
+  ``loop_to_graph (lo,hi) wf rfs body = (As, R) ⇒
+      (∀a. a ∈ As ⇒ lo ≤ a.iter ∧ a.iter < hi) ∧
+      (∀a1 a2. R a1 a2 ⇒ a1 ∈ As ∧ a2 ∈ As)``,
+  map_every qid_spec_tac [`As`, `R`] >>
+  Induct_on `hi - lo` >> simp[Once loop_to_graph_def] >>
+  rpt gen_tac >> qmatch_rename_tac `SUC n = hi - lo ⇒ XX` ["XX"] >>
+  disch_then (assume_tac o SYM) >> map_every qx_gen_tac [`R`, `As`] >>
+  `∃As0 R0. loop_to_graph (lo + 1, hi) wf rfs body = (As0, R0)`
+    by metis_tac[TypeBase.nchotomy_of ``:'a # 'b``] >>
+  `n = hi - (lo + 1)` by decide_tac >>
+  `(∀a. a ∈ As0 ⇒ lo + 1 ≤ a.iter ∧ a.iter < hi) ∧
+   ∀a1 a2. R0 a1 a2 ⇒ a1 ∈ As0 ∧ a2 ∈ As0` by metis_tac[] >>
+  simp[add_action_def] >> rw[] >> fs[mkEAction_def]
+  >- (res_tac >> decide_tac)
+  >- decide_tac
+  >- metis_tac[]
+  >- metis_tac[]);
+
+val loop_to_graph_correct = store_thm(
+  "loop_to_graph_correct",
+  ``evalG A (loop_to_graph (lo,hi) wf rfs body)
+            (FOR (lo,hi) (eval wf rfs body) A)``,
+  qid_spec_tac `A` >> Induct_on `hi - lo`
+  >- simp[Once FOR_def, Once loop_to_graph_def] >>
+  rpt gen_tac >>
+  qmatch_rename_tac `SUC n = hi - lo ⇒ XX` ["XX"] >>
+  disch_then (assume_tac o SYM) >> qx_gen_tac `A` >>
+  simp[Once FOR_def, Once loop_to_graph_def, eval_apply_action] >>
+  match_mp_tac evalG_I >>
+  `∃As R0. loop_to_graph (lo + 1, hi) wf rfs body = (As,R0)`
+    by metis_tac[TypeBase.nchotomy_of ``:'a # 'b``] >>
+  simp[add_action_def] >>
+  map_every qexists_tac [`mkEAction wf rfs body lo`, `As`] >>
+  simp[] >> csimp[] >>
+  `(∀a. a ∈ As ⇒ lo + 1 ≤ a.iter ∧ a.iter < hi) ∧
+   ∀a1 a2. R0 a1 a2 ⇒ a1 ∈ As ∧ a2 ∈ As`
+    by metis_tac[loop_to_graph_iterations] >>
+  `(mkEAction wf rfs body lo).iter = lo ∧ ¬(lo + 1 ≤ lo)`
+    by simp[mkEAction_def] >>
+  rpt conj_tac >- metis_tac[] >- metis_tac[] >>
+  qmatch_abbrev_tac `
+    evalG AA (As, RR \\ act) (FOR (lo + 1, hi) (eval wf rfs body) AA)
+  ` >>
+  `n = hi - (lo + 1)` by decide_tac >>
+  `RR \\ act = R0` suffices_by metis_tac[] >>
+  qunabbrev_tac `RR` >> csimp[FUN_EQ_THM] >> metis_tac[]);
+
+val RIMAGE_DEF = new_definition(
+  "RIMAGE_DEF",
+  ``RIMAGE f R x y <=> ?a b. (x = f a) /\ (y = f b) /\ R a b``);
+
+val imap_def = Define`
+  imap f ((As,R):'a action_graph) =
+     (IMAGE (λa. a with iter updated_by f) As,
+      RIMAGE (λa. a with iter updated_by f) R)
+`;
+
+val iterations_def = Define`
+  iterations AG = IMAGE (λa. a.iter) (FST AG)
+`;
+
+val IN_iterations = store_thm(
+  "IN_iterations",
+  ``i ∈ iterations AG ⇔ ∃a. a ∈ FST AG ∧ a.iter = i``,
+  simp[iterations_def] >> metis_tac[]);
+
+val imap_irrelevance = store_thm(
+  "imap_irrelevance",
+  ``∀A0 AG A.
+      evalG A0 AG A ⇒
+      wfG AG ⇒
+        ∀f Is. INJ f (iterations AG) Is ⇒ evalG A0 (imap f AG) A``,
+  Induct_on `evalG` >> simp[imap_def] >> rpt strip_tac >>
+  match_mp_tac (CONJUNCT2 evalG_rules) >> simp[RIMAGE_DEF] >>
+  `∀a1 a2. R a1 a2 ⇒ (a1 = a ∨ a1 ∈ as) ∧ (a2 = a ∨ a2 ∈ as)`
+     by metis_tac[wfG_def, IN_INSERT] >>
+  `∀a1 a2. (a1 = a ∨ a1 ∈ as) ∧ (a2 = a ∨ a2 ∈ as) ⇒
+           (a1 with iter updated_by f = a2 with iter updated_by f ⇔
+            a1 = a2)`
+    by (rpt gen_tac >> disch_then assume_tac >>
+        simp[theorem "action_component_equality", EQ_IMP_THM] >>
+        qpat_assum `INJ f XX YY` mp_tac >>
+        simp[INJ_DEF] >> REWRITE_TAC [IN_iterations, AND_IMP_INTRO] >>
+        rpt strip_tac >>
+        first_x_assum match_mp_tac >> simp[] >> metis_tac[]) >>
+  rpt conj_tac >| [
+    dsimp[] >> map_every qx_gen_tac [`a1`, `a1'`, `a'`] >> strip_tac >>
+    Cases_on `R a1' a'` >> simp[] >>
+    Cases_on `a' = a`
+    >- (rw[] >> `a1' ∉ as` by metis_tac[] >> `a1' = a` by metis_tac[] >>
+        metis_tac[wfG_irrefl, IN_INSERT]) >>
+    `a' ∈ as` by metis_tac[] >> simp[],
+    qx_gen_tac `a2` >> Cases_on `a2 ∈ as` >> simp[] >> metis_tac[],
+    `apply_action (a with iter updated_by f) A0 = apply_action a A0`
+      by simp[apply_action_def] >> simp[] >>
+    `RIMAGE (λa. a with iter updated_by f) R \\ (a with iter updated_by f) =
+     RIMAGE (λa. a with iter updated_by f) (R \\ a)`
+      by (simp[FUN_EQ_THM, RIMAGE_DEF] >> metis_tac[]) >>
+    pop_assum SUBST1_TAC >> imp_res_tac wfGs_pull_apart >> fs[] >>
+    first_x_assum match_mp_tac >> qexists_tac `Is` >>
+    qpat_assum `INJ f XX YY` mp_tac >> simp[iterations_def] >>
+    REWRITE_TAC[INJ_DEF, IN_INSERT, IN_IMAGE] >> BETA_TAC >>
+    metis_tac[]
+  ]);
 
 val example_t =
   ``FOR (0,N)
@@ -248,10 +399,6 @@ for (int i= 0; i < N; i++)
 
 
 *)
-
-val _ = set_mapped_fixity { fixity = Infixl 500, term_name = "FAPPLY",
-                            tok = "<*>" }
-val _ = overload_on ("FAPPLY", ``LIST_APPLY``)
 
 val ddepR_def = Define`
   ddepR wf rfs i0 i ⇔
