@@ -1,5 +1,6 @@
 open HolKernel Parse boolLib bossLib;
 open primitivesTheory forLoopTheory pred_setTheory
+open listRangeTheory
 open lcsymtacs
 
 fun asimp thl = asm_simp_tac (srw_ss() ++ ARITH_ss) thl
@@ -289,6 +290,17 @@ val loop_to_graph_def = tDefine "loop_to_graph" `
     else (∅, REMPTY)
 ` (WF_REL_TAC `measure (λp. SND (FST p) - FST (FST p))`)
 
+(*
+val loop_to_graph_FOLDR = store_thm(
+  "loop_to_graph_FOLDR",
+  ``loop_to_graph (lo,hi) wf rfs body =
+      FOLDR (λi. add_action (mkEAction wf rfs body i))
+            (∅, REMPTY)
+            [lo ..< hi]``,
+  Induct_on `hi - lo` >> asimp[Once loop_to_graph_def] >> rpt strip_tac
+  >- (`hi - 1 < lo` by decide_tac
+*)
+
 val eval_apply_action = store_thm(
   "eval_apply_action",
   ``eval wf rfs body i = apply_action (mkEAction wf rfs body i)``,
@@ -535,6 +547,17 @@ Cases_on `i = n` >| [
       simp_tac (srw_ss())[eval_def]
 *)
 
+(* val same_graphs = prove(
+  ``(∀i0 i. ddepR wf rfs i0 i ==> δ i0 < δ i) ∧
+    BIJ δ (count N) (count N) ∧
+    γ = LINV δ (count N) ⇒
+    loop_to_graph (0,N) (wf o γ) (MAP (λf. f o γ) rds) body =
+      imap (λa. δ a.iter) (loop_to_graph (0,N) wf rds body)``,
+  strip_tac >> SIMP_TAC (srw_ss()) [Once loop_to_graph_def, SimpLHS] >>
+  SIMP_TAC (srw_ss()) [Once loop_to_graph_def, SimpRHS] >>
+  pop_assum (assume_tac o SYM) >>
+  Cases_on `0 < N` >> simp[]
+*)
 
 (*
 val correctness = store_thm(
