@@ -322,39 +322,28 @@ val RIMAGE_DEF = new_definition(
   ``RIMAGE f R x y <=> ?a b. (x = f a) /\ (y = f b) /\ R a b``);
 
 val imap_def = Define`
-  imap f ((As,R):'a action_graph) =
-     (IMAGE (λa. a with iter updated_by f) As,
-      RIMAGE (λa. a with iter updated_by f) R)
+  imap (f:'a action -> num) ((As,R):'a action_graph) =
+     (IMAGE (λa. a with iter := f a) As,
+      RIMAGE (λa. a with iter := f a) R)
 `;
-
-val iterations_def = Define`
-  iterations AG = IMAGE (λa. a.iter) (FST AG)
-`;
-
-val IN_iterations = store_thm(
-  "IN_iterations",
-  ``i ∈ iterations AG ⇔ ∃a. a ∈ FST AG ∧ a.iter = i``,
-  simp[iterations_def] >> metis_tac[]);
 
 val imap_irrelevance = store_thm(
   "imap_irrelevance",
   ``∀A0 AG A.
       evalG A0 AG A ⇒
       wfG AG ⇒
-        ∀f Is. INJ f (iterations AG) Is ⇒ evalG A0 (imap f AG) A``,
+        ∀f Is. INJ f (FST AG) Is ⇒ evalG A0 (imap f AG) A``,
   Induct_on `evalG` >> simp[imap_def] >> rpt strip_tac >>
   match_mp_tac (CONJUNCT2 evalG_rules) >> simp[RIMAGE_DEF] >>
   `∀a1 a2. R a1 a2 ⇒ (a1 = a ∨ a1 ∈ as) ∧ (a2 = a ∨ a2 ∈ as)`
      by metis_tac[wfG_def, IN_INSERT] >>
   `∀a1 a2. (a1 = a ∨ a1 ∈ as) ∧ (a2 = a ∨ a2 ∈ as) ⇒
-           (a1 with iter updated_by f = a2 with iter updated_by f ⇔
+           (a1 with iter := f a1 = a2 with iter := f a2 ⇔
             a1 = a2)`
     by (rpt gen_tac >> disch_then assume_tac >>
-        simp[theorem "action_component_equality", EQ_IMP_THM] >>
+        simp[Once (theorem "action_component_equality"), EQ_IMP_THM] >>
         qpat_assum `INJ f XX YY` mp_tac >>
-        simp[INJ_DEF] >> REWRITE_TAC [IN_iterations, AND_IMP_INTRO] >>
-        rpt strip_tac >>
-        first_x_assum match_mp_tac >> simp[] >> metis_tac[]) >>
+        REWRITE_TAC[INJ_DEF, IN_INSERT] >> metis_tac[]) >>
   rpt conj_tac >| [
     dsimp[] >> map_every qx_gen_tac [`a1`, `a1'`, `a'`] >> strip_tac >>
     Cases_on `R a1' a'` >> simp[] >>
@@ -363,16 +352,14 @@ val imap_irrelevance = store_thm(
         metis_tac[wfG_irrefl, IN_INSERT]) >>
     `a' ∈ as` by metis_tac[] >> simp[],
     qx_gen_tac `a2` >> Cases_on `a2 ∈ as` >> simp[] >> metis_tac[],
-    `apply_action (a with iter updated_by f) A0 = apply_action a A0`
+    `apply_action (a with iter := f a) A0 = apply_action a A0`
       by simp[apply_action_def] >> simp[] >>
-    `RIMAGE (λa. a with iter updated_by f) R \\ (a with iter updated_by f) =
-     RIMAGE (λa. a with iter updated_by f) (R \\ a)`
+    `RIMAGE (λa. a with iter := f a) R \\ (a with iter := f a) =
+     RIMAGE (λa. a with iter := f a) (R \\ a)`
       by (simp[FUN_EQ_THM, RIMAGE_DEF] >> metis_tac[]) >>
     pop_assum SUBST1_TAC >> imp_res_tac wfGs_pull_apart >> fs[] >>
     first_x_assum match_mp_tac >> qexists_tac `Is` >>
-    qpat_assum `INJ f XX YY` mp_tac >> simp[iterations_def] >>
-    REWRITE_TAC[INJ_DEF, IN_INSERT, IN_IMAGE] >> BETA_TAC >>
-    metis_tac[]
+    qpat_assum `INJ f XX YY` mp_tac >> metis_tac[INJ_INSERT]
   ]);
 
 val example_t =
