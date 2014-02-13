@@ -79,6 +79,12 @@ val wfG_def = Define`
       ∀a1 a2. a1 ∈ els ∧ a2 ∈ els ∧ R⁺ a1 a2 ⇒ ¬R⁺ a2 a1
 `;
 
+val wfG_empty = store_thm(
+  "wfG_empty",
+  ``wfG (∅, REMPTY)``,
+  simp[wfG_def]);
+val _ = export_rewrites ["wfG_empty"]
+
 val wfG_irrefl = store_thm(
   "wfG_irrefl",
   ``wfG (es,R) ∧ x ∈ es ⇒ ¬R x x``,
@@ -233,10 +239,41 @@ val wfG_evaluate_deterministically = store_thm(
 
 val add_action_def = Define`
   add_action a (As,R) =
-    (a INSERT As,
-     (λsrc tgt. R src tgt ∨
-                src = a ∧ touches a tgt ∧ tgt ∈ As))
+    if a ∈ As then (As,R)
+    else
+      (a INSERT As,
+       (λsrc tgt. R src tgt ∨
+                  src = a ∧ touches a tgt ∧ tgt ∈ As))
 `;
+
+val add_action_lemma = prove(
+  ``(∀a1 a2. R' a1 a2 ⇒ R a1 a2 ∨ a1 = a ∧ a2 ≠ a) ∧ (∀b. ¬R a b ∧ ¬R b a) ⇒
+     ∀a1 a2. R'⁺ a1 a2 ⇒ a2 ≠ a ∧ a1 = a ∨ R⁺ a1 a2``,
+  strip_tac >> Induct_on `R'⁺` >> conj_tac >- metis_tac[relationTheory.TC_SUBSET] >>
+  rpt strip_tac >> simp[]
+  >- metis_tac[TC_in_R]
+  >- metis_tac[TC_in_R] >>
+  metis_tac[relationTheory.TC_RULES]);
+
+val wfG_add_action = store_thm(
+  "wfG_add_action",
+  ``wfG G ⇒ wfG (add_action a G)``,
+  Cases_on `G` >>
+  qmatch_rename_tac `XX ⇒ wfG (add_action a (As,R))` ["XX"] >>
+  simp[add_action_def] >>
+  qabbrev_tac
+    `R' = (λsrc tgt. R src tgt ∨ src = a ∧ touches a tgt ∧ tgt ∈ As)`>>
+  Cases_on `a ∈ As` >> simp[] >>
+  `∀a1 a2. R a1 a2 ∨ a1 = a ∧ touches a a2 ∧ a2 ∈ As ⇔ R' a1 a2` by simp[Abbr`R'`] >>
+  markerLib.RM_ALL_ABBREVS_TAC >>
+  simp[wfG_def] >> reverse (rpt strip_tac)
+  >- (`∀b. ¬R a b ∧ ¬R b a` by metis_tac[] >>
+      `∀a1 a2. R' a1 a2 ⇒ R a1 a2 ∨ a1 = a ∧ a2 ≠ a` by metis_tac[] >>
+      pop_assum
+        (fn c1 => pop_assum
+           (fn c2 => assume_tac (MATCH_MP add_action_lemma (CONJ c1 c2)))) >>
+      metis_tac[]) >>
+  metis_tac[TC_in_R, touches_SYM]);
 
 val mkEAction_def = Define`
   mkEAction wf rfs body i =
@@ -284,6 +321,9 @@ val loop_to_graph_iterations = store_thm(
    ∀a1 a2. R0 a1 a2 ⇒ a1 ∈ As0 ∧ a2 ∈ As0` by metis_tac[] >>
   simp[add_action_def] >> rw[] >> fs[mkEAction_def]
   >- (res_tac >> decide_tac)
+  >- res_tac
+  >- res_tac
+  >- (res_tac >> decide_tac)
   >- decide_tac
   >- metis_tac[]
   >- metis_tac[]);
@@ -302,6 +342,11 @@ val loop_to_graph_correct = store_thm(
   `∃As R0. loop_to_graph (lo + 1, hi) wf rfs body = (As,R0)`
     by metis_tac[TypeBase.nchotomy_of ``:'a # 'b``] >>
   simp[add_action_def] >>
+  `mkEAction wf rfs body lo ∉ As`
+    by (strip_tac >>
+        `lo + 1 ≤ (mkEAction wf rfs body lo).iter`
+          by metis_tac[loop_to_graph_iterations] >>
+        full_simp_tac (srw_ss() ++ ARITH_ss) [mkEAction_def]) >>
   map_every qexists_tac [`mkEAction wf rfs body lo`, `As`] >>
   simp[] >> csimp[] >>
   `(∀a. a ∈ As ⇒ lo + 1 ≤ a.iter ∧ a.iter < hi) ∧
@@ -309,7 +354,7 @@ val loop_to_graph_correct = store_thm(
     by metis_tac[loop_to_graph_iterations] >>
   `(mkEAction wf rfs body lo).iter = lo ∧ ¬(lo + 1 ≤ lo)`
     by simp[mkEAction_def] >>
-  rpt conj_tac >- metis_tac[] >- metis_tac[] >>
+  conj_tac >- metis_tac[] >>
   qmatch_abbrev_tac `
     evalG AA (As, RR \\ act) (FOR (lo + 1, hi) (eval wf rfs body) AA)
   ` >>
