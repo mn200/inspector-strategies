@@ -67,5 +67,19 @@ val MEM_listRangeLHI = store_thm(
   Q.EXISTS_TAC `x - m` THEN DECIDE_TAC);
 val _ = export_rewrites ["MEM_listRangeLHI"]
 
+val listRangeLHI_EMPTY = store_thm(
+  "listRangeLHI_EMPTY",
+  ``hi <= lo ==> ([lo ..< hi] = [])``,
+  SRW_TAC[][listRangeLHI_def] THEN
+  `hi - lo = 0` by DECIDE_TAC THEN
+  SRW_TAC[][]);
+
+val listRangeLHI_CONS = store_thm(
+  "listRangeLHI_CONS",
+  ``lo < hi ==> ([lo ..< hi] = lo :: [lo + 1 ..< hi])``,
+  SRW_TAC[][listRangeLHI_def] THEN
+  `hi - lo = SUC (hi - (lo + 1))` by DECIDE_TAC THEN
+  SRW_TAC[ARITH_ss][listTheory.GENLIST_CONS, listTheory.GENLIST_FUN_EQ]);
+
 
 val _ = export_theory();
