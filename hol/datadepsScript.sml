@@ -290,16 +290,20 @@ val loop_to_graph_def = tDefine "loop_to_graph" `
     else (∅, REMPTY)
 ` (WF_REL_TAC `measure (λp. SND (FST p) - FST (FST p))`)
 
-(*
 val loop_to_graph_FOLDR = store_thm(
   "loop_to_graph_FOLDR",
   ``loop_to_graph (lo,hi) wf rfs body =
-      FOLDR (λi. add_action (mkEAction wf rfs body i))
+      FOLDR (add_action o mkEAction wf rfs body)
             (∅, REMPTY)
             [lo ..< hi]``,
-  Induct_on `hi - lo` >> asimp[Once loop_to_graph_def] >> rpt strip_tac
-  >- (`hi - 1 < lo` by decide_tac
-*)
+  Induct_on `hi - lo` >>
+  asimp[Once loop_to_graph_def,listRangeLHI_EMPTY, listRangeLHI_CONS]);
+
+val wfG_loop_to_graph = store_thm(
+  "wfG_loop_to_graph",
+  ``wfG (loop_to_graph (lo, hi) wf rfs body)``,
+  simp[loop_to_graph_FOLDR] >> Q.SPEC_TAC(`[lo ..< hi]`, `l`) >>
+  Induct >> simp[wfG_empty, wfG_add_action]);
 
 val eval_apply_action = store_thm(
   "eval_apply_action",
