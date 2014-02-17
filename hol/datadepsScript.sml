@@ -39,6 +39,14 @@ val touches_def = Define`
      a1.write = a2.write ∨ MEM a1.write a2.reads ∨ MEM a2.write a1.reads
 `;
 
+val touches_ignores_iter = store_thm(
+  "touches_ignores_iter",
+  ``(touches a1 (a2 with iter updated_by f) ⇔ touches a1 a2) ∧
+    (touches (a1 with iter updated_by f) a2 ⇔ touches a1 a2)``,
+  simp[touches_def]);
+val _ = export_rewrites ["touches_ignores_iter"]
+
+
 val MAP_vsub = store_thm(
   "MAP_vsub",
   ``¬MEM w reads ⇒ MAP ($' (update A w e)) reads = MAP ($' A) reads``,
@@ -308,6 +316,12 @@ val mkEAction_def = Define`
        expr := body i; iter := i |>
 `;
 
+val mkEAction_11 = store_thm(
+  "mkEAction_11",
+  ``mkEAction wf rfs body i = mkEAction wf rfs body j ⇔ i = j``,
+  simp[mkEAction_def, EQ_IMP_THM]);
+val _ = export_rewrites ["mkEAction_11"]
+
 val loop_to_graph_def = tDefine "loop_to_graph" `
   loop_to_graph (lo,hi) wf rfs body =
     if lo < hi then
@@ -325,11 +339,15 @@ val loop_to_graph_FOLDR = store_thm(
   Induct_on `hi - lo` >>
   asimp[Once loop_to_graph_def,listRangeLHI_EMPTY, listRangeLHI_CONS]);
 
+val wfG_FOLDR_add_action = store_thm(
+  "wfG_FOLDR_add_action",
+  ``wfG (FOLDR (add_action o f) emptyG l)``,
+  Induct_on `l` >> simp[wfG_add_action]);
+
 val wfG_loop_to_graph = store_thm(
   "wfG_loop_to_graph",
   ``wfG (loop_to_graph (lo, hi) wf rfs body)``,
-  simp[loop_to_graph_FOLDR] >> Q.SPEC_TAC(`[lo ..< hi]`, `l`) >>
-  Induct >> simp[wfG_empty, wfG_add_action]);
+  simp[loop_to_graph_FOLDR, wfG_FOLDR_add_action]);
 
 val eval_apply_action = store_thm(
   "eval_apply_action",
@@ -432,6 +450,31 @@ val imap_edges = store_thm(
                 a2 = a20 with iter := f a20``,
   simp[imap_def, RIMAGE_DEF] >> metis_tac[]);
 
+val INJ_THM = store_thm(
+  "INJ_THM",
+  ``INJ f s t ⇔
+      (∀x. x ∈ s ⇒ f x ∈ t) ∧
+      ∀x y. x ∈ s ∧ y ∈ s ⇒ (f x = f y ⇔ x = y)``,
+  metis_tac[INJ_DEF]);
+
+val imap_add_action = store_thm(
+  "imap_add_action",
+  ``INJ f (a INSERT G.nodes) Is ⇒
+    (imap f (add_action a G) = add_action (a with iter := f a) (imap f G))``,
+  simp[graph_equality, imap_edges, IN_imap] >> rpt strip_tac
+  >- metis_tac[] >>
+  `∀a1 a2. (a1 = a ∨ a1 ∈ G) ∧ (a2 = a ∨ a2 ∈ G) ⇒
+           (a1 with iter := f a1 = a2 with iter := f a2 ⇔
+            a1 = a2)`
+    by (simp[EQ_IMP_THM] >> fs[INJ_THM] >>
+        rpt gen_tac >> strip_tac >> simp[theorem "action_component_equality"]) >>
+  eq_tac >> rpt strip_tac >> csimp[]
+  >- (disj1_tac >> rw[] >> qmatch_rename_tac `b ∉ G.nodes ∨ XX` ["XX"] >>
+      Cases_on `b ∈ G` >> simp[] >> strip_tac >> fs[])
+  >- metis_tac[]
+  >- (`a ∉ G.nodes` by metis_tac[] >> dsimp[] >> csimp[] >> rw[] >> fs[]) >>
+  metis_tac[]);
+
 val apply_action_ignores_iter = store_thm(
   "apply_action_ignores_iter",
   ``apply_action (a with iter updated_by f) A = apply_action a A``,
@@ -450,11 +493,11 @@ val imap_irrelevance = store_thm(
   `∀a1 a2. a1 ∈ G ∧ a2 ∈ G ⇒
            (a1 with iter := f a1 = a2 with iter := f a2 ⇔
             a1 = a2)`
-    by (rpt strip_tac >> fs[INJ_DEF] >> simp[EQ_IMP_THM] >>
+    by (rpt strip_tac >> fs[INJ_THM] >> simp[EQ_IMP_THM] >>
         simp[theorem "action_component_equality"]) >>
   reverse conj_tac
   >- (`imap f G \\ (a with iter := f a) = imap f (G \\ a)` suffices_by
-          (rw[] >> first_x_assum match_mp_tac >> fs[INJ_DEF] >> metis_tac[]) >>
+          (rw[] >> first_x_assum match_mp_tac >> fs[INJ_THM] >> metis_tac[]) >>
       dsimp[graph_equality, imap_edges, EQ_IMP_THM] >> csimp[] >>
       rpt strip_tac
       >- (pop_assum mp_tac >> `a10 ∈ G` by metis_tac[wfG_def] >> simp[] >>
@@ -464,6 +507,12 @@ val imap_irrelevance = store_thm(
   qmatch_rename_tac `a0 ∈ G ⇒ ¬G.edges a1' a2' ∨ XX` ["XX"] >> strip_tac >>
   Cases_on `G.edges a1' a2'` >> simp[] >>
   `a1' ∈ G ∧ a2' ∈ G` by metis_tac[wfG_def] >> simp[] >> metis_tac[]);
+
+val imap_imap_o = store_thm(
+  "imap_imap_o",
+  ``imap f (imap g G) = imap (λa. f (a with iter := g a)) G``,
+  simp[graph_equality, IN_imap, imap_edges] >> rpt strip_tac >>
+  dsimp[]);
 
 val example_t =
   ``FOR (0,N)
@@ -554,86 +603,206 @@ val mkEAction_o = store_thm(
        REWRITE_RULE [SINGL_DEF] SINGL_APPLY_MAP, MAP_MAP_o,
        combinTheory.o_ABS_R]);
 
-(* now convinced that this approach, based on what was done for
-"simple" loops, can't work because it's hard to imagine using it
-anything about the contents of the array part-way through the loop. In
-the simple case, a given index had either been written or had not.
-Here, depending on the wf array/function, an array cell may be written
-multiple times.
+val IN_add_action = store_thm(
+  "IN_add_action",
+  ``a1 ∈ add_action a2 G ⇔ a1 = a2 ∨ a1 ∈ G``,
+  simp[add_action_def] >> rw[EQ_IMP_THM] >> simp[]);
+val _ = export_rewrites ["IN_add_action"]
 
-val correct0 = prove(
-  ``BIJ δ (count N) (count N) ∧ Abbrev (γ = LINV δ (count N)) ∧
-    (∀j. j < N ⇒ wf j < N) ∧
-    (final = FOR (0,N) (eval wf rfs body) A1) ∧
-    (∀i0 i. ddepR wf rfs i0 i ==> δ i0 < δ i) ⇒
-    ∀m n A2.
-      (vsz A1 = vsz A2) ∧ N ≤ vsz A1 ∧
-      (m = N - n) ∧ n ≤ N ∧
-      (∀i. A2 ' i = if i ∈ IMAGE δ (count n) then vsub final i
-                    else vsub A1 i)
-     ⇒
-      (FOR (n, N) (eval (wf o γ) (MAP (λf. f o γ) rfs) body) A2 = final)``,
-  strip_tac >> Induct >| [
-    rpt strip_tac >> `N = n` by decide_tac >>
-    qpat_assum `0 = N - n` kall_tac >>
-    srw_tac[ARITH_ss][] >>
-    srw_tac[ARITH_ss][vector_EQ] >>
-    Cases_on `i < N`
-    >- (`∃j. j < N ∧ (i = δ j)`
-          by metis_tac[BIJ_DEF, IN_COUNT, SURJ_DEF] >>
-        rw[] >> metis_tac[]) >>
-    metis_tac[vsub_eval_out_range_FOR],
+val add_action_edges = store_thm(
+  "add_action_edges",
+  ``(add_action a G).edges a1 a2 ⇔
+    ¬(a ∈ G) ∧ a1 = a ∧ a2 ∈ G ∧ touches a1 a2 ∨ G.edges a1 a2``,
+  rw[add_action_def] >> metis_tac[]);
+val _ = export_rewrites ["add_action_edges"]
 
-    rpt strip_tac >> ONCE_REWRITE_TAC [FOR_def] >>
-    srw_tac[ARITH_ss][] >> fs[AND_IMP_INTRO] >>
-    first_x_assum match_mp_tac >> asimp[] >>
-    `n < N` by decide_tac >>
-    qx_gen_tac `i` >>
-    `∀i. i < N ⇒ γ i < N`
-      by (simp[Abbr`γ`] >> imp_res_tac BIJ_LINV_BIJ >>
-          metis_tac[BIJ_DEF, SURJ_DEF, IN_COUNT]) >>
-    reverse (Cases_on `i < N`)
-    >- (`FOR (0,N) (eval wf rfs body) A1 ' i = A1 ' i`
-          by metis_tac[vsub_eval_out_range_FOR] >>
-        simp[] >>
-        `A2 ' i = A1 ' i` by simp[] >>
-        `i ≠ wf (γ n)` suffices_by
-          simp[eval_def, update_sub] >>
-        metis_tac[]) >>
-    Cases_on `i = wf (γ n)`
+val IN_FOLD_add_action = store_thm(
+  "IN_FOLD_add_action",
+  ``a ∈ FOLDR (add_action o f) emptyG l ⇔ ∃i. MEM i l ∧ a = f i``,
+  Induct_on `l` >> simp[] >> rw[EQ_IMP_THM] >> metis_tac[]);
 
+(* the ALL_DISTINCT assumption is reasonable given our setting *)
+val FOLD_add_action_edges_ALL_DISTINCT = store_thm(
+  "FOLD_add_action_edges_ALL_DISTINCT",
+  ``ALL_DISTINCT l ∧ (∀x y. f x = f y ⇔ x = y) ⇒
+    ((FOLDR (add_action o f) emptyG l).edges a1 a2 ⇔
+     ∃i j. i < j ∧ j < LENGTH l ∧ a1 = f (EL i l) ∧ a2 = f (EL j l) ∧
+           touches a1 a2)``,
+  Induct_on `l` >> simp[IN_FOLD_add_action] >> qx_gen_tac `h` >> strip_tac >>
+  fs[] >> qpat_assum `XX a1 a2 ⇔ YY` kall_tac >> eq_tac >> strip_tac >| [
+    qmatch_assum_rename_tac `MEM i l` [] >>
+    `∃n. n < LENGTH l ∧ i = EL n l` by metis_tac[MEM_EL] >>
+    map_every qexists_tac [`0`, `SUC n`] >> simp[],
+    qmatch_assum_rename_tac `a1 = f (EL i l)` [] >>
+    qmatch_assum_rename_tac `a2 = f (EL j l)` [] >>
+    map_every qexists_tac [`SUC i`, `SUC j`] >> simp[],
+    qmatch_assum_rename_tac `a1 = f (EL i (h::l))` [] >>
+    qmatch_assum_rename_tac `a2 = f (EL j (h::l))` [] >>
+    `i = 0 ∨ ∃i0. i = SUC i0` by (Cases_on `i` >> simp[])
+    >- (disj1_tac >> fs[] >>
+        `∃j0. j = SUC j0` by (Cases_on `j` >> fs[]) >>
+        fs[] >> metis_tac[MEM_EL]) >>
+    disj2_tac >>
+    `∃j0. j = SUC j0` by (Cases_on `j` >> fs[]) >> fs[] >>
+    metis_tac[]
+  ]);
 
-    simp_tac (srw_ss()) [eval_def]
+val FOLD_add_action_edges = store_thm(
+  "FOLD_add_action_edges",
+  ``(FOLDR (add_action o mkEAction wf rfs body) emptyG l).edges a1 a2 ⇔
+     ∃i j. i < j ∧ j < LENGTH l ∧ (∀k. j <= k ∧ k < LENGTH l ⇒ EL k l ≠ EL i l) ∧
+           a1 = mkEAction wf rfs body (EL i l) ∧
+           a2 = mkEAction wf rfs body (EL j l) ∧ touches a1 a2``,
+  Induct_on `l` >> simp[IN_FOLD_add_action] >> pop_assum kall_tac >>
+  qx_gen_tac `h` >> eq_tac >> strip_tac >| [
+    qmatch_assum_rename_tac `MEM i l` [] >>
+    `∃n. n < LENGTH l ∧ i = EL n l` by metis_tac[MEM_EL] >>
+    map_every qexists_tac [`0`, `SUC n`] >> simp[] >> qx_gen_tac `k` >>
+    strip_tac >> `∃k0. k = SUC k0` by (Cases_on`k` >> fs[]) >> fs[] >>
+    metis_tac[MEM_EL],
 
-Cases_on `i = n` >| [
-      pop_assum SUBST_ALL_TAC >>
-      `n < N` by decide_tac >>
-      `δ n < N` by metis_tac[BIJ_DEF, IN_COUNT, SURJ_DEF] >>
-      simp_tac (srw_ss())[eval_def]
-*)
+    qmatch_assum_rename_tac `a1 = mkEAction wf rfs body (EL i l)` [] >>
+    qmatch_assum_rename_tac `a2 = mkEAction wf rfs body (EL j l)` [] >>
+    map_every qexists_tac [`SUC i`, `SUC j`] >> simp[] >> qx_gen_tac `k` >>
+    strip_tac >> `∃k0. k = SUC k0` by (Cases_on`k` >> fs[]) >> fs[],
 
+    qmatch_assum_rename_tac `a1 = mkEAction wf rfs body (EL i (h::l))` [] >>
+    qmatch_assum_rename_tac `a2 = mkEAction wf rfs body (EL j (h::l))` [] >>
+    `i = 0 ∨ ∃i0. i = SUC i0` by (Cases_on `i` >> simp[])
+    >- (`∃j0. j = SUC j0` by (Cases_on `j` >> fs[]) >> fs[] >>
+        Cases_on `MEM h l`
+        >- (disj2_tac >> `∃k. k < LENGTH l ∧ EL k l = h` by metis_tac[MEM_EL] >>
+            qpat_assum `∀k. P k`
+              (assume_tac o
+               SIMP_RULE (srw_ss()) [Once arithmeticTheory.FORALL_NUM]) >>
+            `k < j0` by metis_tac [DECIDE ``¬(x < y) ⇔ y ≤ x``] >>
+            map_every qexists_tac [`k`, `j0`] >> simp[]) >>
+        disj1_tac >> reverse conj_tac
+        >- metis_tac[MEM_EL] >>
+        qx_gen_tac `a` >> Cases_on `MEM a l` >> simp[] >>
+        `a ≠ h` by metis_tac[] >> simp[mkEAction_def]) >>
+    disj2_tac >>
+    `∃j0. j = SUC j0` by (Cases_on `j` >> fs[]) >> fs[] >>
+    map_every qexists_tac [`i0`, `j0`] >> simp[] >>
+    qpat_assum `∀k. P k`
+      (ACCEPT_TAC o
+       SIMP_RULE (srw_ss()) [Once arithmeticTheory.FORALL_NUM])
+  ]);
+
+val FOLDR_add_action_nodes = store_thm(
+  "FOLDR_add_action_nodes",
+  ``(FOLDR add_action G l).nodes = G.nodes ∪ set l``,
+  simp[EXTENSION] >> Induct_on `l` >> simp[] >> metis_tac[]);
+
+val INJ_COMPOSE_IMAGE = store_thm(
+  "INJ_COMPOSE_IMAGE",
+  ``INJ (f o g) s t ⇒ INJ f (IMAGE g s) t``,
+  dsimp[INJ_THM] >> metis_tac[]);
+
+val add_action_nodes = store_thm(
+  "add_action_nodes",
+  ``(add_action a G).nodes = a INSERT G.nodes``,
+  rw[add_action_def, ABSORPTION_RWT]);
+val _ = export_rewrites ["add_action_nodes"]
+
+val FOLDR_add_iterupd = store_thm(
+  "FOLDR_add_iterupd",
+  ``INJ (λa. g a.iter) (FOLDR (add_action o f) emptyG l).nodes Is ⇒
+    FOLDR (add_action o (λa. a with iter updated_by g) o f) emptyG l =
+    imap (λa. g a.iter) (FOLDR (add_action o f) emptyG l)``,
+  Induct_on `l` >> simp[] >> rpt strip_tac >>
+  Q.SPEC_THEN `(λa. g a.iter)`
+    (Q.ISPEC_THEN `FOLDR (add_action o f) emptyG l`
+       (Q.SPEC_THEN `f h` (mp_tac o GSYM)))
+    (Q.GENL [`a`, `G`, `f`] imap_add_action) >>
+  simp[] >>
+  imp_res_tac (INJ_INSERT |> SPEC_ALL |> EQ_IMP_RULE |> #1
+                          |> UNDISCH |> CONJUNCT1 |> DISCH_ALL
+                          |> GEN_ALL) >>
+  fs[] >>
+  `f h with iter := g (f h).iter = f h with iter updated_by g`
+    by simp[theorem "action_component_equality"] >>
+  simp[] >> disch_then match_mp_tac);
+
+val iter_noop = prove(
+  ``a with iter := a.iter = a``,
+  simp[theorem "action_component_equality"]);
+
+val imap_ID = store_thm(
+  "imap_ID",
+  ``imap (λa. a.iter) G = G``,
+  dsimp[graph_equality, imap_edges, iter_noop]);
+
+val imap_CONG = store_thm(
+  "imap_CONG",
+  ``wfG G ⇒ (∀a. a ∈ G ⇒ f a = f' a) ⇒ imap f G = imap f' G``,
+  dsimp[graph_equality, imap_edges] >> csimp[] >> rpt strip_tac >>
+  eq_tac >> rpt strip_tac >> metis_tac[wfG_def]);
+
+val ALL_DISTINCT_MAP_INJ = store_thm(
+  "ALL_DISTINCT_MAP_INJ",
+  ``(∀x y. MEM x l ∧ MEM y l ⇒ (f x = f y ⇔ x = y)) ⇒
+    (ALL_DISTINCT (MAP f l) ⇔ ALL_DISTINCT l)``,
+  Induct_on `l` >> dsimp[MEM_MAP] >> metis_tac[]);
 (*
-val FOLDR_example = prove(
-  ``BIJ f (count n) (count n) ⇒
-    FOLDR (INSERT) ∅ [0 ..< n] = FOLDR (INSERT) ∅ (MAP f [0 ..< n])``,
-  Induct_on `l` >> simp[] >> map_every qx_gen_tac [`h`, `m`] >>
-  Cases_on `MEM h l`
-  >- (`h INSERT set l = set l` by metis_tac[ABSORPTION] >>
-      simp[]
-*)
-
-
-(* val same_graphs = prove(
+val same_graphs = prove(
   ``(∀i0 i. ddepR wf rfs i0 i ==> δ i0 < δ i) ∧
     BIJ δ (count N) (count N) ∧
     γ = LINV δ (count N) ⇒
-    loop_to_graph (0,N) (wf o γ) (MAP (λf. f o γ) rds) body =
+    loop_to_graph (0,N) (wf o γ) (MAP (λf. f o γ) rds) (body o γ) =
       imap (λa. δ a.iter) (loop_to_graph (0,N) wf rds body)``,
-  strip_tac >> SIMP_TAC (srw_ss()) [Once loop_to_graph_def, SimpLHS] >>
-  SIMP_TAC (srw_ss()) [Once loop_to_graph_def, SimpRHS] >>
-  pop_assum (assume_tac o SYM) >>
-  Cases_on `0 < N` >> simp[]
+  strip_tac >> pop_assum (assume_tac o SYM) >>
+  `∀n. n < N ⇒ γ (δ n) = n ∧ δ (γ n) = n`
+     by metis_tac[IN_COUNT, BIJ_DEF, LINV_DEF, BIJ_LINV_INV] >>
+  `∀n. n < N ⇒ γ n < N ∧ δ n < N`
+     by metis_tac[BIJ_DEF, INJ_THM, BIJ_LINV_BIJ, IN_COUNT] >>
+  `∀m n. m < N ∧ n < N ⇒ (δ m = δ n ⇔ m = n)` by metis_tac[] >>
+  simp[loop_to_graph_FOLDR] >>
+  `MAP (γ o δ) [0 ..< N] = [0 ..< N]`
+    by simp[LIST_EQ_REWRITE, EL_MAP, EL_listRangeLHI] >>
+  qabbrev_tac `add = add_action o mkEAction wf rds body` >>
+  qabbrev_tac `mk' = mkEAction (wf o γ) (MAP (λf. f o γ) rds) (body o γ)` >>
+  `FOLDR add emptyG [0 ..< N] = FOLDR add emptyG (MAP (γ o δ) [0 ..< N])`
+    by simp[] >>
+  `_ = FOLDR (add o γ) emptyG (MAP δ [0 ..< N])`
+    by simp[GSYM MAP_MAP_o, FOLDR_MAP_o] >>
+  `add o γ = add_action o (λa. a with iter updated_by γ) o mk'`
+    by simp[Abbr`add`, Abbr`mk'`, Once FUN_EQ_THM, mkEAction_def,
+           REWRITE_RULE[SINGL_DEF] SINGL_APPLY_PERMUTE,
+           REWRITE_RULE[SINGL_DEF] SINGL_APPLY_MAP,
+           MAP_MAP_o, combinTheory.o_ABS_R] >>
+  pop_assum SUBST_ALL_TAC >>
+  `INJ (λa. γ a.iter) (FOLDR (add_action o mk') emptyG (MAP δ [0 ..< N])).nodes
+                      (count N)`
+    by (dsimp[INJ_THM, IN_FOLD_add_action, MEM_MAP] >>
+        simp[Abbr`mk'`, mkEAction_def] >> metis_tac[]) >>
+  pop_assum (assume_tac o MATCH_MP FOLDR_add_iterupd) >>
+  pop_assum SUBST_ALL_TAC >> simp[imap_imap_o] >>
+  qabbrev_tac `G' = FOLDR (add_action o mk') emptyG (MAP δ [0 ..< N])` >>
+  `wfG G'` by metis_tac[wfG_FOLDR_add_action] >>
+  `∀a. a ∈ G' ⇒ a.iter < N`
+    by (simp[Abbr`G'`, FOLDR_add_action_nodes, GSYM FOLDR_MAP_o, MEM_MAP, MAP_MAP_o] >>
+        dsimp[Abbr`mk'`, mkEAction_def]) >>
+  `imap (λa. δ (γ a.iter)) G' = imap (λa. a.iter) G'`
+    by (ho_match_mp_tac (REWRITE_RULE [AND_IMP_INTRO] imap_CONG) >> simp[]) >>
+  simp[imap_ID] >> simp[Abbr`G'`] >>
+  dsimp[graph_equality, IN_FOLD_add_action, MEM_MAP] >> conj_tac >- metis_tac[] >>
+  `∀x y. mk' x = mk' y ⇔ x = y` by simp[Abbr`mk'`] >>
+  asm_simp_tac (srw_ss() ++ ARITH_ss ++ boolSimps.CONJ_ss)
+    [FOLD_add_action_edges_ALL_DISTINCT, EL_listRangeLHI] >>
+  `ALL_DISTINCT (MAP δ [0 ..< N])` by simp[MEM_listRangeLHI, ALL_DISTINCT_MAP_INJ] >>
+  asm_simp_tac (srw_ss() ++ ARITH_ss ++ boolSimps.CONJ_ss)
+    [FOLD_add_action_edges_ALL_DISTINCT, EL_MAP, EL_listRangeLHI] >>
+  map_every qx_gen_tac [`a1`, `a2`] >> eq_tac >| [
+    disch_then (qx_choosel_then [`i`, `j`] strip_assume_tac) >>
+    map_every qexists_tac [`γ i`, `γ j`] >> asimp[]  ddepR_def
+
+
 *)
+
+
+
+
 
 (*
 val correctness = store_thm(
