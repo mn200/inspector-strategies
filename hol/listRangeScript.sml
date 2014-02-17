@@ -81,5 +81,30 @@ val listRangeLHI_CONS = store_thm(
   `hi - lo = SUC (hi - (lo + 1))` by DECIDE_TAC THEN
   SRW_TAC[ARITH_ss][listTheory.GENLIST_CONS, listTheory.GENLIST_FUN_EQ]);
 
+val listRangeLHI_ALL_DISTINCT = store_thm(
+  "listRangeLHI_ALL_DISTINCT",
+  ``ALL_DISTINCT [lo ..< hi]``,
+  Induct_on `hi - lo` THEN SRW_TAC[][listRangeLHI_EMPTY] THEN
+  `lo < hi` by DECIDE_TAC THEN
+  SRW_TAC[ARITH_ss][listRangeLHI_CONS]);
+val _ = export_rewrites ["listRangeLHI_ALL_DISTINCT"]
+
+val LENGTH_listRangeLHI = store_thm(
+  "LENGTH_listRangeLHI",
+  ``LENGTH [lo ..< hi] = hi - lo``,
+  SRW_TAC[][listRangeLHI_def]);
+val _ = export_rewrites ["LENGTH_listRangeLHI"]
+
+val EL_listRangeLHI = store_thm(
+  "EL_listRangeLHI",
+  ``lo + i < hi ==> (EL i [lo ..< hi] = lo + i)``,
+  Q.ID_SPEC_TAC `i` THEN Induct_on `hi - lo` THEN
+  SRW_TAC[ARITH_ss][listRangeLHI_EMPTY] THEN
+  `lo < hi` by DECIDE_TAC THEN
+  SRW_TAC[ARITH_ss][listRangeLHI_CONS] THEN
+  Cases_on `i` THEN
+  SRW_TAC[ARITH_ss][]);
+
+
 
 val _ = export_theory();
