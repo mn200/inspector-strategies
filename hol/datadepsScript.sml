@@ -594,10 +594,8 @@ val mkEAction_o = store_thm(
   "mkEAction_o",
   ``mkEAction wf rfs body o f =
     iter_fupd f o mkEAction (wf o f) (MAP (\rf. rf o f) rfs) (body o f)``,
-  simp[FUN_EQ_THM, mkEAction_def,
-       REWRITE_RULE [SINGL_DEF] SINGL_APPLY_PERMUTE,
-       REWRITE_RULE [SINGL_DEF] SINGL_APPLY_MAP, MAP_MAP_o,
-       combinTheory.o_ABS_R]);
+  simp[FUN_EQ_THM, mkEAction_def, SINGL_APPLY_PERMUTE, MAP_MAP_o,
+       combinTheory.o_ABS_R, SINGL_APPLY_MAP]);
 
 val IN_FOLD_add_action = store_thm(
   "IN_FOLD_add_action",
@@ -752,9 +750,8 @@ val same_graphs = store_thm(
     by simp[GSYM MAP_MAP_o, FOLDR_MAP_o] >>
   `add o γ = add_action o (λa. a with iter updated_by γ) o mk'`
     by simp[Abbr`add`, Abbr`mk'`, Once FUN_EQ_THM, mkEAction_def,
-           REWRITE_RULE[SINGL_DEF] SINGL_APPLY_PERMUTE,
-           REWRITE_RULE[SINGL_DEF] SINGL_APPLY_MAP,
-           MAP_MAP_o, combinTheory.o_ABS_R] >>
+            SINGL_APPLY_PERMUTE, SINGL_APPLY_MAP, MAP_MAP_o,
+            combinTheory.o_ABS_R] >>
   pop_assum SUBST_ALL_TAC >>
   `INJ (λa. γ a.iter) (FOLDR (add_action o mk') emptyG (MAP δ [0 ..< N])).nodes
                       (count N)`
@@ -765,16 +762,19 @@ val same_graphs = store_thm(
   qabbrev_tac `G' = FOLDR (add_action o mk') emptyG (MAP δ [0 ..< N])` >>
   `wfG G'` by metis_tac[wfG_FOLDR_add_action] >>
   `∀a. a ∈ G' ⇒ a.iter < N`
-    by (simp[Abbr`G'`, FOLDR_add_action_nodes, GSYM FOLDR_MAP_o, MEM_MAP, MAP_MAP_o] >>
+    by (simp[Abbr`G'`, FOLDR_add_action_nodes, GSYM FOLDR_MAP_o, MEM_MAP,
+             MAP_MAP_o] >>
         dsimp[Abbr`mk'`, mkEAction_def]) >>
   `imap (λa. δ (γ a.iter)) G' = imap (λa. a.iter) G'`
     by (ho_match_mp_tac (REWRITE_RULE [AND_IMP_INTRO] imap_CONG) >> simp[]) >>
   simp[imap_ID] >> simp[Abbr`G'`] >>
-  dsimp[graph_equality, IN_FOLD_add_action, MEM_MAP] >> conj_tac >- metis_tac[] >>
+  dsimp[graph_equality, IN_FOLD_add_action, MEM_MAP] >>
+  conj_tac >- metis_tac[] >>
   `∀x y. mk' x = mk' y ⇔ x = y` by simp[Abbr`mk'`] >>
   asm_simp_tac (srw_ss() ++ ARITH_ss ++ boolSimps.CONJ_ss)
     [FOLD_add_action_edges_ALL_DISTINCT, EL_listRangeLHI] >>
-  `ALL_DISTINCT (MAP δ [0 ..< N])` by simp[MEM_listRangeLHI, ALL_DISTINCT_MAP_INJ] >>
+  `ALL_DISTINCT (MAP δ [0 ..< N])`
+    by simp[MEM_listRangeLHI, ALL_DISTINCT_MAP_INJ] >>
   asm_simp_tac (srw_ss() ++ ARITH_ss ++ boolSimps.CONJ_ss)
     [FOLD_add_action_edges_ALL_DISTINCT, EL_MAP, EL_listRangeLHI] >>
   map_every qx_gen_tac [`a1`, `a2`] >> eq_tac >| [
@@ -786,10 +786,8 @@ val same_graphs = store_thm(
     qmatch_abbrev_tac `¬(γ j < γ i) ∨ P ⇒ γ i < γ j` >>
     `¬P`
       by (qpat_assum `touches XX YY` mp_tac >>
-          simp[touches_def, Abbr`mk'`, mkEAction_def, Abbr`P`,
-               REWRITE_RULE [SINGL_DEF] SINGL_APPLY_PERMUTE,
-               REWRITE_RULE [SINGL_DEF] SINGL_APPLY_MAP,
-               MAP_MAP_o, combinTheory.o_ABS_R] >>
+          simp[touches_def, Abbr`mk'`, mkEAction_def, Abbr`P`, SINGL_APPLY_MAP,
+               SINGL_APPLY_PERMUTE, MAP_MAP_o, combinTheory.o_ABS_R] >>
           strip_tac >> simp[]) >> simp[] >>
     `i < N` by decide_tac >>
     `γ i ≠ γ j` by simp[] >> decide_tac,
@@ -798,10 +796,8 @@ val same_graphs = store_thm(
     map_every qexists_tac [`δ i`, `δ j`]  >> simp[] >>
     first_x_assum match_mp_tac >> simp[ddepR_def] >>
     pop_assum mp_tac >>
-    simp[touches_def, Abbr`mk'`, mkEAction_def,
-         REWRITE_RULE [SINGL_DEF] SINGL_APPLY_PERMUTE,
-         REWRITE_RULE [SINGL_DEF] SINGL_APPLY_MAP,
-         MAP_MAP_o, combinTheory.o_ABS_R]
+    simp[touches_def, Abbr`mk'`, mkEAction_def, SINGL_APPLY_MAP,
+         SINGL_APPLY_PERMUTE, MAP_MAP_o, combinTheory.o_ABS_R]
   ]);
 
 val FOLDR_add_actionf_nodes = store_thm(
