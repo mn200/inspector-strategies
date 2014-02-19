@@ -19,10 +19,10 @@ sig
     val rlookup : envtype * string -> mrelation option
 
     (* functions for modifying value associated with a string *)
-(*    val denvupdate : envtype -> string -> 'a dvector -> envtype
+    val denvupdate : envtype * string * real dvector -> envtype
 
-    val ienvupdate : envtype -> string -> ivector -> envtype
+    val ienvupdate : envtype * string * ivector -> envtype
 
-    val renvupdate : envtype -> string -> mrelation -> envtype
-*)
+    val renvupdate : envtype * string * mrelation -> envtype
+
 end
