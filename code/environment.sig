@@ -8,17 +8,23 @@ signature environment =
 sig
     type envtype
 
+    exception VarNotFound of string
+
     (* constructor *)
     val empty_env : envtype
 
     (* functions for looking up each of the value types *)
-    val dlookup : envtype * string -> real dvector option
-    
-    val ilookup : envtype * string -> ivector option
+    val iterlookup : envtype * string -> int
 
-    val rlookup : envtype * string -> mrelation option
+    val dlookup : envtype * string -> real dvector
+    
+    val ilookup : envtype * string -> ivector
+
+    val rlookup : envtype * string -> mrelation
 
     (* functions for modifying value associated with a string *)
+    val iterenvupdate : envtype * string * int -> envtype
+
     val denvupdate : envtype * string * real dvector -> envtype
 
     val ienvupdate : envtype * string * ivector -> envtype
