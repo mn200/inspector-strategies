@@ -1,6 +1,7 @@
 open HolKernel Parse boolLib bossLib;
 
 open primitivesTheory pred_setTheory listRangeTheory listTheory
+open finite_mapTheory
 open lcsymtacs
 fun asimp thl = asm_simp_tac (srw_ss() ++ ARITH_ss) thl
 fun dsimp thl = asm_simp_tac (srw_ss() ++ boolSimps.DNF_ss) thl
@@ -126,8 +127,8 @@ val INWR = prove(
 
 val wfG_irrefl = store_thm(
   "wfG_irrefl",
-  ``!G::respects wfEQ. x ∈ G.nodes ⇒ ¬G.edges x x``,
-  simp[wfG_def, wfEQ_def, quotientTheory.respects_def, RES_FORALL_THM, INWR] >> rpt strip_tac >>
+  ``!G. wfG G ⇒ x ∈ G.nodes ⇒ ¬G.edges x x``,
+  simp[wfG_def] >> rpt strip_tac >>
   metis_tac[relationTheory.TC_SUBSET]);
 
 val empty_edges = prove(
@@ -158,8 +159,8 @@ val iterations0_def = Define`
   iterations0 G = IMAGE (\a. a.iter) G.nodes
 `;
 
-val add_action_def = Define`
-  add_action a G =
+val add_action0_def = Define`
+  add_action0 a G =
     if a.iter ∈ iterations0 G then G
     else
       <| nodes := a INSERT G.nodes ;
@@ -184,54 +185,210 @@ val wfG_WF = prove(
   pop_assum (SUBST_ALL_TAC o SYM) >>
   simp[relationTheory.irreflexive_def] >> metis_tac[TC_in_R]);
 
-val wfG_FINITE = store_thm(
-  "wfG_FINITE",
+val wfG_FINITE = prove(
+  ``wfG g ==> FINITE g.nodes``,
+  simp[wfG_def]);
+
+val wfEQ_FINITE = prove(
   ``!G::respects wfEQ. FINITE G.nodes``,
   simp[wfG_def, wfEQ_def, quotientTheory.respects_def, INWR, RES_FORALL_THM]);
 
+val add_action0_lemma = prove(
+  ``(∀a1 a2. R' a1 a2 ⇒ R a1 a2 ∨ a1 = a ∧ a2 ≠ a) ∧ (∀b. ¬R a b ∧ ¬R b a) ⇒
+     ∀a1 a2. R'⁺ a1 a2 ⇒ a2 ≠ a ∧ a1 = a ∨ R⁺ a1 a2``,
+  strip_tac >> Induct_on `R'⁺` >> conj_tac >- metis_tac[relationTheory.TC_SUBSET] >>
+  rpt strip_tac >> simp[]
+  >- metis_tac[TC_in_R]
+  >- metis_tac[TC_in_R] >>
+  metis_tac[relationTheory.TC_RULES]);
+
+val INJ_THM = store_thm(
+  "INJ_THM",
+  ``INJ f s t ⇔
+      (∀x. x ∈ s ⇒ f x ∈ t) ∧
+      ∀x y. x ∈ s ∧ y ∈ s ⇒ (f x = f y ⇔ x = y)``,
+  metis_tac[INJ_DEF]);
+
+val wfG_add_action0 = prove(
+  ``wfG G ⇒ wfG (add_action0 a G)``,
+  rw[add_action0_def] >>
+  qabbrev_tac `
+    R' = (λsrc tgt. G.edges src tgt ∨ src = a ∧ touches a tgt ∧ tgt ∈ G.nodes)
+  ` >>
+  `∀x y. G.edges x y ∨ x = a ∧ touches a y ∧ y ∈ G.nodes <=> R' x y`
+    by simp[Abbr`R'`] >>
+  markerLib.RM_ALL_ABBREVS_TAC >> fs[wfG_def, iterations0_def] >> reverse (rpt strip_tac)
+  >- (fs[INJ_THM] >> metis_tac[])
+  >- (`∀b. ¬G.edges a b ∧ ¬G.edges b a` by metis_tac[] >>
+      `∀a1 a2. R' a1 a2 ⇒ G.edges a1 a2 ∨ a1 = a ∧ a2 ≠ a` by metis_tac[] >>
+      pop_assum
+        (fn c1 => pop_assum
+           (fn c2 => assume_tac (MATCH_MP add_action0_lemma (CONJ c1 c2)))) >>
+      metis_tac[]) >>
+  metis_tac[TC_in_R, touches_SYM])
+
+val wfEQ_add_action0 = prove(
+  ``a1 = a2 ∧ wfEQ g1 g2 ⇒ wfEQ (add_action0 a1 g1) (add_action0 a2 g2)``,
+  csimp[wfEQ_def, wfG_add_action0]);
+
+val IN_add_action0 = prove(
+  ``x ∈ (add_action0 a G).nodes <=>
+    a.iter ∉ iterations0 G ∧ x = a ∨ x ∈ G.nodes``,
+  rw[add_action0_def]);
+
+val add_action0_edges = prove(
+  ``(add_action0 a G).edges a1 a2 ⇔
+      a.iter ∉ iterations0 G ∧ a1 = a ∧ a2 ∈ G.nodes ∧ touches a1 a2 ∨
+      G.edges a1 a2``,
+  rw[add_action0_def] >> metis_tac[]);
+
+val fmap0_def = Define`
+  fmap0 G = FUN_FMAP (λi. @a. a ∈ G.nodes ∧ a.iter = i) (iterations0 G)
+`;
+
+val FDOM_fmap0 = prove(
+  ``!g::respects wfEQ. FDOM (fmap0 g) = iterations0 g``,
+  simp[fmap0_def, FUN_FMAP_DEF, wfEQ_def, wfG_FINITE, iterations0_def,
+       IMAGE_FINITE, quotientTheory.respects_def, INWR]);
+
+val fmap0_add_action0 = prove(
+  ``!g::respects wfEQ.
+       fmap0 (add_action0 a g) ' i = if a.iter = i ∧ i ∉ iterations0 g then a
+                                     else fmap0 g ' i``,
+  simp[wfEQ_def, quotientTheory.respects_def, INWR, RES_FORALL_THM] >>
+  rw[add_action0_def] >> fs[wfG_def, INJ_THM, fmap0_def, iterations0_def] >| [
+    metis_tac[],
+    simp[IMAGE_FINITE, FUN_FMAP_DEF] >> dsimp[] >> csimp[] >>
+    `∀b. b ∈ g.nodes ∧ b.iter = a.iter <=> F`
+      suffices_by disch_then (fn th => simp[th]) >>
+    metis_tac[],
+    Cases_on `i ∈ IMAGE (λa. a.iter) g.nodes`
+    >- (dsimp[IMAGE_FINITE, FUN_FMAP_DEF] >> csimp[]) >>
+    simp[IMAGE_FINITE, NOT_FDOM_FAPPLY_FEMPTY, FUN_FMAP_DEF],
+    `a.iter ≠ a'.iter` by metis_tac[] >>
+    simp[IMAGE_FINITE, FUN_FMAP_DEF] >> dsimp[] >> csimp[] >>
+    metis_tac[]
+  ]);
+
+val IN_edges0 = prove(
+  ``!g. wfG g ⇒
+    g.edges a1 a2 ⇒ a1 ∈ g.nodes ∧ a2 ∈ g.nodes ∧
+                    touches a1 a2 ∧ ¬g.edges a2 a1``,
+  simp[wfG_def] >> metis_tac[relationTheory.TC_SUBSET])
+
+val wfG_wfEQ = prove(
+  ``wfG g <=> g ∈ respects wfEQ``,
+  simp[quotientTheory.respects_def, INWR, wfEQ_def]);
+
+fun mkwfeq th =
+    th |> SIMP_RULE bool_ss [GSYM RES_FORALL_THM, wfG_wfEQ]
+
+val gDELETE0_def = Define`
+  gDELETE0 G a = <|
+    nodes := G.nodes DELETE a;
+    edges := (\a1 a2. G.edges a1 a2 ∧ a1 ≠ a ∧ a2 ≠ a)
+  |>
+`;
+
+val TC_MONO' =
+    relationTheory.TC_MONOTONE
+      |> ONCE_REWRITE_RULE[DECIDE ``a ⇒ b ⇒ c ⇔ b ⇒ a ⇒ c``]
+      |> GEN_ALL
+
+val wfG_delete = prove(
+  ``!g. wfG g ⇒ wfG (gDELETE0 g a)``,
+  simp[gDELETE0_def, wfG_def, INJ_THM] >> reverse (rpt strip_tac)
+  >- (`g.edges⁺ a1 a2 ∧ g.edges⁺ a2 a1` suffices_by metis_tac[] >>
+      conj_tac >>
+      first_x_assum (MATCH_MP_TAC o MATCH_MP TC_MONO') >> simp[]) >>
+  metis_tac[]);
+
+val wfEQ_delete = prove(
+  ``wfEQ g1 g2 ⇒ wfEQ (gDELETE0 g1 b) (gDELETE0 g2 b)``,
+  simp[wfEQ_def, wfG_delete]);
+
+val IN_gDELETE0 = prove(
+  ``!G. wfG G ⇒ (a ∈ (gDELETE0 G b).nodes ⇔ a ∈ G.nodes ∧ a ≠ b)``,
+  simp[gDELETE0_def]);
+
 (*
-val wfG_add_action = prove(
-  ``wfG G ⇒ wfG (add_action a G)``,
-  rw[add_action_def] >> fs[wfG_def] >> rpt strip_tac
-  >- metis_tac[]
-  >- metis_tac[]
-  >- metis_tac[]
-  >- metis_tac[]
-  >- metis_tac[]
-  >- metis_tac[]
-  >- metis_tac[]
-  >- (fs[iterations0_def] >> metis_tac[TC_in_R, touches_SYM])
-  >- (fs[iterations0_def] >> metis_tac[TC_in_R, touches_SYM])
+val gDELETE_edges = store_thm(
+  "gDELETE_edges",
+  ``(G \\ a).edges b c ⇔ G.edges b c ∧ a ≠ b``,
+  simp[gDELETE_def] >> metis_tac[]);
+val _ = export_rewrites ["gDELETE_edges"]
+
+val gDELETE_commutes = store_thm(
+  "gDELETE_commutes",
+  ``(G:'a action_graph) \\ a1 \\ a2 = G \\ a2 \\ a1``,
+  simp[gDELETE_def, theorem "action_graph_component_equality", DELETE_COMM] >>
+  simp[FUN_EQ_THM] >> metis_tac[]);
 *)
 
 
 fun mk(s,t) = {def_name = s ^ "_def", fname = s, fixity = NONE, func = t}
 
 val [emptyG_nodes, emptyG_edges, edges_irrefl, graph_equality,
-     edges_WF, nodes_FINITE] =
+     edges_WF, nodes_FINITE, IN_add_action, add_action_edges,
+     iterations_thm, FDOM_fmap, fmap_add_action, IN_edges,
+     IN_gDELETE] =
 quotientLib.define_quotient_types_full {
   types = [{name = "action_graph", equiv = wfEQ_equiv}],
   defs = [mk("emptyG",``emptyG0``),
           mk("iterations", ``iterations0``),
           mk("ag_nodes", ``action_graph0_nodes``),
-          mk("ag_edges", ``action_graph0_edges``)],
-  old_thms = [emptyG0_nodes, emptyG0_edges, wfG_irrefl, graph0_equality,
-              wfG_WF, wfG_FINITE],
+          mk("ag_edges", ``action_graph0_edges``),
+          mk("add_action", ``add_action0``),
+          mk("fmap", ``fmap0``),
+          mk("gDELETE", ``gDELETE0``)],
+  old_thms = [emptyG0_nodes, emptyG0_edges, mkwfeq wfG_irrefl, graph0_equality,
+              wfG_WF, mkwfeq (GEN_ALL wfG_FINITE), IN_add_action0,
+              add_action0_edges, iterations0_def, FDOM_fmap0,
+              fmap0_add_action0, mkwfeq IN_edges0,
+              mkwfeq IN_gDELETE0],
   poly_preserves = [],
   poly_respects = [],
   respects = [wfEQ_emptyG0, simple_rsp ``action_graph0_nodes``,
               simple_rsp ``action_graph0_edges``,
-              simple_rsp ``iterations0``],
+              simple_rsp ``fmap0``, wfEQ_delete,
+              simple_rsp ``iterations0``, wfEQ_add_action0],
   tyop_equivs = [],
   tyop_quotients = [],
   tyop_simps = []}
+
+val _ = overload_on("ag_edge_arrow", ``\x g y. ag_edges g x y``)
+val _ = overload_on("not_ag_edge_arrow", ``\x g y. ¬ag_edges g x y``)
+
+val _ = add_rule {block_style = (AroundEachPhrase, (PP.CONSISTENT, 0)),
+                  fixity = Infix(NONASSOC, 450),
+                  paren_style = OnlyIfNecessary,
+                  pp_elements = [HardSpace 1, TOK "-<", TM, TOK ">->",
+                                 BreakSpace(1,2)],
+                  term_name = "ag_edge_arrow"}
+
+val _ = add_rule {block_style = (AroundEachPhrase, (PP.CONSISTENT, 0)),
+                  fixity = Infix(NONASSOC, 450),
+                  paren_style = OnlyIfNecessary,
+                  pp_elements = [HardSpace 1, TOK "-<", TM, TOK ">/->",
+                                 BreakSpace(1,2)],
+                  term_name = "not_ag_edge_arrow"}
+
+val _ = overload_on ("flip_add_action", ``\x y. add_action y x``)
+val _ = set_mapped_fixity {fixity = Infixl 500, term_name = "flip_add_action",
+                           tok = "⊕"}
+
+val _ = overload_on ("\\\\", ``gDELETE``)
+
+val _ = overload_on ("IN", ``\a g. a IN ag_nodes g``)
+val _ = overload_on ("NOTIN", ``\a g. ~(a IN ag_nodes g)``)
+val _ = set_mapped_fixity {term_name = "touches", fixity = Infix(NONASSOC, 450),
+                           tok = "∼ₜ"}
 
 val _ = augment_srw_ss [rewrites [edges_WF]]
 
 val nonempty_wfG_has_points = store_thm(
   "nonempty_wfG_has_points",
-  ``ag_nodes G ≠ ∅ ⇒
-    ∃e. e ∈ ag_nodes G ∧ ∀e'. e' ∈ ag_nodes G ⇒ ¬ag_edges G e' e``,
+  ``ag_nodes G ≠ ∅ ⇒ ∃e. e ∈ G ∧ ∀e'. e' ∈ G ⇒ e' -<G>/-> e``,
   rpt strip_tac >>
   `WF (ag_edges G)` by simp[] >>
   pop_assum mp_tac >> REWRITE_TAC [relationTheory.WF_DEF] >>
