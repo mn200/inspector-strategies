@@ -88,6 +88,11 @@ val wfG_def = Define`
       INJ (λa. a.iter) G.nodes univ(:num)
 `;
 
+val touching_actions_link0 = prove(
+  ``wfG G ⇒ a1 ∈ G.nodes ∧ a2 ∈ G.nodes ∧ a1 ≠ a2 ∧ a1 ∼ₜ a2 ⇒
+    G.edges a1 a2 ∨ G.edges a2 a1``,
+  metis_tac[wfG_def]);
+
 val emptyG0_def = Define`
   emptyG0 = <| nodes := ∅; edges := REMPTY |>
 `;
@@ -130,7 +135,7 @@ val INWR = prove(
 
 val wfG_irrefl = store_thm(
   "wfG_irrefl",
-  ``!G. wfG G ⇒ x ∈ G.nodes ⇒ ¬G.edges x x``,
+  ``!G. wfG G ⇒ ¬G.edges x x``,
   simp[wfG_def] >> rpt strip_tac >>
   metis_tac[relationTheory.TC_SUBSET]);
 
@@ -442,7 +447,7 @@ val [emptyG_nodes, emptyG_edges, edges_irrefl, graph_equality,
      edges_WF, nodes_FINITE, IN_add_action, add_action_edges,
      iterations_thm, FDOM_fmap, fmap_add_action, IN_edges,
      IN_gDELETE, nodes_gDELETE, gDELETE_edges, gDELETE_commutes,
-     imap_emptyG, IN_imap, imap_edges] =
+     imap_emptyG, IN_imap, imap_edges, touching_actions_link] =
 define_quotient {
   types = [{name = "action_graph", equiv = wfEQ_equiv}],
   defs = [("emptyG",``emptyG0``),
@@ -471,7 +476,8 @@ define_quotient {
           ("gDELETE_commutes", gDELETE0_commutes),
           ("imap_emptyG", imap_emptyG0),
           ("IN_imap", IN_imap0),
-          ("imap_edges", imap0_edges)],
+          ("imap_edges", imap0_edges),
+         ("touching_actions_link", mkwfeq (GEN_ALL touching_actions_link0))],
   poly_preserves = [],
   poly_respects = [],
   respects = [wfEQ_emptyG0, simple_rsp ``action_graph0_nodes``,
@@ -507,7 +513,8 @@ val _ = overload_on ("IN", ``\a g. a IN ag_nodes g``)
 val _ = overload_on ("NOTIN", ``\a g. ~(a IN ag_nodes g)``)
 
 val _ = export_rewrites ["edges_WF", "IN_add_action", "IN_imap", "emptyG_nodes",
-                         "emptyG_edges", "nodes_gDELETE", "nodes_FINITE"]
+                         "emptyG_edges", "nodes_gDELETE", "nodes_FINITE",
+                         "gDELETE_edges", "edges_irrefl"]
 
 val nonempty_wfG_has_points = store_thm(
   "nonempty_wfG_has_points",
@@ -536,7 +543,10 @@ val gCARD_gDELETE = store_thm(
   simp[]);
 val _ = export_rewrites ["gCARD_gDELETE"]
 
-
+val IN_emptyG = store_thm(
+  "IN_emptyG",
+  ``a ∈ emptyG ⇔ F``,
+  simp[]);
 
 
 val _ = export_theory();
