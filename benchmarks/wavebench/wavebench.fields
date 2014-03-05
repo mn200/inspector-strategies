@@ -1,0 +1,29 @@
+# specify database, host, username, and password
+database::rtrt
+host::faure.cs.colostate.edu
+username::rtrt
+password::aicomp
+
+# specify new table name
+table::WaveBench
+
+# field names and datatypes (float, int, or string)
+# 1 field per line, order matters
+# not going to get any data from a .config file anymore, should just
+# put that info in the log.txt file of the STexperiment dir
+field::datadir(string)          ! parent directory for matrix dir
+field::matrixfilename(string)   ! matrix filename
+field::outfilename(string)      ! name of output file to append records
+field::workPerIter(int)         ! number of exp() calls per iteration of loop
+field::inspectorStr(string)     ! which inspector implementation to use
+field::computername(string)     ! computer which we are running on
+field::datetime(string)         ! date time stamp
+field::N(int)                   ! number of rows and columns in the matrix
+field::numwave(int)             ! number of waves found
+field::avgIterPerWave(float)    ! average number of iterations per wavefront
+field::minIterPerWave(float)    ! minimum number of iterations per wavefront
+field::maxIterPerWave(float)    ! maximum number of iterations per wavefront
+field::stddevIterPerWave(float) ! standard deviation of iterations per wavefront
+field::originalTime(float)      ! time to execute original loop
+field::inspectorTime(float)     ! time to execute inspector in seconds
+field::executorTime(float)      ! time to execute executor in seconds
