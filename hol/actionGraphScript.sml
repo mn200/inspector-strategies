@@ -310,9 +310,13 @@ val wfEQ_delete = prove(
   ``wfEQ g1 g2 ⇒ wfEQ (gDELETE0 g1 b) (gDELETE0 g2 b)``,
   simp[wfEQ_def, wfG_delete]);
 
-val IN_gDELETE0 = prove(
-  ``!G. wfG G ⇒ (a ∈ (gDELETE0 G b).nodes ⇔ a ∈ G.nodes ∧ a ≠ b)``,
+val nodes_delete = prove(
+  ``(gDELETE0 g a).nodes = g.nodes DELETE a``,
   simp[gDELETE0_def]);
+
+val IN_gDELETE0 = prove(
+  ``a ∈ (gDELETE0 G b).nodes ⇔ a ∈ G.nodes ∧ a ≠ b``,
+  simp[nodes_delete]);
 
 val gDELETE0_edges = prove(
   ``(gDELETE0 G a).edges b c ⇔ G.edges b c ∧ a ≠ b ∧ a ≠ c``,
@@ -437,8 +441,8 @@ fun define_quotient {types,defs,thms,poly_preserves,poly_respects,respects} =
 val [emptyG_nodes, emptyG_edges, edges_irrefl, graph_equality,
      edges_WF, nodes_FINITE, IN_add_action, add_action_edges,
      iterations_thm, FDOM_fmap, fmap_add_action, IN_edges,
-     IN_gDELETE, gDELETE_edges, gDELETE_commutes, imap_emptyG,
-     IN_imap, imap_edges] =
+     IN_gDELETE, nodes_gDELETE, gDELETE_edges, gDELETE_commutes,
+     imap_emptyG, IN_imap, imap_edges] =
 define_quotient {
   types = [{name = "action_graph", equiv = wfEQ_equiv}],
   defs = [("emptyG",``emptyG0``),
@@ -462,6 +466,7 @@ define_quotient {
           ("fmap_add_action", fmap0_add_action0),
           ("IN_edges", mkwfeq IN_edges0),
           ("IN_gDELETE", mkwfeq IN_gDELETE0),
+          ("nodes_gDELETE", nodes_delete),
           ("gDELETE_edges", gDELETE0_edges),
           ("gDELETE_commutes", gDELETE0_commutes),
           ("imap_emptyG", imap_emptyG0),
@@ -502,7 +507,7 @@ val _ = overload_on ("IN", ``\a g. a IN ag_nodes g``)
 val _ = overload_on ("NOTIN", ``\a g. ~(a IN ag_nodes g)``)
 
 val _ = export_rewrites ["edges_WF", "IN_add_action", "IN_imap", "emptyG_nodes",
-                         "emptyG_edges", "IN_gDELETE"]
+                         "emptyG_edges", "nodes_gDELETE", "nodes_FINITE"]
 
 val nonempty_wfG_has_points = store_thm(
   "nonempty_wfG_has_points",
@@ -513,5 +518,25 @@ val nonempty_wfG_has_points = store_thm(
   simp[IN_DEF] >>
   pop_assum mp_tac >> simp[GSYM MEMBER_NOT_EMPTY, IN_DEF] >>
   metis_tac[]);
+
+val _ = overload_on ("gCARD", ``\g. CARD (ag_nodes g)``)
+
+val gCARD_EQ_0 = store_thm(
+  "gCARD_EQ_0",
+  ``gCARD G = 0 ⇔ G = emptyG``,
+  simp[EQ_IMP_THM] >> rpt strip_tac >> fs[] >>
+  simp[graph_equality] >> fs[CARD_EQ_0] >>
+  metis_tac[IN_edges, NOT_IN_EMPTY]);
+val _ = export_rewrites ["gCARD_EQ_0"]
+
+
+val gCARD_gDELETE = store_thm(
+  "gCARD_gDELETE",
+  ``a ∈ G ⇒ gCARD (G \\ a) = gCARD G - 1``,
+  simp[]);
+val _ = export_rewrites ["gCARD_gDELETE"]
+
+
+
 
 val _ = export_theory();
