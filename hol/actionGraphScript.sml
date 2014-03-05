@@ -378,6 +378,10 @@ val imap0_def = Define`
               else G
 `;
 
+val imap0_id = prove(
+  ``¬INJ f (iterations0 G) UNIV ⇒ imap0 f G = G``,
+  simp[imap0_def]);
+
 val wfG_imap = prove(
   ``wfG G ⇒ wfG (imap0 f G)``,
   simp[imap0_def, iterations0_def] >> COND_CASES_TAC >> simp[] >>
@@ -447,7 +451,7 @@ val [emptyG_nodes, emptyG_edges, edges_irrefl, graph_equality,
      edges_WF, nodes_FINITE, IN_add_action, add_action_edges,
      iterations_thm, FDOM_fmap, fmap_add_action, IN_edges,
      IN_gDELETE, nodes_gDELETE, gDELETE_edges, gDELETE_commutes,
-     imap_emptyG, IN_imap, imap_edges, touching_actions_link] =
+     imap_emptyG, IN_imap, imap_edges, touching_actions_link, imap_id] =
 define_quotient {
   types = [{name = "action_graph", equiv = wfEQ_equiv}],
   defs = [("emptyG",``emptyG0``),
@@ -477,7 +481,8 @@ define_quotient {
           ("imap_emptyG", imap_emptyG0),
           ("IN_imap", IN_imap0),
           ("imap_edges", imap0_edges),
-         ("touching_actions_link", mkwfeq (GEN_ALL touching_actions_link0))],
+          ("touching_actions_link", mkwfeq (GEN_ALL touching_actions_link0)),
+          ("imap_id", imap0_id)],
   poly_preserves = [],
   poly_respects = [],
   respects = [wfEQ_emptyG0, simple_rsp ``action_graph0_nodes``,
