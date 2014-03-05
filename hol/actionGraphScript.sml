@@ -30,6 +30,9 @@ val touches_def = Define`
      a1.write = a2.write ∨ MEM a1.write a2.reads ∨ MEM a2.write a1.reads
 `;
 
+val _ = set_mapped_fixity {term_name = "touches", fixity = Infix(NONASSOC, 450),
+                           tok = "∼ₜ"}
+
 val touches_ignores_iter = store_thm(
   "touches_ignores_iter",
   ``(touches a1 (a2 with iter updated_by f) ⇔ touches a1 a2) ∧
@@ -311,50 +314,166 @@ val IN_gDELETE0 = prove(
   ``!G. wfG G ⇒ (a ∈ (gDELETE0 G b).nodes ⇔ a ∈ G.nodes ∧ a ≠ b)``,
   simp[gDELETE0_def]);
 
-(*
-val gDELETE_edges = store_thm(
-  "gDELETE_edges",
-  ``(G \\ a).edges b c ⇔ G.edges b c ∧ a ≠ b``,
-  simp[gDELETE_def] >> metis_tac[]);
-val _ = export_rewrites ["gDELETE_edges"]
+val gDELETE0_edges = prove(
+  ``(gDELETE0 G a).edges b c ⇔ G.edges b c ∧ a ≠ b ∧ a ≠ c``,
+  simp[gDELETE0_def] >> metis_tac[]);
 
-val gDELETE_commutes = store_thm(
-  "gDELETE_commutes",
-  ``(G:'a action_graph) \\ a1 \\ a2 = G \\ a2 \\ a1``,
-  simp[gDELETE_def, theorem "action_graph_component_equality", DELETE_COMM] >>
+val gDELETE0_commutes = prove(
+  ``gDELETE0 (gDELETE0 G a1) a2 = gDELETE0 (gDELETE0 G a2) a1``,
+  simp[gDELETE0_def, theorem "action_graph0_component_equality", DELETE_COMM] >>
   simp[FUN_EQ_THM] >> metis_tac[]);
-*)
+
+val RIMAGE_DEF = new_definition(
+  "RIMAGE_DEF",
+  ``RIMAGE f R x y <=> ?a b. (x = f a) /\ (y = f b) /\ R a b``);
+
+val RIMAGE_REMPTY = store_thm(
+  "RIMAGE_REMPTY",
+  ``RIMAGE f REMPTY = REMPTY``,
+  SIMP_TAC (srw_ss()) [FUN_EQ_THM, RIMAGE_DEF]);
+val _ = export_rewrites ["RIMAGE_REMPTY"]
+
+val field_def = Define`field R = { x | (∃y. R x y) ∨ (∃y. R y x) }`
+
+val RIMAGE_TC_IN_field = store_thm(
+  "RIMAGE_TC_IN_field",
+  ``∀x y. (RIMAGE f R)⁺ x y ⇒
+          ∃x0 y0. x = f x0 ∧ y = f y0 ∧ x0 ∈ field R ∧ y0 ∈ field R``,
+  Induct_on `(RIMAGE f R)⁺` >> simp[RIMAGE_DEF] >> rpt strip_tac
+  >- (simp[field_def] >> metis_tac[]) >>
+  metis_tac[]);
+
+val INJ_RIMAGE_TC = store_thm(
+  "INJ_RIMAGE_TC",
+  ``INJ f (field R) SS ⇒
+    ∀x y. x ∈ field R ∧ y ∈ field R ∧ (RIMAGE f R)⁺ (f x) (f y) ⇒ R⁺ x y``,
+  strip_tac >>
+  `∀x y. (RIMAGE f R)⁺ x y ⇒
+         ∀x0 y0. x = f x0 ∧ y = f y0 ∧ x0 ∈ field R ∧ y0 ∈ field R ⇒ R⁺ x0 y0`
+     suffices_by metis_tac[] >>
+  Induct_on `(RIMAGE f R)⁺` >> simp[RIMAGE_DEF] >>
+  rpt strip_tac
+  >- (`a ∈ field R ∧ b ∈ field R` by (simp[field_def] >> metis_tac[]) >>
+      metis_tac[INJ_DEF, relationTheory.TC_SUBSET]) >>
+  qmatch_assum_rename_tac `(RIMAGE f R)⁺ x a` [] >>
+  qmatch_assum_rename_tac `(RIMAGE f R)⁺ a y` [] >>
+  `∃a0. a0 ∈ field R ∧ f a0 = a` by metis_tac[RIMAGE_TC_IN_field] >>
+  metis_tac[relationTheory.TC_RULES]);
 
 
-fun mk(s,t) = {def_name = s ^ "_def", fname = s, fixity = NONE, func = t}
+val imap0_def = Define`
+  imap0 f G = if INJ f (iterations0 G) UNIV then
+                G with <| nodes updated_by IMAGE (λa. a with iter updated_by f);
+                          edges updated_by RIMAGE (λa. a with iter updated_by f)
+                       |>
+              else G
+`;
+
+val wfG_imap = prove(
+  ``wfG G ⇒ wfG (imap0 f G)``,
+  simp[imap0_def, iterations0_def] >> COND_CASES_TAC >> simp[] >>
+  simp[wfG_def, RIMAGE_DEF] >> strip_tac >>
+  qabbrev_tac `f' = λa. a with iter updated_by f` >> simp[] >>
+  `∀a1 a2. a1 ∈ G.nodes ∧ a2 ∈ G.nodes ⇒ (f' a1 = f' a2 ⇔ a1 = a2)`
+    by (rpt strip_tac >> simp[theorem "action_component_equality", Abbr`f'`] >>
+        full_simp_tac (srw_ss() ++ boolSimps.DNF_ss) [INJ_THM]) >>
+  `∀a b. (f' a ∼ₜ b ⇔ a ∼ₜ b) ∧ (a ∼ₜ f' b ⇔ a ∼ₜ b)`
+    by simp[Abbr`f'`] >> rw[]
+  >- rw[]
+  >- metis_tac[]
+  >- metis_tac[]
+  >- (eq_tac >- (fs[] >> metis_tac[]) >>
+      disch_then (qx_choosel_then [`b`, `c`] strip_assume_tac) >>
+      map_every qx_gen_tac [`d`, `e`] >> fs[] >> Cases_on `G.edges d e` >>
+      simp[] >>
+      `b ∈ G.nodes ∧ c ∈ G.nodes ∧ d ∈ G.nodes ∧ e ∈ G.nodes` by metis_tac[] >>
+      simp[] >> metis_tac[])
+  >- (`field G.edges ⊆ G.nodes`
+        by (simp[field_def, SUBSET_DEF] >> metis_tac[]) >>
+      `INJ f' (field G.edges) (IMAGE f' (field G.edges))`
+        by (simp[INJ_DEF] >> map_every qx_gen_tac [`c`, `d`] >>
+            strip_tac >> `c ∈ G.nodes ∧ d ∈ G.nodes` by metis_tac[SUBSET_DEF] >>
+            simp[]) >>
+      IMP_RES_THEN (qx_choosel_then [`c`, `d`] strip_assume_tac)
+         RIMAGE_TC_IN_field >>
+      `a = c ∧ a' = d` by metis_tac[SUBSET_DEF] >> rw[] >>
+      metis_tac[INJ_RIMAGE_TC]) >>
+  full_simp_tac (srw_ss() ++ boolSimps.DNF_ss)[INJ_THM, Abbr`f'`])
+
+val wfEQ_imap0 = prove(
+  ``wfEQ g1 g2 ⇒ wfEQ (imap0 f g1) (imap0 f g2)``,
+  csimp[wfEQ_def, wfG_imap]);
+
+val imap_emptyG0 = prove(
+  ``imap0 f emptyG0 = emptyG0``,
+  simp[emptyG0_def, imap0_def]);
+
+val IN_imap0 = prove(
+  ``INJ f (iterations0 G) UNIV ⇒ (a ∈ (imap0 f G).nodes ⇔ ∃a0. a0 ∈ G.nodes ∧ a = a0 with iter updated_by f)``,
+  simp[imap0_def] >> metis_tac[]);
+
+val imap0_edges = prove(
+  ``INJ f (iterations0 G) UNIV ⇒
+    ((imap0 f G).edges a1 a2 ⇔
+      ∃a10 a20. G.edges a10 a20 ∧ a1 = a10 with iter updated_by f ∧
+                a2 = a20 with iter updated_by f)``,
+  simp[imap0_def, RIMAGE_DEF] >> metis_tac[]);
+
+fun define_quotient {types,defs,thms,poly_preserves,poly_respects,respects} =
+    let
+      fun mk(s,t) = {def_name = s ^ "_def", fname = s, fixity = NONE, func = t}
+      val (names, old_thms) = ListPair.unzip thms
+      val new_thms =
+          quotientLib.define_quotient_types_full {
+            types = types, defs = map mk defs, old_thms = old_thms,
+            poly_respects = poly_respects, poly_preserves = poly_preserves,
+            respects = respects, tyop_equivs = [],
+            tyop_quotients = [], tyop_simps = []}
+      val named_new = ListPair.zip(names, new_thms)
+    in
+      map save_thm named_new
+    end
 
 val [emptyG_nodes, emptyG_edges, edges_irrefl, graph_equality,
      edges_WF, nodes_FINITE, IN_add_action, add_action_edges,
      iterations_thm, FDOM_fmap, fmap_add_action, IN_edges,
-     IN_gDELETE] =
-quotientLib.define_quotient_types_full {
+     IN_gDELETE, gDELETE_edges, gDELETE_commutes, imap_emptyG,
+     IN_imap, imap_edges] =
+define_quotient {
   types = [{name = "action_graph", equiv = wfEQ_equiv}],
-  defs = [mk("emptyG",``emptyG0``),
-          mk("iterations", ``iterations0``),
-          mk("ag_nodes", ``action_graph0_nodes``),
-          mk("ag_edges", ``action_graph0_edges``),
-          mk("add_action", ``add_action0``),
-          mk("fmap", ``fmap0``),
-          mk("gDELETE", ``gDELETE0``)],
-  old_thms = [emptyG0_nodes, emptyG0_edges, mkwfeq wfG_irrefl, graph0_equality,
-              wfG_WF, mkwfeq (GEN_ALL wfG_FINITE), IN_add_action0,
-              add_action0_edges, iterations0_def, FDOM_fmap0,
-              fmap0_add_action0, mkwfeq IN_edges0,
-              mkwfeq IN_gDELETE0],
+  defs = [("emptyG",``emptyG0``),
+          ("iterations", ``iterations0``),
+          ("ag_nodes", ``action_graph0_nodes``),
+          ("ag_edges", ``action_graph0_edges``),
+          ("add_action", ``add_action0``),
+          ("fmap", ``fmap0``),
+          ("gDELETE", ``gDELETE0``),
+          ("imap", ``imap0``)],
+  thms = [("emptyG_nodes", emptyG0_nodes),
+          ("emptyG_edges", emptyG0_edges),
+          ("edges_irrefl", mkwfeq wfG_irrefl),
+          ("graph_equality", graph0_equality),
+          ("edges_WF", wfG_WF),
+          ("nodes_FINITE", mkwfeq (GEN_ALL wfG_FINITE)),
+          ("IN_add_action", IN_add_action0),
+          ("add_action_edges", add_action0_edges),
+          ("iterations_thm", iterations0_def),
+          ("FDOM_fmap", FDOM_fmap0),
+          ("fmap_add_action", fmap0_add_action0),
+          ("IN_edges", mkwfeq IN_edges0),
+          ("IN_gDELETE", mkwfeq IN_gDELETE0),
+          ("gDELETE_edges", gDELETE0_edges),
+          ("gDELETE_commutes", gDELETE0_commutes),
+          ("imap_emptyG", imap_emptyG0),
+          ("IN_imap", IN_imap0),
+          ("imap_edges", imap0_edges)],
   poly_preserves = [],
   poly_respects = [],
   respects = [wfEQ_emptyG0, simple_rsp ``action_graph0_nodes``,
               simple_rsp ``action_graph0_edges``,
               simple_rsp ``fmap0``, wfEQ_delete,
-              simple_rsp ``iterations0``, wfEQ_add_action0],
-  tyop_equivs = [],
-  tyop_quotients = [],
-  tyop_simps = []}
+              simple_rsp ``iterations0``, wfEQ_add_action0,
+              wfEQ_imap0]}
 
 val _ = overload_on("ag_edge_arrow", ``\x g y. ag_edges g x y``)
 val _ = overload_on("not_ag_edge_arrow", ``\x g y. ¬ag_edges g x y``)
@@ -381,10 +500,9 @@ val _ = overload_on ("\\\\", ``gDELETE``)
 
 val _ = overload_on ("IN", ``\a g. a IN ag_nodes g``)
 val _ = overload_on ("NOTIN", ``\a g. ~(a IN ag_nodes g)``)
-val _ = set_mapped_fixity {term_name = "touches", fixity = Infix(NONASSOC, 450),
-                           tok = "∼ₜ"}
 
-val _ = augment_srw_ss [rewrites [edges_WF]]
+val _ = export_rewrites ["edges_WF", "IN_add_action", "IN_imap", "emptyG_nodes",
+                         "emptyG_edges", "IN_gDELETE"]
 
 val nonempty_wfG_has_points = store_thm(
   "nonempty_wfG_has_points",
