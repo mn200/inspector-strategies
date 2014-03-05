@@ -9,23 +9,30 @@
  * the amount of work per iteration (-w #).  If there is a non-zero at location 
  * A_{ij} in the sparse matrix and i<j, then there is a dependence between 
  * iteration i and j (i must execute before j).  If the amount of work is set
- * to zero, then no exp() calls will occur but 2 multiplications and 2 adds will
- * occur each iteration.
+ * to zero, then no exp() calls will occur but 2 adds will occur each iteration.
  *
- *
- * Pseudocode, sum should converge to 1.4(?) as w increases
+ * Pseudocode, 
  *      foreach non-zero A_{ij} in sparse matrix:
- *          sum = Sum_{k=0}^{w-1} 1 / exp( data[i] * data[j] )
- *          data[ i ] += data[i]*data[j] + sum;
- *                       
- *          data[ j ] += data[i]*data[j] + sum; 
+ *          sum = Sum_{k=0}^{w-1} 1 / exp( k*data[i]*data[j] )
+ *          data[ i ] += 1.0 + sum                     
+ *          data[ j ] += 1.0 + sum
  *
- * The loop has reduction dependencies.  Race conditions have to be
- * avoided between two iterations that share a dependence, but they
- * could be reordered.  The wavefront inspectors we investigate in
- * this driver, treat all of the dependences between iterations in this
- * loop as creating a partial ordering between i and j where A_{i,j}
- * is a non-zero in the sparse matrix and i<j.
+ * Let nnz[v] be the number of non-zeros A_{vw} or A{wv}.  Essentially the
+ * number of nonzeros were v is the column or the row.  The value of each 
+ * data[v] will be less than (nnz[v] + nnz[v]*1.58).
+ * Here is why:
+ *  Ratio test: lim_{n->inf} abs(a_{n+1}/a_n) < 1
+ * 
+ *  Sum_{x to inf} 1/exp(x) converges because r = (1/exp(x+1)) / (1/exp(x)) 
+ *     = exp(x)/exp(x+1) = exp(x)/exp(x)*exp(1) = 1/e < 1
+ *     Since r is a constant, we have a geometric sequence that converges to
+ *     1/(1-r), which in this case is 1/(1-1/e) = e/(e-1) = 1.58.
+ *
+ *  The above value "sum" is 
+ *      Sum_{x to inf} 1/exp(x*y*z), where 1<=y and 1<=z
+ *      a_{n+1} / a_n = exp(n*y*z)/exp((n+1)*y*z) = 1/exp(y*z)
+ *  As n goes to infinity, the ratio is 1/exp(y*z), which is less than 1.
+ *  It is at most 1/e, so the summation converges to 1.58.
  *
  * \date Started: March 5, 2014
  *
@@ -35,6 +42,7 @@
  * All rights reserved. <br>
  */
 #include <stdlib.h>
+#include <math.h>
 #include "util/CmdParams.h"
 #include "util/COO_mat.h"
 #include "util/timer.h"
@@ -56,7 +64,7 @@ typedef enum {
 } inspector_type;
 inspector_type inspectorChoice = naive_inspector;
 #define num_IPairs 3
-static EnumStringPair IPairs[] = {{naive_inspector,"pipelined_4x4x4"},
+static EnumStringPair IPairs[] = {{naive_inspector,"naive_inspector"},
                         {Rauchwerger95_inspector,"Rauchwerger95_inspector"},
                         {Zhuang09_inspector,"Zhuang09_inspector"}
                 };
@@ -107,7 +115,9 @@ int main(int argc, char ** argv) {
     double* data_org=(double*)malloc(sizeof(double)*(mat->nrows));
     double* data=(double*)malloc(sizeof(double)*(mat->nrows));
     for(int i=0; i<mat->nrows; i++) {
-      data_org[i] = data[i]=i;
+      // Need to start at 1.0 instead of 2.0.  
+      // See convergence argument in header, 1<=y and 1<=z.
+      data_org[i] = data[i] = 1.0;
     }
 
     // Query information about the sparse matrix.
@@ -120,21 +130,29 @@ int main(int argc, char ** argv) {
     N = mat->nrows;
 
     // Original Computation
+    printf("==== performing original computation ====\n");
     timer_start(&original_timer);
-    /* 
- *      foreach non-zero A_{ij} in sparse matrix:
- *          sum = Sum_{k=0}^{w-1} 1 / exp( data[i] * data[j] )
- *          data[ i ] += data[i]*data[j] + sum;
- *                       
- *          data[ j ] += data[i]*data[j] + sum; 
-*/
+    // foreach non-zero A_{ij} in sparse matrix:
+    for (int p; p<nnz; p++) {
+        int i = row[p];
+        int j = col[p];
+        // sum = Sum_{k=0}^{w-1} 1 / exp( k * data[i] * data[j] )
+        double sum = 0.0;
+        for (int k=0; k<workPerIter; k++) {
+            sum += 1.0 / exp( (double)k * data_org[i] * data_org[j] );
+        }
+        data_org[ i ] += 1.0 + sum;
+        data_org[ j ] += 1.0 + sum; 
+    }
     timer_end(&original_timer);    
 
     // One of the wavefront inspectors
+    printf("==== performing wavefront inspector ====\n");
     timer_start(&inspector_timer);    
     timer_end(&inspector_timer);    
 
     // The wavefront executor
+    printf("==== performing wavefront executor ====\n");
     timer_start(&executor_timer);    
     timer_end(&executor_timer);    
 
@@ -217,7 +235,7 @@ void getParamValues(CmdParams *cmdparams)
     
     strncpy(matrixfilename, CmdParams_getString(cmdparams,'m'), MAXLINESIZE);
 
-    strncpy(outfilename, CmdParams_getString(cmdparams,'m'), MAXLINESIZE);
+    strncpy(outfilename, CmdParams_getString(cmdparams,'o'), MAXLINESIZE);
 
     workPerIter = CmdParams_getValue(cmdparams,'w');
 
@@ -252,7 +270,7 @@ void verify_results(int N, double *data_org, double *data)
   with the data generated by the executor.  Should be equal.
 *//*--------------------------------------------------------------*/
 {
-    printf("==== Running verification wavefront computation ====\n");
+    printf("==== Running verification for wavefront computation ====\n");
     int i;
     double diff,diffsum;
 
