@@ -507,11 +507,6 @@ val same_graphs = store_thm(
          SINGL_APPLY_PERMUTE, MAP_MAP_o, combinTheory.o_ABS_R]
   ]);
 
-val FOLDR_add_actionf_nodes = store_thm(
-  "FOLDR_add_actionf_nodes",
-  ``(FOLDR (add_action o f) G l).nodes = { f e | MEM e l } ∪ G.nodes``,
-  Induct_on `l` >> simp[EXTENSION] >> metis_tac[]);
-
 val correctness = store_thm(
   "correctness",
   ``(∀i0 i. ddepR wf rds i0 i ==> δ i0 < δ i) ∧
