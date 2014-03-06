@@ -553,20 +553,6 @@ val IN_emptyG = store_thm(
   ``a ∈ emptyG ⇔ F``,
   simp[]);
 
-val GSPEC_CONG = store_thm(
-  "GSPEC_CONG",
-  ``(!x. SND (f x) = h x) ∧ (!x. h x ⇒ FST (f x) = g x) ⇒ GSPEC f = IMAGE g h``,
-  simp[GSPECIFICATION, EXTENSION] >> rpt strip_tac >> eq_tac >> strip_tac
-  >- (qmatch_assum_rename_tac `(a,T) = f b` [] >>
-      rpt (first_x_assum (qspec_then `b` mp_tac)) >>
-      pop_assum (SUBST_ALL_TAC o SYM) >> simp[SPECIFICATION] >>
-      metis_tac[]) >>
-  rw[] >> fs[SPECIFICATION] >>
-  qmatch_assum_rename_tac `h y` [] >> qexists_tac `y` >>
-  Cases_on `f y` >>
-  rpt (first_x_assum (qspec_then `y` mp_tac)) >> simp[]);
-val _ = DefnBase.export_cong "GSPEC_CONG"
-
 val ilink_def = Define`
   ilink i G j <=> i ∈ iterations G ∧ j ∈ iterations G ∧
                   fmap G ' i -<G>-> fmap G ' j
