@@ -553,5 +553,63 @@ val IN_emptyG = store_thm(
   ``a ∈ emptyG ⇔ F``,
   simp[]);
 
+val GSPEC_CONG = store_thm(
+  "GSPEC_CONG",
+  ``(!x. SND (f x) = h x) ∧ (!x. h x ⇒ FST (f x) = g x) ⇒ GSPEC f = IMAGE g h``,
+  simp[GSPECIFICATION, EXTENSION] >> rpt strip_tac >> eq_tac >> strip_tac
+  >- (qmatch_assum_rename_tac `(a,T) = f b` [] >>
+      rpt (first_x_assum (qspec_then `b` mp_tac)) >>
+      pop_assum (SUBST_ALL_TAC o SYM) >> simp[SPECIFICATION] >>
+      metis_tac[]) >>
+  rw[] >> fs[SPECIFICATION] >>
+  qmatch_assum_rename_tac `h y` [] >> qexists_tac `y` >>
+  Cases_on `f y` >>
+  rpt (first_x_assum (qspec_then `y` mp_tac)) >> simp[]);
+val _ = DefnBase.export_cong "GSPEC_CONG"
+
+val ilink_def = Define`
+  ilink i G j <=> i ∈ iterations G ∧ j ∈ iterations G ∧
+                  fmap G ' i -<G>-> fmap G ' j
+`;
+
+val _ = add_rule {block_style = (AroundEachPhrase, (PP.CONSISTENT, 0)),
+                  fixity = Infix(NONASSOC, 450),
+                  paren_style = OnlyIfNecessary,
+                  pp_elements = [HardSpace 1, TOK "-<", TM, TOK ">#->",
+                                 BreakSpace(1,2)],
+                  term_name = "ilink"}
+
+val _ = add_rule {block_style = (AroundEachPhrase, (PP.CONSISTENT, 0)),
+                  fixity = Infix(NONASSOC, 450),
+                  paren_style = OnlyIfNecessary,
+                  pp_elements = [HardSpace 1, TOK "-<", TM, TOK ">/#->",
+                                 BreakSpace(1,2)],
+                  term_name = "not_ilink"}
+
+val _ = overload_on ("not_ilink", ``λi G j. ¬ilink i G j``)
+
+
+val wave_defn = with_flag(allow_schema_definition,true) (Hol_defn "wave") `
+  wave i = MAX_SET (IMAGE (λj. wave j + 1) { j | ilink j G i })
+`
+
+val _ = overload_on ("'", ``\G i. fmap G ' i``)
+
+val (wave_def, wave_ind) = Defn.tprove(
+  wave_defn,
+  reverse (WF_REL_TAC `\i j. ilink i G j`) >> simp[] >>
+  simp[ilink_def] >> match_mp_tac relationTheory.WF_SUBSET >>
+  qexists_tac `\i j. fmap G ' i -<G>-> fmap G ' j` >>
+  simp[] >> qmatch_abbrev_tac `WF R` >>
+  `R = inv_image (ag_edges G) (\i. fmap G ' i)`
+    suffices_by simp[relationTheory.WF_inv_image] >>
+  simp[Abbr`R`, relationTheory.inv_image_def])
+
+val wave_thm = store_thm(
+  "wave_thm",
+  ``wave G i = MAX_SET { wave G j + 1 | j | j -<G>#-> i }``,
+  simp[SimpLHS, Once wave_def] >> AP_TERM_TAC >>
+  simp[EXTENSION]);
+
 
 val _ = export_theory();
