@@ -47,6 +47,8 @@
 #include "util/COO_mat.h"
 #include "util/timer.h"
 
+#define MAX(x,y) ((x)>(y)?(x):(y))
+
 // Useful global flags
 bool debug = false;
 bool diff = true;
@@ -133,7 +135,7 @@ int main(int argc, char ** argv) {
     printf("==== performing original computation ====\n");
     timer_start(&original_timer);
     // foreach non-zero A_{ij} in sparse matrix:
-    for (int p; p<nnz; p++) {
+    for (int p=0; p<nnz; p++) {
         int i = row[p];
         int j = col[p];
         // sum = Sum_{k=0}^{w-1} 1 / exp( k * data[i] * data[j] )
@@ -148,12 +150,93 @@ int main(int argc, char ** argv) {
 
     // One of the wavefront inspectors
     printf("==== performing wavefront inspector ====\n");
-    timer_start(&inspector_timer);    
+    timer_start(&inspector_timer);
+    
+    //===== find_waves_fast variant, see 3/17/14 in SPFproofs-log.txt
+    // possible optimizations: could do a single calloc for below
+    
+    // need lw_iter and lr_iter for each element in data array
+    int* lw_iter=(int*)malloc(sizeof(int)*(mat->nrows));
+    int* lr_iter=(int*)malloc(sizeof(int)*(mat->nrows));
+    // initializing them all to -1 to represent bottom (no iter has R or W yet)
+    for (int i=0; i<mat->nrows; i++) { lw_iter[i] = -1; lr_iter[i] = -1; }
+    // initialize all iteration wavefronts to 0
+    int* wave=(int*)malloc(sizeof(int)*nnz);
+    for (int i=0; i<nnz; i++) { wave[i] = 0; }
+    // will keep a count per wave, max number of waves is number of iterations
+    int* count=(int*)malloc(sizeof(int)*nnz);
+    for (int i=0; i<nnz; i++) { count[i] = 0; }
+    int max_wave = 0;
+    
+    // Iterating over iterations and how those iterations access data
+    // the read and write access relations have been hardcoded here
+    // for wavebench computation.
+    // One optimization included here is a count of how many iterations
+    // are put into each wave.
+    for (int p=0; p<nnz; p++) {
+        // last iteration read and wrote row[p-1] and col[p-1]
+        if (p>0) {
+            lr_iter[row[p-1]] = p-1;
+            lr_iter[col[p-1]] = p-1;
+            lw_iter[row[p-1]] = p-1;
+            lw_iter[col[p-1]] = p-1;
+        }
+
+        // reading and writing to indices r and c for iter p
+        int r = row[p];
+        int c = col[p];
+        
+        // the wavefront for this iteration needs to be +1 from
+        // the wavefront of previous iterations that have overlapping
+        // reads and writes
+        if (lw_iter[r]>=0) { wave[p] = MAX(wave[p],wave[lw_iter[r]]+1); }
+        if (lr_iter[r]>=0) { wave[p] = MAX(wave[p],wave[lr_iter[r]]+1); }
+        if (lw_iter[c]>=0) { wave[p] = MAX(wave[p],wave[lw_iter[c]]+1); }
+        if (lr_iter[c]>=0) { wave[p] = MAX(wave[p],wave[lr_iter[c]]+1); }
+
+        // count up number of iterations in each wave
+        max_wave = MAX(max_wave,wave[p]);
+        count[wave[p]]++;   
+    }
+    
+    // collect iterations per wave in CSR-like data structure
+    int* wavestart=(int*)malloc(sizeof(int)*(max_wave+2));
+    // possible optimization: wavestart can reuse count storage
+    wavestart[0] = 0;  // where the iterations for wave 0 start
+    for (int w=1; w<=max_wave; w++) {
+        // where the iterations for wave w start
+        wavestart[w] = wavestart[w-1] + count[w-1];
+    }
+    int* wavefronts=(int*)malloc(sizeof(int)*nnz);
+    for (int p=nnz-1; p>=0; p--) {
+        int w = wave[p];
+        wavefronts[wavestart[w]+(--count[w])] = p;
+    }   
+    
     timer_end(&inspector_timer);    
 
     // The wavefront executor
     printf("==== performing wavefront executor ====\n");
-    timer_start(&executor_timer);    
+    timer_start(&executor_timer);
+    // for each wavefront
+    for (int w=0; w<=max_wave; w++) {  
+        // foreach non-zero A_{ij} in sparse matrix in wavefront
+        for (int k=wavestart[w]; k<wavestart[w+1]; k++) {
+            int p = wavefronts[k];
+            
+            // The rest of the code is all the same as original
+            // except writing into data instead of data_org.
+            int i = row[p];
+            int j = col[p];
+            // sum = Sum_{k=0}^{w-1} 1 / exp( k * data[i] * data[j] )
+            double sum = 0.0;
+            for (int k=0; k<workPerIter; k++) {
+                sum += 1.0 / exp( (double)k * data[i] * data[j] );
+            }
+            data[ i ] += 1.0 + sum;
+            data[ j ] += 1.0 + sum;
+        }
+    }
     timer_end(&executor_timer);    
 
     // Compare the wavefront executor results with original.
