@@ -138,6 +138,9 @@ int main(int argc, char ** argv) {
     for (int p=0; p<nnz; p++) {
         int i = row[p];
         int j = col[p];
+        if (debug) {
+            printf("original: i=%d, j=%d\n", i, j);
+        }
         // sum = Sum_{k=0}^{w-1} 1 / exp( k * data[i] * data[j] )
         double sum = 0.0;
         for (int k=0; k<workPerIter; k++) {
@@ -203,14 +206,19 @@ int main(int argc, char ** argv) {
     int* wavestart=(int*)malloc(sizeof(int)*(max_wave+2));
     // possible optimization: wavestart can reuse count storage
     wavestart[0] = 0;  // where the iterations for wave 0 start
-    for (int w=1; w<=max_wave; w++) {
+    for (int w=1; w<max_wave+2; w++) {
         // where the iterations for wave w start
         wavestart[w] = wavestart[w-1] + count[w-1];
     }
     int* wavefronts=(int*)malloc(sizeof(int)*nnz);
     for (int p=nnz-1; p>=0; p--) {
         int w = wave[p];
-        wavefronts[wavestart[w]+(--count[w])] = p;
+        count[w]--;
+        wavefronts[wavestart[w]+count[w]] = p;
+        if (debug) {
+            printf("w=%d, wavestart[w]=%d, count[w]=%d, p=%d\n",
+                    w, wavestart[w], count[w], p);
+        }
     }   
     
     timer_end(&inspector_timer);    
@@ -228,6 +236,9 @@ int main(int argc, char ** argv) {
             // except writing into data instead of data_org.
             int i = row[p];
             int j = col[p];
+            if (debug) {
+                printf("executor: i=%d, j=%d\n", i, j);
+            }
             // sum = Sum_{k=0}^{w-1} 1 / exp( k * data[i] * data[j] )
             double sum = 0.0;
             for (int k=0; k<workPerIter; k++) {
