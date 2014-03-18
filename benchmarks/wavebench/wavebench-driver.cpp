@@ -126,10 +126,10 @@ int main(int argc, char ** argv) {
     double *val = mat->val; // nnz values in COO matrix representation
     int *row    = mat->row; // nnz rows in COO matrix representation
     int *col    = mat->col; // nnz rows in COO matrix representation
-    int nnz     = mat->nnz; // number of nonzeros
     if (mat->nrows != mat->ncols) assert(0);// only dealing with square matrices
-    // wavebench.fields var N
-    N = mat->nrows;
+    // wavebench.fields
+    nnz         = mat->nnz; // number of nonzeros
+    N           = mat->nrows;
 
     // Original Computation
     printf("==== performing original computation ====\n");
@@ -229,6 +229,7 @@ int main(int argc, char ** argv) {
     // for each wavefront
     for (int w=0; w<=max_wave; w++) {  
         // foreach non-zero A_{ij} in sparse matrix in wavefront
+        #pragma omp parallel for shared(data) private(i)
         for (int k=wavestart[w]; k<wavestart[w+1]; k++) {
             int p = wavefronts[k];
             
@@ -260,10 +261,20 @@ int main(int argc, char ** argv) {
     gethostname(computername, MAXLINESIZE);
     my_strftime(datetime, MAXLINESIZE);
     N = mat->nrows;
-//    avgIterPerWave = compute_avg( wave );
-//    minIterPerWave = compute_min( wave );
-//    maxIterPerWave = compute_max( wave );
-//    stddevIterPerWave = compute_stddev( wave );
+    // stats about the wavefronts
+    numwave = max_wave + 1;
+    avgIterPerWave = (double)nnz / (double)numwave;
+    double sum = 0.0;
+    minIterPerWave = nnz;
+    maxIterPerWave = 0;
+    for (int w=0; w<numwave; w++) {
+        int wave_size = wavestart[w+1] - wavestart[w];
+        if (wave_size>maxIterPerWave) { maxIterPerWave = wave_size; }
+        if (wave_size<minIterPerWave) { minIterPerWave = wave_size; }
+        sum += (wave_size - avgIterPerWave)*(wave_size - avgIterPerWave);
+    }
+    stddevIterPerWave = sqrt( sum / (double)numwave);  
+    // timings
     originalTime = timer_numsecs(&original_timer);
     inspectorTime = timer_numsecs(&inspector_timer);
     executorTime = timer_numsecs(&executor_timer);

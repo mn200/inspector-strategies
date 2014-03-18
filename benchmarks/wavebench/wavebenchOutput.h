@@ -22,16 +22,18 @@
     <dd> date time stamp
     <dt>N
     <dd> number of rows and columns in the matrix
+    <dt>nnz
+    <dd> number of non-zeros in the matrix
     <dt>numwave
     <dd> number of waves found
     <dt>avgIterPerWave
     <dd> average number of iterations per wavefront
+    <dt>stddevIterPerWave
+    <dd> standard deviation of iterations per wavefront
     <dt>minIterPerWave
     <dd> minimum number of iterations per wavefront
     <dt>maxIterPerWave
     <dd> maximum number of iterations per wavefront
-    <dt>stddevIterPerWave
-    <dd> standard deviation of iterations per wavefront
     <dt>originalTime
     <dd> time to execute original loop
     <dt>inspectorTime
@@ -50,10 +52,11 @@ fprintf(wavebenchOutfile, 			"%s\t"
 			"%s\t"
 			"%d\t"
 			"%d\t"
+			"%d\t"
 			"%15.8e\t"
 			"%15.8e\t"
-			"%15.8e\t"
-			"%15.8e\t"
+			"%d\t"
+			"%d\t"
 			"%15.8e\t"
 			"%15.8e\t"
 			"%15.8e\n",
@@ -65,11 +68,12 @@ fprintf(wavebenchOutfile, 			"%s\t"
 			computername,
 			datetime,
 			N,
+			nnz,
 			numwave,
 			avgIterPerWave,
+			stddevIterPerWave,
 			minIterPerWave,
 			maxIterPerWave,
-			stddevIterPerWave,
 			originalTime,
 			inspectorTime,
 			executorTime);

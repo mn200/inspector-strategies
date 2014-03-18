@@ -19,11 +19,12 @@ field::inspectorStr(string)     ! which inspector implementation to use
 field::computername(string)     ! computer which we are running on
 field::datetime(string)         ! date time stamp
 field::N(int)                   ! number of rows and columns in the matrix
+field::nnz(int)                 ! number of non-zeros in the matrix
 field::numwave(int)             ! number of waves found
 field::avgIterPerWave(float)    ! average number of iterations per wavefront
-field::minIterPerWave(float)    ! minimum number of iterations per wavefront
-field::maxIterPerWave(float)    ! maximum number of iterations per wavefront
 field::stddevIterPerWave(float) ! standard deviation of iterations per wavefront
+field::minIterPerWave(int)      ! minimum number of iterations per wavefront
+field::maxIterPerWave(int)      ! maximum number of iterations per wavefront
 field::originalTime(float)      ! time to execute original loop
 field::inspectorTime(float)     ! time to execute inspector in seconds
 field::executorTime(float)      ! time to execute executor in seconds
