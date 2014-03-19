@@ -20,6 +20,8 @@
     <dd> computer which we are running on
     <dt>datetime
     <dd> date time stamp
+    <dt>numthreads
+    <dd> number of OpenMP threads used to execute in parallel
     <dt>N
     <dd> number of rows and columns in the matrix
     <dt>nnz
@@ -53,6 +55,7 @@ extern int    workPerIter;
 extern char    inspectorStr[MAXLINESIZE];
 extern char    computername[MAXLINESIZE];
 extern char    datetime[MAXLINESIZE];
+extern int    numthreads;
 extern int    N;
 extern int    nnz;
 extern int    numwave;

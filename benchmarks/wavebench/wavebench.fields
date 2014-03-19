@@ -18,6 +18,7 @@ field::workPerIter(int)         ! number of exp() calls per iteration of loop
 field::inspectorStr(string)     ! which inspector implementation to use
 field::computername(string)     ! computer which we are running on
 field::datetime(string)         ! date time stamp
+field::numthreads(int)          ! number of OpenMP threads used to execute in parallel
 field::N(int)                   ! number of rows and columns in the matrix
 field::nnz(int)                 ! number of non-zeros in the matrix
 field::numwave(int)             ! number of waves found
