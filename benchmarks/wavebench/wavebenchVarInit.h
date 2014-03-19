@@ -10,6 +10,7 @@ int    workPerIter=0;
 char    inspectorStr[MAXLINESIZE] = "";
 char    computername[MAXLINESIZE] = "";
 char    datetime[MAXLINESIZE] = "";
+int    numthreads=0;
 int    N=0;
 int    nnz=0;
 int    numwave=0;

@@ -43,6 +43,7 @@
  */
 #include <stdlib.h>
 #include <math.h>
+#include <omp.h>
 #include "util/CmdParams.h"
 #include "util/COO_mat.h"
 #include "util/timer.h"
@@ -128,6 +129,7 @@ int main(int argc, char ** argv) {
     int *col    = mat->col; // nnz rows in COO matrix representation
     if (mat->nrows != mat->ncols) assert(0);// only dealing with square matrices
     // wavebench.fields
+    numthreads  = atoi(getenv("OMP_NUM_THREADS"));
     nnz         = mat->nnz; // number of nonzeros
     N           = mat->nrows;
 

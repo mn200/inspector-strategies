@@ -433,7 +433,7 @@ val ALL_DISTINCT_MAP_INJ = store_thm(
 
 val same_graphs = store_thm(
   "same_graphs",
-  ``(∀i0 i. ddepR wf rds i0 i ==> δ i0 < δ i) ∧
+  ``(∀i0 i. i < N ∧ ddepR wf rds i0 i ==> δ i0 < δ i) ∧
     BIJ δ (count N) (count N) ∧
     γ = LINV δ (count N) ⇒
     loop_to_graph (0,N) (wf o γ) (MAP (λf. f o γ) rds) (body o γ) =
@@ -487,7 +487,7 @@ val same_graphs = store_thm(
   map_every qx_gen_tac [`a1`, `a2`] >> eq_tac >| [
     disch_then (qx_choosel_then [`i`, `j`] strip_assume_tac) >>
     map_every qexists_tac [`γ i`, `γ j`] >> asimp[] >>
-    qpat_assum `∀i0 i. ddepR wf rsf i0 i ⇒ δ i0 < δ i`
+    qpat_assum `∀i0 i. i < N ∧ ddepR wf rsf i0 i ⇒ δ i0 < δ i`
       (qspecl_then [`γ j`, `γ i`] mp_tac) >>
     simp[ddepR_def] >>
     qmatch_abbrev_tac `¬(γ j < γ i) ∨ P ⇒ γ i < γ j` >>
@@ -509,7 +509,7 @@ val same_graphs = store_thm(
 
 val correctness = store_thm(
   "correctness",
-  ``(∀i0 i. ddepR wf rds i0 i ==> δ i0 < δ i) ∧
+  ``(∀i0 i. i < N ∧ ddepR wf rds i0 i ==> δ i0 < δ i) ∧
     BIJ δ (count N) (count N) ∧
     γ = LINV δ (count N)
   ==>

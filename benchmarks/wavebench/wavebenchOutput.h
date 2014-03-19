@@ -20,6 +20,8 @@
     <dd> computer which we are running on
     <dt>datetime
     <dd> date time stamp
+    <dt>numthreads
+    <dd> number of OpenMP threads used to execute in parallel
     <dt>N
     <dd> number of rows and columns in the matrix
     <dt>nnz
@@ -53,6 +55,7 @@ fprintf(wavebenchOutfile, 			"%s\t"
 			"%d\t"
 			"%d\t"
 			"%d\t"
+			"%d\t"
 			"%15.8e\t"
 			"%15.8e\t"
 			"%d\t"
@@ -67,6 +70,7 @@ fprintf(wavebenchOutfile, 			"%s\t"
 			inspectorStr,
 			computername,
 			datetime,
+			numthreads,
 			N,
 			nnz,
 			numwave,
