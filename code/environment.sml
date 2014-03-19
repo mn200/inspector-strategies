@@ -31,40 +31,40 @@ struct
                                      
 
   (*** env type ***)
-  type envtype = { iterdict : int dict,
+  type envtype = { pdict : int dict,  (* parameter and iterator dict *)
                    ddict : real dvector dict, 
                    idict : ivector dict, 
                    rdict : mrelation dict }
 
-  val empty_env = { iterdict = fn key => NONE,
+  val empty_env = { pdict = fn key => NONE,
                     ddict = fn key => NONE,
                     idict = fn key => NONE,
                     rdict = fn key => NONE} : envtype
 
   (*** functions to access environment ***)
-  fun iterlookup ({iterdict=iter, ddict=d, idict=i, rdict=r}, str) =
+  fun iterlookup ({pdict=iter, ddict=d, idict=i, rdict=r}, str) =
       lookup str iter
 
-  fun dlookup ({iterdict=iter, ddict=d, idict=i, rdict=r}, str) = 
+  fun dlookup ({pdict=iter, ddict=d, idict=i, rdict=r}, str) = 
       lookup str d
 
-  fun ilookup ({iterdict=iter, ddict=d, idict=i, rdict=r}, str) = 
+  fun ilookup ({pdict=iter, ddict=d, idict=i, rdict=r}, str) = 
       lookup str i
 
-  fun rlookup ({iterdict=iter, ddict=d, idict=i, rdict=r}, str) = 
+  fun rlookup ({pdict=iter, ddict=d, idict=i, rdict=r}, str) = 
       lookup str r
 
   (*** functions to modify environment ***)
-  fun iterenvupdate ({iterdict=iter, ddict=d, idict=i, rdict=r}, str, value) =
-      {iterdict=insert (str,value) iter, ddict=d, idict=i, rdict=r}
+  fun iterenvupdate ({pdict=iter, ddict=d, idict=i, rdict=r}, str, value) =
+      {pdict=insert (str,value) iter, ddict=d, idict=i, rdict=r}
 
-  fun denvupdate ({iterdict=iter, ddict=d, idict=i, rdict=r}, str, value) =
-      {iterdict=iter, ddict=insert (str,value) d, idict=i, rdict=r}
+  fun denvupdate ({pdict=iter, ddict=d, idict=i, rdict=r}, str, value) =
+      {pdict=iter, ddict=insert (str,value) d, idict=i, rdict=r}
 
-  fun ienvupdate ({iterdict=iter, ddict=d, idict=i, rdict=r}, str, value) =
-      {iterdict=iter, ddict=d, idict=insert (str,value) i, rdict=r}
+  fun ienvupdate ({pdict=iter, ddict=d, idict=i, rdict=r}, str, value) =
+      {pdict=iter, ddict=d, idict=insert (str,value) i, rdict=r}
 
-  fun renvupdate ({iterdict=iter, ddict=d, idict=i, rdict=r}, str, value) =
-      {iterdict=iter, ddict=d, idict=i, rdict=insert (str,value) r}
+  fun renvupdate ({pdict=iter, ddict=d, idict=i, rdict=r}, str, value) =
+      {pdict=iter, ddict=d, idict=i, rdict=insert (str,value) r}
 
 end

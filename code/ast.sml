@@ -14,7 +14,7 @@ datatype astnode =
          (* Define statement in a 1D loop *)
          (* write idx function, read idx functions, val compute, array *)
          (* A[ wf(i) ] = vf( A[ rf0(i) ], A[ rf1(i) ], ... ) *)
-         DefineStmt of string                   (* iterator name *)  
+         AssignStmt of string                   (* iterator name *)  
                        * (int -> int)           (* wf         *)
                        * (int -> int) list      (* rf list    *)
                        * ((real list) -> real)  (* vf         *)
@@ -40,7 +40,7 @@ fun eval ast env =
          * a location in the data array based on write function, reads,
          * and the value function that computes the rhs of define stmt.
          *)
-        DefineStmt (itername, wf,rfs,vf,Aname) =>
+        AssignStmt (itername, wf,rfs,vf,Aname) =>
         let
             val i = iterlookup (env, itername)
             val Aval = dlookup (env, Aname)
