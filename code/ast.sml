@@ -10,13 +10,24 @@ use "environment.sml";
 open primitives
 open environment
 
+(* grammar for affine expressions with UFTerms *)
+datatype expnode =
+         (* iterator or parameter variable read *)
+         VarExp of string
+
+         (* index array read, e.g., f(i) *)
+         | ISub of string * expnode
+
+datatype daccess =
+         Write of string * expnode
+         | Read of string * expnode
+
 datatype astnode =
          (* Define statement in a 1D loop *)
          (* write idx function, read idx functions, val compute, array *)
          (* A[ wf(i) ] = vf( A[ rf0(i) ], A[ rf1(i) ], ... ) *)
-         AssignStmt of string                   (* iterator name *)  
-                       * (int -> int)           (* wf         *)
-                       * (int -> int) list      (* rf list    *)
+         AssignStmt of daccess                  (* wf         *)
+                       * daccess list           (* rf list    *)
                        * ((real list) -> real)  (* vf         *)
                        * string                 (* array name *)
 
@@ -31,31 +42,38 @@ datatype astnode =
          (* FIXME: right now just does two statements, but should have list *)
          | SeqStmt of astnode * astnode
 
-(* grammar for affine expressions with UFTerms *)
-datatype expnode =
-         (* iterator or parameter variable read *)
-         VarExp of string
-
-         (* index array read, e.g., f(i) *)
-         | ISub of string * expnode
-
 
 (**** Interpreter ****)
 (* Given the AST and the current environment, evaluates the AST
  * and returns a new updated environment. *)
+
+(* Since these are indexing expressions, the result of evaluating them is int*)
+fun evalexp exp  env =
+    case exp of
+
+         (* iterator or parameter variable read *)
+         VarExp id => vlookup(env, id)
+
+         (* index array read, e.g., f(i) *)
+         | ISub(id,e) => isub( ilookup(env,id), (evalexp e env) )
+
+fun evaldaccess da env =
+    case da of
+        Write (id,exp) => evalexp exp env
+      | Read (id,exp) => evalexp exp env
+
 fun eval ast env =
     case ast of
         (* Looks up current value of data array and iterator and then updates
          * a location in the data array based on write function, reads,
          * and the value function that computes the rhs of define stmt.
          *)
-        AssignStmt (itername, wf,rfs,vf,Aname) =>
+        AssignStmt (wf,rfs,vf,Aname) =>
         let
-            val i = vlookup (env, itername)
             val Aval = dlookup (env, Aname)
-            val rhs = vf (map (fn rf => dsub(Aval,(rf i))) rfs) 
+            val rhs = vf (map (fn rf => dsub(Aval,(evaldaccess rf env))) rfs) 
         in
-            denvupdate(env, Aname, dupdate(Aval, wf i, rhs))
+            denvupdate(env, Aname, dupdate(Aval, (evaldaccess wf env), rhs))
         end
 
       (* Right now the interpretation of ForLoop assumes lb=0. *)
@@ -85,12 +103,3 @@ fun eval ast env =
       | SeqStmt (s1,s2) =>
         eval s2 (eval s1 env)
 
-(* Since these are indexing expressions, the result of evaluating them is int*)
-fun evalexp exp  env =
-    case exp of
-
-         (* iterator or parameter variable read *)
-         VarExp id => vlookup(env, id)
-
-         (* index array read, e.g., f(i) *)
-         | ISub(id,e) => isub( ilookup(env,id), (evalexp e env) )
