@@ -27,12 +27,8 @@ datatype astnode =
          (* for ( lb <= i < ub ) body *)
          | ParForLoop of string * int * int * astnode
 
-         (* data array declaration and initialization  *)
-         | DataInit of string                (* data array name *)
-                       * int                 (* domain is [0,N) *) 
-                       * real                (* initial value   *)
-
          (* Statement sequencing *)
+         (* FIXME: right now just does two statements, but should have list *)
          | SeqStmt of astnode * astnode
 
 (**** Interpreter ****)
@@ -76,9 +72,6 @@ fun eval ast env =
                     eval bodyast env
                 end)
             env
-
-      | DataInit (name,size,initval) =>
-        denvupdate(env, name, empty_dv(size,initval))
 
       | SeqStmt (s1,s2) =>
         eval s2 (eval s1 env)
