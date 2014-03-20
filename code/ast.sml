@@ -23,6 +23,10 @@ datatype astnode =
          (* for ( lb <= i < ub ) body *)
          | ForLoop of string * int * int * astnode
 
+         (* iterations of loop can be executed concurrently *)
+         (* for ( lb <= i < ub ) body *)
+         | ParForLoop of string * int * int * astnode
+
          (* data array declaration and initialization  *)
          | DataInit of string                (* data array name *)
                        * int                 (* domain is [0,N) *) 
@@ -42,7 +46,7 @@ fun eval ast env =
          *)
         AssignStmt (itername, wf,rfs,vf,Aname) =>
         let
-            val i = iterlookup (env, itername)
+            val i = vlookup (env, itername)
             val Aval = dlookup (env, Aname)
             val rhs = vf (map (fn rf => dsub(Aval,(rf i))) rfs) 
         in
@@ -54,12 +58,25 @@ fun eval ast env =
         FOR (0,ub)
             (fn iterval => fn env =>
                 let 
-                    val env = iterenvupdate(env, itername, iterval)
+                    val env = venvupdate(env, itername, iterval)
                 in 
                     eval bodyast env
                 end)
             env
-                    
+
+      (* Right now the interpretation of ForLoop assumes lb=0. *)
+      (* FIXME: need some way of doing random ordering of evaluations to
+       * model concurrency. *)
+      | ParForLoop (itername,lb,ub,bodyast) =>
+        FOR (0,ub)
+            (fn iterval => fn env =>
+                let 
+                    val env = venvupdate(env, itername, iterval)
+                in 
+                    eval bodyast env
+                end)
+            env
+
       | DataInit (name,size,initval) =>
         denvupdate(env, name, empty_dv(size,initval))
 
