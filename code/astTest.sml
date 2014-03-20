@@ -42,3 +42,11 @@ val comp_incr_test = dvector_to_list (dlookup ((eval incrLoop initEnv),"A"))
 (* The parallel implementation of the above. *)
 val comp_incr_par_test = dvector_to_list (
         dlookup ((eval parincrLoop initEnv),"A"))
+
+(* Some testing for the expression evaluation. *)
+val gofi_exp = ISub("g", VarExp("i"))  (* g[i] *)
+
+(* initialize environment with index array g and iterator i *)
+val initEnv = venvupdate( ienvupdate( empty_env, "g", empty_iv(5,5)), "i", 3)
+
+val gofi_exp_test = evalexp gofi_exp initEnv

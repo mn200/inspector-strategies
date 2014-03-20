@@ -31,6 +31,15 @@ datatype astnode =
          (* FIXME: right now just does two statements, but should have list *)
          | SeqStmt of astnode * astnode
 
+(* grammar for affine expressions with UFTerms *)
+datatype expnode =
+         (* iterator or parameter variable read *)
+         VarExp of string
+
+         (* index array read, e.g., f(i) *)
+         | ISub of string * expnode
+
+
 (**** Interpreter ****)
 (* Given the AST and the current environment, evaluates the AST
  * and returns a new updated environment. *)
@@ -75,3 +84,13 @@ fun eval ast env =
 
       | SeqStmt (s1,s2) =>
         eval s2 (eval s1 env)
+
+(* Since these are indexing expressions, the result of evaluating them is int*)
+fun evalexp exp  env =
+    case exp of
+
+         (* iterator or parameter variable read *)
+         VarExp id => vlookup(env, id)
+
+         (* index array read, e.g., f(i) *)
+         | ISub(id,e) => isub( ilookup(env,id), (evalexp e env) )
