@@ -1,0 +1,23 @@
+# Makefile for creating wavebench executable
+# using TAU on blacklight
+
+include ${TAU_ROOT_DIR}/x86_64/lib/Makefile.tau-icpc-pdt-openmp-opari
+
+TAU_OPTIONS = -optKeepFiles -optVerbose
+
+CCFLAGS = ${TAU_OPTIONS} -O3
+CCLFLAGS = ${CCFLAGS}
+CC = ${TAU_COMPILER} icc
+
+# wavebench specific files
+
+UTIL_CPP_FILES = util/CmdParams.cpp util/timer.cpp util/COO_mat.cpp util/mmio.cpp
+UTIL_OBJS = CmdParams.o timer.o COO_mat.o mmio.o
+                 
+UTIL_H_FILES = util/CmdParams.h util/timer.h util/COO_mat.h util/mmio.h
+
+wavebench: wavebench-driver.o ${UTIL_CPP_FILES} ${UTIL_H_FILES} ${UTIL_OBJS}
+	${CC} ${CCFLAGS} wavebench-driver.o ${UTIL_OBJS} -o wavebench
+
+clean:
+	-/bin/rm -rf *.o *.inst.* *.pdb wavebench wavebench.dSYM 2> /dev/null
