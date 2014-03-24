@@ -44,9 +44,9 @@
 #include <stdlib.h>
 #include <math.h>
 #include <omp.h>
-#include "util/CmdParams.h"
-#include "util/COO_mat.h"
-#include "util/timer.h"
+#include "CmdParams.h"
+#include "COO_mat.h"
+#include "timer.h"
 
 #define MAX(x,y) ((x)>(y)?(x):(y))
 
