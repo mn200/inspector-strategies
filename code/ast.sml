@@ -10,37 +10,38 @@ use "environment.sml";
 open primitives
 open environment
 
-(* grammar for affine expressions with UFTerms *)
-datatype expnode =
+(* grammar for index expressions: affine expressions with UFTerms *)
+datatype iexp =
          (* iterator or parameter variable read *)
          VarExp of string
 
          (* index array read, e.g., f(i) *)
-         | ISub of string * expnode
+         | ISub of string * iexp
 
-datatype daccess =
-         Write of string * expnode
-         | Read of string * expnode
+(* data expressions *)
+datatype dexp =
+         Convert of iexp
+         | Read of string * iexp
+         | DValue of real
 
-datatype astnode =
+datatype stmt =
          (* Define statement in a 1D loop *)
-         (* write idx function, read idx functions, val compute, array *)
-         (* A[ wf(i) ] = vf( A[ rf0(i) ], A[ rf1(i) ], ... ) *)
-         AssignStmt of daccess                  (* wf         *)
-                       * daccess list           (* rf list    *)
-                       * ((real list) -> real)  (* vf         *)
-                       * string                 (* array name *)
+         (* write idx function, functions, val compute, array   *)
+         (* A[ wf(i) ] = vf( read0(i) ], read1(i) ], ... )      *)
+         (* e.g. read#(i)=A[i], read#(i)=A[f[i]], or read#(i)=i *)
+         AssignStmt of string * iexp            (* wf           *)
+                       * dexp list              (* reads        *)
+                       * ((real list) -> real)  (* vf           *)
 
          (* for ( lb <= i < ub ) body *)
-         | ForLoop of string * int * int * astnode
+         | ForLoop of string * int * int * stmt
 
          (* iterations of loop can be executed concurrently *)
          (* for ( lb <= i < ub ) body *)
-         | ParForLoop of string * int * int * astnode
+         | ParForLoop of string * int * int * stmt
 
          (* Statement sequencing *)
-         (* FIXME: right now just does two statements, but should have list *)
-         | SeqStmt of astnode * astnode
+         | SeqStmt of stmt list
 
 
 (**** Interpreter ****)
@@ -48,32 +49,34 @@ datatype astnode =
  * and returns a new updated environment. *)
 
 (* Since these are indexing expressions, the result of evaluating them is int*)
-fun evalexp exp  env =
+fun evaliexp exp env =
     case exp of
 
          (* iterator or parameter variable read *)
          VarExp id => vlookup(env, id)
 
          (* index array read, e.g., f(i) *)
-         | ISub(id,e) => isub( ilookup(env,id), (evalexp e env) )
+         | ISub(id,e) => isub( ilookup(env,id), (evaliexp e env) )
 
-fun evaldaccess da env =
-    case da of
-        Write (id,exp) => evalexp exp env
-      | Read (id,exp) => evalexp exp env
+(* FIXME: right now returns a real, later should return DValue? *)
+fun evaldexp de env =
+    case de of
+        Convert (exp) => Real.fromInt(evaliexp exp env)
+      | Read (id,exp) => dsub(dlookup(env,id),(evaliexp exp env))
+      | DValue(v) => v 
 
-fun eval ast env =
+fun evalstmt ast env =
     case ast of
         (* Looks up current value of data array and iterator and then updates
          * a location in the data array based on write function, reads,
          * and the value function that computes the rhs of define stmt.
          *)
-        AssignStmt (wf,rfs,vf,Aname) =>
+        AssignStmt (Aname,wf,reads,vf) =>
         let
+            val rhs = vf (map (fn read => evaldexp read env) reads) 
             val Aval = dlookup (env, Aname)
-            val rhs = vf (map (fn rf => dsub(Aval,(evaldaccess rf env))) rfs) 
         in
-            denvupdate(env, Aname, dupdate(Aval, (evaldaccess wf env), rhs))
+            denvupdate(env, Aname, dupdate(Aval, (evaliexp wf env), rhs))
         end
 
       (* Right now the interpretation of ForLoop assumes lb=0. *)
@@ -83,7 +86,7 @@ fun eval ast env =
                 let 
                     val env = venvupdate(env, itername, iterval)
                 in 
-                    eval bodyast env
+                    evalstmt bodyast env
                 end)
             env
 
@@ -96,10 +99,11 @@ fun eval ast env =
                 let 
                     val env = venvupdate(env, itername, iterval)
                 in 
-                    eval bodyast env
+                    evalstmt bodyast env
                 end)
             env
 
-      | SeqStmt (s1,s2) =>
-        eval s2 (eval s1 env)
+      | SeqStmt (stmts) =>
+        foldl (fn (stm,env) => evalstmt stm env) env stmts
+
 
