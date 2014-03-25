@@ -31,19 +31,27 @@ val parincrLoop = ParForLoop ( "i", 0, 5,
 
 (* Initialize the environment *)
 (* A[i] = 0.0, forall i in [0,5) *)
-val initEnv = denvupdate ( empty_env, "A", empty_dv(5,0.0) )
+val initEnv = envupdate ( empty_env, "A", RealVecVal(empty_dv(5,0.0)) )
 
-val comp_incr_test = dvector_to_list (dlookup ((evalstmt incrLoop initEnv),"A"))
+val comp_incr_test = dvector_to_list (
+        getrealvec( envlookup ((evalstmt incrLoop initEnv),"A") ) )
   (* = [1.0,1.0,1.0,1.0,1.0], real lists are not equality types I guess*)
 
 (* The parallel implementation of the above. *)
 val comp_incr_par_test = dvector_to_list (
-        dlookup ((evalstmt parincrLoop initEnv),"A"))
+        getrealvec( envlookup ((evalstmt parincrLoop initEnv),"A") ) )
 
+(* Testing sequences of statements *)
+val loopseq = SeqStmt([incrLoop,incrLoop])
+val comp_incrincr_test = 
+    dvector_to_list ( getrealvec( envlookup ((evalstmt loopseq initEnv),"A") ) )
+
+(*****************************************************)
 (* Some testing for the expression evaluation. *)
 val gofi_exp = ISub("g", VarExp("i"))  (* g[i] *)
 
 (* initialize environment with index array g and iterator i *)
-val initEnv = venvupdate( ienvupdate( empty_env, "g", empty_iv(5,5)), "i", 3)
+val initEnv = envupdate( 
+        envupdate( empty_env, "g", IVecVal(empty_iv(5,5))), "i", IntVal(3) )
 
 val gofi_exp_test = evaliexp gofi_exp initEnv

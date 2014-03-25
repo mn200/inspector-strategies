@@ -53,16 +53,16 @@ fun evaliexp exp env =
     case exp of
 
          (* iterator or parameter variable read *)
-         VarExp id => vlookup(env, id)
+         VarExp id => getint(envlookup(env, id))
 
          (* index array read, e.g., f(i) *)
-         | ISub(id,e) => isub( ilookup(env,id), (evaliexp e env) )
+         | ISub(id,e) => isub( getivec(envlookup(env,id)), (evaliexp e env) )
 
 (* FIXME: right now returns a real, later should return DValue? *)
 fun evaldexp de env =
     case de of
         Convert (exp) => Real.fromInt(evaliexp exp env)
-      | Read (id,exp) => dsub(dlookup(env,id),(evaliexp exp env))
+      | Read (id,exp) => dsub(getrealvec(envlookup(env,id)),(evaliexp exp env))
       | DValue(v) => v 
 
 fun evalstmt ast env =
@@ -74,9 +74,10 @@ fun evalstmt ast env =
         AssignStmt (Aname,wf,reads,vf) =>
         let
             val rhs = vf (map (fn read => evaldexp read env) reads) 
-            val Aval = dlookup (env, Aname)
+            val Aval = getrealvec(envlookup (env, Aname))
         in
-            denvupdate(env, Aname, dupdate(Aval, (evaliexp wf env), rhs))
+            envupdate(env, Aname, 
+                      RealVecVal(dupdate(Aval, (evaliexp wf env), rhs)))
         end
 
       (* Right now the interpretation of ForLoop assumes lb=0. *)
@@ -84,7 +85,7 @@ fun evalstmt ast env =
         FOR (0,ub)
             (fn iterval => fn env =>
                 let 
-                    val env = venvupdate(env, itername, iterval)
+                    val env = envupdate(env, itername, IntVal(iterval))
                 in 
                     evalstmt bodyast env
                 end)
@@ -97,7 +98,7 @@ fun evalstmt ast env =
         FOR (0,ub)
             (fn iterval => fn env =>
                 let 
-                    val env = venvupdate(env, itername, iterval)
+                    val env = envupdate(env, itername, IntVal(iterval))
                 in 
                     evalstmt bodyast env
                 end)

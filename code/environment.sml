@@ -6,7 +6,7 @@
 use "primitives.sig";
 use "primitives.sml";
 
-use "environment.sig"; (* why needed? *)
+use "environment.sig"; (* FIXME: why needed? *)
 
 open primitives
 
@@ -29,32 +29,31 @@ struct
          NONE => raise VarNotFound(key)
        | SOME value => value 
                                      
+  (*** value union type ***)
+  datatype valuetype = RelVal of mrelation
+                     | IVecVal of ivector
+                     | RealVecVal of real dvector
+                     | IntVal of int
+
+  fun getmrel v = case v of RelVal(r) => r
+  fun getivec v = case v of IVecVal(iv) => iv
+  fun getrealvec v = case v of RealVecVal(dv) => dv
+  fun getint v = case v of IntVal(i) => i
 
   (*** env type ***)
+  type envtype = valuetype dict
+(*
   type envtype = { vdict : int dict,  (* parameter and iterator dict *)
                    ddict : real dvector dict, 
                    idict : ivector dict, 
                    rdict : mrelation dict }
+*)
+  val empty_env = (fn key => NONE) : envtype
 
-  val empty_env = { vdict = fn key => NONE,
-                    ddict = fn key => NONE,
-                    idict = fn key => NONE,
-                    rdict = fn key => NONE} : envtype
+  fun envlookup (env,str) = lookup str env
 
-  (*** functions to access environment ***)
-  fun vlookup ({vdict=v, ddict=d, idict=i, rdict=r}, str) =
-      lookup str v
-
-  fun dlookup ({vdict=v, ddict=d, idict=i, rdict=r}, str) = 
-      lookup str d
-
-  fun ilookup ({vdict=v, ddict=d, idict=i, rdict=r}, str) = 
-      lookup str i
-
-  fun rlookup ({vdict=v, ddict=d, idict=i, rdict=r}, str) = 
-      lookup str r
-
-  (*** functions to modify environment ***)
+  fun envupdate (env,str,value) = insert (str,value) env
+(*
   fun venvupdate ({vdict=v, ddict=d, idict=i, rdict=r}, str, value) =
       {vdict=insert (str,value) v, ddict=d, idict=i, rdict=r}
 
@@ -66,5 +65,5 @@ struct
 
   fun renvupdate ({vdict=v, ddict=d, idict=i, rdict=r}, str, value) =
       {vdict=v, ddict=d, idict=i, rdict=insert (str,value) r}
-
+*)
 end
