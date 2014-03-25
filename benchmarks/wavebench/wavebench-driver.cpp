@@ -43,7 +43,8 @@
  */
 #include <stdlib.h>
 #include <math.h>
-#include <omp.h>
+#include <cpucounters.h>  // For Intel Performance Counter Monitor
+
 #include "CmdParams.h"
 #include "COO_mat.h"
 #include "timer.h"
@@ -129,6 +130,8 @@ int main(int argc, char ** argv) {
     int *col    = mat->col; // nnz rows in COO matrix representation
     if (mat->nrows != mat->ncols) assert(0);// only dealing with square matrices
     // wavebench.fields
+    // FIXME: check if getenv works.  If not then exist with an error indicating
+    // need to set OMP_NUM_THREADS.
     numthreads  = atoi(getenv("OMP_NUM_THREADS"));
     nnz         = mat->nnz; // number of nonzeros
     N           = mat->nrows;

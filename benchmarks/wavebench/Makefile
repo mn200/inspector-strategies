@@ -6,13 +6,22 @@ else
     CC = g++
 endif
 
+#CCFLAGS = -O3 -fopenmp \
+#    -I/Users/mstrout/package/IntelPerformanceCounterMonitorV2.6
+CCFLAGS = -O0 -g -fopenmp
 
-UTIL_CPP_FILES = util/CmdParams.cpp util/timer.cpp util/COO_mat.cpp util/mmio.cpp
-                 
-UTIL_H_FILES = util/CmdParams.h util/timer.h util/COO_mat.h util/mmio.h
+# wavebench specific files
 
-wavebench: wavebench-driver.cpp ${UTIL_CPP_FILES} ${UTIL_H_FILES}
-	${CC} -O3 -fopenmp wavebench-driver.cpp ${UTIL_CPP_FILES} -o wavebench
+UTIL_H_FILES = CmdParams.h timer.h COO_mat.h mmio.h
+UTIL_CPP_FILES = CmdParams.cpp timer.cpp COO_mat.cpp mmio.cpp
+UTIL_OBJS = CmdParams.o timer.o COO_mat.o mmio.o
+
+wavebench: wavebench-driver.o ${UTIL_CPP_FILES} ${UTIL_H_FILES} ${UTIL_OBJS}
+	${CC} ${CCFLAGS} wavebench-driver.o ${UTIL_OBJS} -o wavebench
+
+%.o : %.cpp %.h
+	${CC} -c ${CCFLAGS} $< -o $@
+
 
 clean:
 	-/bin/rm -rf *.o wavebench wavebench.dSYM 2> /dev/null
