@@ -1,7 +1,7 @@
 open HolKernel Parse boolLib bossLib;
 
 open stringTheory
-open integerTheory
+open integerTheory intLib
 open realTheory
 open finite_mapTheory
 open lcsymtacs
@@ -203,7 +203,9 @@ fun subeval t =
 fun eval1 t0 = let
   val gv = genvar (type_of t0)
   val th = subeval ``eval ^t0 ^gv``
-  val ts = map rhs (strip_disj (rhs (concl th)))
+  val c = rhs (concl th)
+  val ts = if aconv c F then []
+           else map rhs (strip_disj (rhs (concl th)))
   fun mkth t = th |> INST [gv |-> t] |> PURE_REWRITE_RULE [OR_CLAUSES, REFL_CLAUSE]
                   |> EQT_ELIM
 in
@@ -213,7 +215,7 @@ end;
 val t0 = ``(FEMPTY |+ ("a", Array (GENLIST (λn. Int &n) 20)), FEMPTY : memory,
          ForLoop "i" (D 0 10) (Assign ("a", VarExp "i") [Read "a" (VarExp "i")] incval))``
 
-fun chain n eq (f: 'a -> 'b list) (d: 'b -> 'a) s0 = let
+fun chain m eq (f: 'a -> 'b list) (d: 'b -> 'a) s0 = let
   fun history_to_next h =
       case h of
           (bs as (b::_), a) =>
@@ -224,10 +226,15 @@ fun chain n eq (f: 'a -> 'b list) (d: 'b -> 'a) s0 = let
 
   fun recurse n hs =
     if n <= 0 then hs
-    else recurse (n - 1) (op_mk_set eq (List.concat (map history_to_next hs)))
-
+    else let
+      val acc' = op_mk_set eq (List.concat (map history_to_next hs))
+      val _ = print ("Stage " ^ Int.toString (m - n + 1) ^ ": " ^
+                     Int.toString (length acc') ^ " results\n")
+    in
+      recurse (n - 1) acc'
+    end
 in
-  map (fn (bs, a) => (a, List.rev bs)) (recurse n [([], s0)])
+  map (fn (bs, a) => (a, List.rev bs)) (recurse m [([], s0)])
 end
 
 fun chaineval n t = let
@@ -242,10 +249,10 @@ in
 end
 
 val par_t =
-    ``(FEMPTY |+ ("a", Array (GENLIST (λn. Int &n) 10)), FEMPTY : memory,
-         ParLoop "i" (D 0 4) (Assign ("a", VarExp "i") [Read "a" (VarExp "i")] incval))``
+    ``(FEMPTY |+ ("a", Array (GENLIST (λn. Int &(2 * n)) 10)), FEMPTY : memory,
+         ParLoop "i" (D 0 3) (Assign ("a", VarExp "i") [Read "a" (VarExp "i")] incval))``
 (*
-val res = chaineval 5 par_t;
+val res = chaineval 17 par_t;
 val _ = print ("Length of result is " ^ Int.toString (length res) ^ "\n")
 *)
 
