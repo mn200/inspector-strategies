@@ -115,7 +115,7 @@ val evalexpr_def = tDefine "evalexpr" `
 
 val (eval_rules, eval_ind, eval_cases) = Hol_reln`
   (∀m0 lm0 llm s1 m s1' rest.
-    eval (m0, llm, s1) (m, llm, s1') ⇒
+    eval (m0, llm ⊌ lm0, s1) (m, llm ⊌ lm0, s1') ⇒
     eval (m0, lm0, Seq ((llm,s1)::rest)) (m, lm0, Seq ((llm,s1')::rest))) ∧
 
   (∀m lm llm rest. eval (m, lm, Seq ((llm, Done) :: rest)) (m, lm, Seq rest)) ∧
@@ -161,9 +161,9 @@ val (eval_rules, eval_ind, eval_cases) = Hol_reln`
            (m, lm, Par (MAP (λdv. (lm |+ (vnm, dv), body)) (dvalues d)))) ∧
 
   (∀llm llm' lm m m' pfx ps s s' sfx.
-      ps = pfx ++ [(llm, s)] ++ sfx ∧ eval (m, llm, s) (m', llm', s')
+      ps = pfx ++ [(llm, s)] ++ sfx ∧ eval (m, llm ⊌ lm, s) (m', llm ⊌ lm, s')
     ⇒
-      eval (m, lm, Par ps) (m', lm, Par (pfx ++ [(llm', s')] ++ sfx))) ∧
+      eval (m, lm, Par ps) (m', lm, Par (pfx ++ [(llm, s')] ++ sfx))) ∧
 
   (∀llm lm m pfx ps sfx.
       ps = pfx ++ [(llm, Done)] ++ sfx ⇒
