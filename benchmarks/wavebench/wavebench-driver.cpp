@@ -43,7 +43,7 @@
  */
 #include <stdlib.h>
 #include <math.h>
-#include <cpucounters.h>  // For Intel Performance Counter Monitor
+//#include <cpucounters.h>  // For Intel Performance Counter Monitor
 
 #include "CmdParams.h"
 #include "COO_mat.h"
@@ -173,7 +173,7 @@ int main(int argc, char ** argv) {
     for (int i=0; i<nnz; i++) { wave[i] = 0; }
     // will keep a count per wave, max number of waves is number of iterations
     int* count=(int*)malloc(sizeof(int)*nnz);
-    for (int i=0; i<nnz; i++) { count[i] = 0; }
+    for (int i=1; i<nnz; i++) { count[i] = 0; }
     int max_wave = 0;
     
     // Iterating over iterations and how those iterations access data
@@ -181,14 +181,15 @@ int main(int argc, char ** argv) {
     // for wavebench computation.
     // One optimization included here is a count of how many iterations
     // are put into each wave.
-    for (int p=0; p<nnz; p++) {
+    // p=0 will always be in wave 0 and its lr_iter and lw_iter will
+    // be taken care of when p=1.
+    count[0] = 1; // iteration p=0 is in wave 0
+    for (int p=1; p<nnz; p++) {
         // last iteration read and wrote row[p-1] and col[p-1]
-        if (p>0) {
-            lr_iter[row[p-1]] = p-1;
-            lr_iter[col[p-1]] = p-1;
-            lw_iter[row[p-1]] = p-1;
-            lw_iter[col[p-1]] = p-1;
-        }
+        lr_iter[row[p-1]] = p-1;
+        lr_iter[col[p-1]] = p-1;
+        lw_iter[row[p-1]] = p-1;
+        lw_iter[col[p-1]] = p-1;
 
         // reading and writing to indices r and c for iter p
         int r = row[p];
