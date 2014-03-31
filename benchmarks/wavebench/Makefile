@@ -16,8 +16,13 @@ UTIL_H_FILES = CmdParams.h timer.h COO_mat.h mmio.h
 UTIL_CPP_FILES = CmdParams.cpp timer.cpp COO_mat.cpp mmio.cpp
 UTIL_OBJS = CmdParams.o timer.o COO_mat.o mmio.o
 
-wavebench: wavebench-driver.o ${UTIL_CPP_FILES} ${UTIL_H_FILES} ${UTIL_OBJS}
+wavebench: ${UTIL_H_FILES} ${UTIL_OBJS} wavebench-driver.o
 	${CC} ${CCFLAGS} wavebench-driver.o ${UTIL_OBJS} -o wavebench
+
+# not sure why have to break this out but do on blacklight
+# maybe because of hyphen?
+wavebench-driver.o: wavebench-driver.cpp
+	${CC} -c ${CCFLAGS} $< -o $@
 
 %.o : %.cpp %.h
 	${CC} -c ${CCFLAGS} $< -o $@
