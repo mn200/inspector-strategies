@@ -5,3 +5,7 @@
 .	small_test_5x5.mm	wavebench.dat	1	naive_inspector	Michelles-MacBook-Air-2.local	Wed Mar 26 09:43:44 2014	2	5	13	10	 1.30000000e+00	 6.08276253e-01	0	2	 4.85897064e-04	 2.86102295e-06	 9.53674316e-07
 .	small_test_5x5.mm	wavebench.dat	1	naive_inspector	Michelles-MacBook-Air-2.local	Wed Mar 26 09:46:16 2014	2	5	13	10	 1.30000000e+00	 4.58257569e-01	1	2	 5.19990921e-04	 4.05311584e-06	 9.53674316e-07
 .	small_test_5x5.mm	wavebench.dat	1	naive_inspector	tg-login1.blacklight.psc.teragrid.org	Thu 27 Mar 2014 08:20:18 PM EDT	2	5	13	10	 1.30000000e+00	 4.58257569e-01	1	2	 4.05311584e-06	 1.90734863e-06	 0.00000000e+00
+.	small_test_5x5.mm	wavebench.dat	1	naive_inspector	Michelles-MacBook-Air-2.local	Mon Mar 31 16:56:51 2014	2	5	13	10	 1.30000000e+00	 4.58257569e-01	1	2	 4.72068787e-04	 3.09944153e-06	 7.20977783e-04
+.	small_test_5x5.mm	wavebench.dat	1	naive_inspector	Michelles-MacBook-Air-2.local	Mon Mar 31 16:57:03 2014	1	5	13	10	 1.30000000e+00	 4.58257569e-01	1	2	 6.68048859e-04	 5.00679016e-06	 6.38961792e-05
+/Users/mstrout/Data/Davis	torso1.mm	wavebench.dat	1	naive_inspector	Michelles-MacBook-Air-2.local	Mon Mar 31 16:58:51 2014	1	116158	8516500	3038594	 2.80277655e+00	 3.84614453e+00	1	121	 1.87545061e-01	 5.69774151e-01	 2.06258106e+00
+/Users/mstrout/Data/Davis	torso1.mm	wavebench.dat	1	naive_inspector	Michelles-MacBook-Air-2.local	Mon Mar 31 17:00:06 2014	2	116158	8516500	3038594	 2.80277655e+00	 3.84614453e+00	1	121	 1.84152842e-01	 5.89959860e-01	 5.68606801e+01

@@ -1,0 +1,16 @@
+./wavebench -d /s/bach/e/proj/rtrt/Data/Davis -w 0 -m apache1.mm
+./wavebench -d /s/bach/e/proj/rtrt/Data/Davis -w 1 -m apache1.mm
+./wavebench -d /s/bach/e/proj/rtrt/Data/Davis -w 2 -m apache1.mm
+./wavebench -d /s/bach/e/proj/rtrt/Data/Davis -w 4 -m apache1.mm
+./wavebench -d /s/bach/e/proj/rtrt/Data/Davis -w 8 -m apache1.mm
+./wavebench -d /s/bach/e/proj/rtrt/Data/Davis -w 16 -m apache1.mm
+./wavebench -d /s/bach/e/proj/rtrt/Data/Davis -w 32 -m apache1.mm
+./wavebench -d /s/bach/e/proj/rtrt/Data/Davis -w 64 -m apache1.mm
+./wavebench -d /s/bach/e/proj/rtrt/Data/Davis -w 0 -m gridgena.mm
+./wavebench -d /s/bach/e/proj/rtrt/Data/Davis -w 1 -m gridgena.mm
+./wavebench -d /s/bach/e/proj/rtrt/Data/Davis -w 2 -m gridgena.mm
+./wavebench -d /s/bach/e/proj/rtrt/Data/Davis -w 4 -m gridgena.mm
+./wavebench -d /s/bach/e/proj/rtrt/Data/Davis -w 8 -m gridgena.mm
+./wavebench -d /s/bach/e/proj/rtrt/Data/Davis -w 16 -m gridgena.mm
+./wavebench -d /s/bach/e/proj/rtrt/Data/Davis -w 32 -m gridgena.mm
+./wavebench -d /s/bach/e/proj/rtrt/Data/Davis -w 64 -m gridgena.mm
