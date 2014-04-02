@@ -30,37 +30,46 @@ infile = open('opt1-li-fwd500.dat','r')
 # being the field names in the first row of the file.
 infile_dict_list = csv.DictReader(infile,delimiter='\t')
 
-# Find the average original time for each sparse matrix and work amount.
+# List of original times for each sparse matrix and work amount.
+# Also lists of inspector and executor times.
 baselines = {}
-baselines = {}
+inspectortimes = {}
+executortimes = {}
 for row in infile_dict_list:
-    mat_work = (row['matrixfilename'],row['workPerIter'])
+    mat_work = (row['matrixfilename'],int(row['workPerIter']))
+    
+    # baselines indexed by (matrix,work)
     if mat_work in baselines:
         baselines[mat_work].append( float(row['originalTime']) )
     else:
         baselines[mat_work] = [ float(row['originalTime']) ]
-
-print baselines
-
-# numpy.mean( numpy.array( list ) )
-
-
-
-
-baseline_dict_avg = {}
-baseline_dict_count = {}
-for row in infile_dict_list:
-    mat_work = (row['matrixfilename'],row['workPerIter'])
-    if mat_work in baseline_dict_count:
-        baseline_dict_avg[mat_work] = \
-            (baseline_dict_avg[mat_work]*baseline_dict_count[mat_work] \
-            + float(row['originalTime']) ) / (baseline_dict_count[mat_work]+1)
-        baseline_dict_count[mat_work] += 1
+        
+    # inspector and executor times indexed by numthreads,
+    # and then (matrix,work)
+    numthreads = int(row['numthreads'])
+    if numthreads in inspectortimes and mat_work in inspectortimes[numthreads]:
+        inspectortimes[numthreads][mat_work].append(float(row['inspectorTime']))
+        executortimes[numthreads][mat_work].append(float(row['executorTime']))
+    elif numthreads in inspectortimes:
+        inspectortimes[numthreads][mat_work] = [float(row['inspectorTime'])]
+        executortimes[numthreads][mat_work] = [float(row['executorTime'])]
     else:
-        baseline_dict_avg[mat_work] = float(row['originalTime'])
-        baseline_dict_count[mat_work] = 1
+        inspectortimes[numthreads] = {}
+        inspectortimes[numthreads][mat_work] = [float(row['inspectorTime'])]
+        executortimes[numthreads] = {}
+        executortimes[numthreads][mat_work] = [float(row['executorTime'])]
 
-print baseline_dict_avg
+# calculate statistics
+import sys
+for numthreads in sorted(executortimes.iterkeys()):
+    sys.stdout.write(str(numthreads))  # avoiding newline
+    for (mat,work) in sorted(executortimes[numthreads].iterkeys()):
+        timelist = executortimes[numthreads][(mat,work)]
+        sys.stdout.write("\t" + str(numpy.mean(numpy.array(timelist))))
+    sys.stdout.write("\n")
+
+
+
 
 
 
