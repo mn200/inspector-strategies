@@ -22,7 +22,6 @@
 #################################################################
 
 import csv
-import numpy
 
 infile = open('opt1-li-fwd500.dat','r')
 
@@ -35,8 +34,10 @@ infile_dict_list = csv.DictReader(infile,delimiter='\t')
 baselines = {}
 inspectortimes = {}
 executortimes = {}
+last_mat_work = ("init",0)
 for row in infile_dict_list:
     mat_work = (row['matrixfilename'],int(row['workPerIter']))
+    last_mat_work = mat_work
     
     # baselines indexed by (matrix,work)
     if mat_work in baselines:
@@ -47,25 +48,35 @@ for row in infile_dict_list:
     # inspector and executor times indexed by numthreads,
     # and then (matrix,work)
     numthreads = int(row['numthreads'])
-    if numthreads in inspectortimes and mat_work in inspectortimes[numthreads]:
-        inspectortimes[numthreads][mat_work].append(float(row['inspectorTime']))
-        executortimes[numthreads][mat_work].append(float(row['executorTime']))
-    elif numthreads in inspectortimes:
-        inspectortimes[numthreads][mat_work] = [float(row['inspectorTime'])]
-        executortimes[numthreads][mat_work] = [float(row['executorTime'])]
+    
+    if  mat_work in inspectortimes and numthreads in inspectortimes[mat_work]:
+        inspectortimes[mat_work][numthreads].append(float(row['inspectorTime']))
+        executortimes[mat_work][numthreads].append(float(row['executorTime']))
+    elif mat_work in inspectortimes:
+        inspectortimes[mat_work][numthreads] = [float(row['inspectorTime'])]
+        executortimes[mat_work][numthreads] = [float(row['executorTime'])]
     else:
-        inspectortimes[numthreads] = {}
-        inspectortimes[numthreads][mat_work] = [float(row['inspectorTime'])]
-        executortimes[numthreads] = {}
-        executortimes[numthreads][mat_work] = [float(row['executorTime'])]
+        inspectortimes[mat_work] = {}
+        inspectortimes[mat_work][numthreads] = [float(row['inspectorTime'])]
+        executortimes[mat_work] = {}
+        executortimes[mat_work][numthreads] = [float(row['executorTime'])]
 
-# calculate statistics
+# calculate statistics and print out table for excel
 import sys
-for numthreads in sorted(executortimes.iterkeys()):
-    sys.stdout.write(str(numthreads))  # avoiding newline
-    for (mat,work) in sorted(executortimes[numthreads].iterkeys()):
-        timelist = executortimes[numthreads][(mat,work)]
-        sys.stdout.write("\t" + str(numpy.mean(numpy.array(timelist))))
+import numpy
+# print num threads headers
+sys.stdout.write("mat,work")
+for numthreads in sorted(executortimes[last_mat_work].iterkeys()):
+    sys.stdout.write("\t" + str(numthreads))
+sys.stdout.write("\n")
+# print numthreads and then speedup for each matrix, work combo
+for (mat,work) in sorted(executortimes.iterkeys()):
+    sys.stdout.write(mat + "," + str(work))
+    for numthreads in sorted(executortimes[(mat,work)].iterkeys()):
+        timelist = executortimes[(mat,work)][numthreads]
+        avg = numpy.mean(numpy.array(timelist))
+        baseline_avg = numpy.mean(numpy.array(baselines[(mat,work)]))
+        sys.stdout.write("\t" + str( baseline_avg/avg ))
     sys.stdout.write("\n")
 
 
