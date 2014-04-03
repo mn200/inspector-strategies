@@ -1,0 +1,12 @@
+setenv OMP_NUM_THREADS 1
+source larger-mats.script
+source larger-mats.script
+setenv OMP_NUM_THREADS 2
+source larger-mats.script
+source larger-mats.script
+setenv OMP_NUM_THREADS 4
+source larger-mats.script
+source larger-mats.script
+setenv OMP_NUM_THREADS 8
+source larger-mats.script
+source larger-mats.script
