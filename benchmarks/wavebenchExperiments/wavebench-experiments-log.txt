@@ -82,10 +82,24 @@ mac econ fwd500 206,500 1,273,389 2,090 72,485,971 0.0030 16.1
 
 Want to look at memory footprint of row and col and data, percentage of non-zeros, number of wavefronts, average, min, and max number of items per wavefront.  I am guessing these just have a really high number of wavefronts.
 
-- scripts need to take name of input file on the command line
++ scripts need to take name of input file on the command line
 
-- matrix script needs to only store the wavefront information once for each matrix
++ matrix script needs to only store the wavefront information once for each matrix
+    
++ probably going to need a sparse matrix that represents a regular 3D mesh connectivity, gonna try some of the larger matrices we already have.  Which
+matrix did well for FST?  thermal2
+
+../wavebench/pythonScripts/create_run.py larger-mats.script ./wavebench 'd(/s/bach/e/proj/rtrt/Data/Davis/)'  'w(0,1,2,4,8,16,32,64,128,256)' 'm(thermal2.mm,nd3k.MM,cage13.mm,cfd2.mm,1d5pt.mm)'
+
+python ../wavebench/pythonScripts/create_run.py larger-mats.script ./wavebench 'd(/s/bach/e/proj/rtrt/Data/Davis/)'  'w(0,1,2,4,8,16,32,64)' 'm(thermal2.mm,nd3k.MM,cage13.mm,cfd2.mm,1d5pt.mm)'
+
 
     
-- probably going to need a sparse matrix that represents a regular 3D mesh connectivity
 
+
+------------------------
+Next time do experiments
+    - it would be nice to see the results print out as they run
+    - the python analysis scripts should have getting the .dat and .fields files into a list of dictionaries a utility function that is in util.py
+    - should split the script that generates inspector break even times away from executor speedup graph
+    - will want to setup benchmark so it can run multiple experiments on a single sparse matrix load

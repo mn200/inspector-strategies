@@ -23,6 +23,8 @@
 #################################################################
 
 import csv
+import sys
+import numpy
 
 # read dat file
 if len(sys.argv) > 1:
@@ -70,8 +72,8 @@ for row in infile_dict_list:
         executortimes[mat_work][numthreads] = [float(row['executorTime'])]
 
 # calculate statistics and print out table for excel
-import sys
-import numpy
+
+#### executor speedup table
 # print num threads headers
 sys.stdout.write("mat,work")
 for numthreads in sorted(executortimes[last_mat_work].iterkeys()):
@@ -87,7 +89,25 @@ for (mat,work) in sorted(executortimes.iterkeys()):
         sys.stdout.write("\t" + str( baseline_avg/avg ))
     sys.stdout.write("\n")
 
+sys.stdout.write("\n\n\n")
 
+#### inspector break even table
+# print num threads headers
+sys.stdout.write("mat,work")
+for numthreads in sorted(inspectortimes[last_mat_work].iterkeys()):
+    sys.stdout.write("\t" + str(numthreads))
+sys.stdout.write("\n")
+# print numthreads and then break even time for each matrix, work combo
+for (mat,work) in sorted(inspectortimes.iterkeys()):
+    sys.stdout.write(mat + "," + str(work))
+    for numthreads in sorted(executortimes[(mat,work)].iterkeys()):
+        timelist = executortimes[(mat,work)][numthreads]
+        avg = numpy.mean(numpy.array(timelist))
+        baseline_avg = numpy.mean(numpy.array(baselines[(mat,work)]))
+        avgOH = numpy.mean(numpy.array(inspectortimes[(mat,work)][numthreads]))
+        break_even = avgOH/(baseline_avg - avg)
+        sys.stdout.write("\t" + str( break_even ))
+    sys.stdout.write("\n")
 
 
 
