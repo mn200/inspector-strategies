@@ -93,6 +93,10 @@ matrix did well for FST?  thermal2
 
 python ../wavebench/pythonScripts/create_run.py larger-mats.script ./wavebench 'd(/s/bach/e/proj/rtrt/Data/Davis/)'  'w(0,1,2,4,8,16,32,64)' 'm(thermal2.mm,nd3k.MM,cage13.mm,cfd2.mm,1d5pt.mm)'
 
+Ok, now have much better results.
+Definitely get better results when the number of wavefronts needed is smaller.  memory footprint does not seem to impact things?
+
+The performance really seems to correlate with average parallelism, which is average number of iterations per wave.  Note that nd3k.MM has 2% non-zeros, which is a really high non-sparsity and it is in the middle in terms of performance.  FIXME: not sure the percentage of non-zeros is correct, because I need to check if these matrices are all square and symmetric for my computation of percentage of non-zeros to be correct.
 
     
 
