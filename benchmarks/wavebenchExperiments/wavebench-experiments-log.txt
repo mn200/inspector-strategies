@@ -69,7 +69,22 @@ For each number of threads row['numthreads'] just need to make a tuple of row['m
 The original time will not be affected by number of threads.  Should do an initial pass where get it because we will need it for the baseline.
 
 
+4/3/14
+------
+The speedups are awful on those matrices until the amount of work per iteration is quite high.
 
+opt1 15,449 1,288,670 3,242 12,982,466 0.5399 15.5
+    ./Davis/opt1.mtx
+li 22,695 1,215,181 2,469 21,032,091 0.2359 14.7
+    ./Davis/li.MM
+mac econ fwd500 206,500 1,273,389 2,090 72,485,971 0.0030 16.1
+    ./Davis/mac_econ_fwd500.mm
+
+Want to look at memory footprint of row and col and data, percentage of non-zeros, number of wavefronts, average, min, and max number of items per wavefront.  I am guessing these just have a really high number of wavefronts.
+
+- scripts need to take name of input file on the command line
+
+- matrix script needs to only store the wavefront information once for each matrix
 
     
 - probably going to need a sparse matrix that represents a regular 3D mesh connectivity

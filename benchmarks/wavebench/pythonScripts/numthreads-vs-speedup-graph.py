@@ -6,8 +6,9 @@
 #
 # Prints to standard out a tab-delimited table that can be read into
 # excel:
-#       numthreads  mat1-work1-speedup  mat1-work2-speedup  ...
-#       1           1.0                 1.0     ...
+#       mat,work    1       2       4       8
+#       mat1-0      speedup
+#       mat1-1      ...
 #       ...
 #
 # Assumptions
@@ -23,7 +24,14 @@
 
 import csv
 
-infile = open('opt1-li-fwd500.dat','r')
+# read dat file
+if len(sys.argv) > 1:
+    datfilename = sys.argv[1]
+else:
+    print "The .dat filename must be specified\n"
+    sys.exit(0)
+
+infile = open(datfilename,'r')
 
 # Read the datafile in as a list of dictionaries with keys
 # being the field names in the first row of the file.
