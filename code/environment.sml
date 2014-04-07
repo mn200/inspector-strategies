@@ -42,28 +42,11 @@ struct
 
   (*** env type ***)
   type envtype = valuetype dict
-(*
-  type envtype = { vdict : int dict,  (* parameter and iterator dict *)
-                   ddict : real dvector dict, 
-                   idict : ivector dict, 
-                   rdict : mrelation dict }
-*)
+
   val empty_env = (fn key => NONE) : envtype
 
   fun envlookup (env,str) = lookup str env
 
   fun envupdate (env,str,value) = insert (str,value) env
-(*
-  fun venvupdate ({vdict=v, ddict=d, idict=i, rdict=r}, str, value) =
-      {vdict=insert (str,value) v, ddict=d, idict=i, rdict=r}
 
-  fun denvupdate ({vdict=v, ddict=d, idict=i, rdict=r}, str, value) =
-      {vdict=v, ddict=insert (str,value) d, idict=i, rdict=r}
-
-  fun ienvupdate ({vdict=v, ddict=d, idict=i, rdict=r}, str, value) =
-      {vdict=v, ddict=d, idict=insert (str,value) i, rdict=r}
-
-  fun renvupdate ({vdict=v, ddict=d, idict=i, rdict=r}, str, value) =
-      {vdict=v, ddict=d, idict=i, rdict=insert (str,value) r}
-*)
 end

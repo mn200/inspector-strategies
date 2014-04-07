@@ -26,25 +26,8 @@ sig
 
     (* function for looking up a value associated with a string *)
     val envlookup : envtype * string -> valuetype
-(*
-    val vlookup : envtype * string -> int
 
-    val dlookup : envtype * string -> real dvector
-    
-    val ilookup : envtype * string -> ivector
-
-    val rlookup : envtype * string -> mrelation
-*)
     (* function for modifying value associated with a string *)
     val envupdate : envtype * string * valuetype -> envtype
 
-(*
-    val venvupdate : envtype * string * int -> envtype
-
-    val denvupdate : envtype * string * real dvector -> envtype
-
-    val ienvupdate : envtype * string * ivector -> envtype
-
-    val renvupdate : envtype * string * mrelation -> envtype
-*)
 end
