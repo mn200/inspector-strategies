@@ -24,6 +24,7 @@ wavebench: ${UTIL_H_FILES} ${UTIL_OBJS} wavebench-driver.o
 # not sure why have to break this out but do on blacklight
 # maybe because of hyphen?
 wavebench-driver.o: wavebench-driver.cpp
+	${CC} -c ${CCFLAGS} $< -o $@
 
 clean:
 	-/bin/rm -rf *.o *.inst.* *.pdb wavebench wavebench.dSYM 2> /dev/null

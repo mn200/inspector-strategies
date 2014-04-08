@@ -1,31 +1,37 @@
 # Makefile for creating wavebench executable
 
+CCFLAGS = -O3 -fopenmp
+
 ifeq ($(OSTYPE),darwin)
-	CC = g++-mp-4.7
+    CC = g++-mp-4.7
 else
-    CC = g++
+    ifeq ($(HOSTNAME),tg-login1.blacklight.psc.teragrid.org)
+        CC = icpc
+        CCFLAGS = -O3 -g -openmp -openmp-report2
+    else
+        CC = g++
+    endif
 endif
 
 #CCFLAGS = -O3 -fopenmp \
 #    -I/Users/mstrout/package/IntelPerformanceCounterMonitorV2.6
-CCFLAGS = -O3 -fopenmp
+
 
 # wavebench specific files
+H_FILES = CmdParams.h timer.h COO_mat.h mmio.h
+CPP_FILES = CmdParams.cpp timer.cpp COO_mat.cpp mmio.cpp wavebench-driver.cpp
+OBJS = CmdParams.o timer.o COO_mat.o mmio.o wavebench-driver.o
 
-UTIL_H_FILES = CmdParams.h timer.h COO_mat.h mmio.h
-UTIL_CPP_FILES = CmdParams.cpp timer.cpp COO_mat.cpp mmio.cpp
-UTIL_OBJS = CmdParams.o timer.o COO_mat.o mmio.o
+%.o : %.cpp
+	$(CC) -c $(CCFLAGS) $< -o $@
 
-wavebench: ${UTIL_H_FILES} ${UTIL_OBJS} wavebench-driver.o
-	${CC} ${CCFLAGS} wavebench-driver.o ${UTIL_OBJS} -o wavebench
+wavebench: $(H_FILES) $(OBJS)
+	$(CC) $(CCFLAGS) $(OBJS) -o wavebench
 
 # not sure why have to break this out but do on blacklight
 # maybe because of hyphen?
-wavebench-driver.o: wavebench-driver.cpp
-	${CC} -c ${CCFLAGS} $< -o $@
-
-%.o : %.cpp %.h
-	${CC} -c ${CCFLAGS} $< -o $@
+#wavebench-driver.o: wavebench-driver.cpp
+#	${CC} -c $(CCFLAGS) $< -o $@
 
 
 clean:

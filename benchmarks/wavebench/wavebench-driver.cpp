@@ -235,7 +235,7 @@ int main(int argc, char ** argv) {
     // for each wavefront
     for (int w=0; w<=max_wave; w++) {  
         // foreach non-zero A_{ij} in sparse matrix in wavefront
-        #pragma omp parallel for shared(data) private(i)
+        #pragma omp parallel for shared(data)
         for (int k=wavestart[w]; k<wavestart[w+1]; k++) {
             int p = wavefronts[k];
             
