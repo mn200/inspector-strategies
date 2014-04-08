@@ -8,7 +8,7 @@ endif
 
 #CCFLAGS = -O3 -fopenmp \
 #    -I/Users/mstrout/package/IntelPerformanceCounterMonitorV2.6
-CCFLAGS = -O0 -g -fopenmp
+CCFLAGS = -O3 -fopenmp
 
 # wavebench specific files
 
