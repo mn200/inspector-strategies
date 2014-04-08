@@ -154,7 +154,7 @@ int main(int argc, char ** argv) {
         data_org[ i ] += 1.0 + sum;
         data_org[ j ] += 1.0 + sum; 
     }
-    timer_end(&original_timer);    
+    timer_end(&original_timer); 
 
     // One of the wavefront inspectors
     printf("==== performing wavefront inspector ====\n");
@@ -386,6 +386,9 @@ void diff_results(int N, double *data_org, double *data)
 
     diffsum=0.0;
     for(i=0;i<N;i++) {
+        if (debug) {
+            printf("data_org[%d] = %f\n", i, data_org[i]);
+        }
         diff=abs(data_org[i]-data[i]);
         diffsum+=diff;
 
