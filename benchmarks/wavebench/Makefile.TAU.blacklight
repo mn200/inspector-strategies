@@ -1,30 +1,24 @@
 # Makefile for creating wavebench executable
 # using TAU on blacklight
 
-include ${TAU_ROOT_DIR}/x86_64/lib/Makefile.tau-icpc-pdt-openmp-opari
+include ${TAU_ROOT_DIR}/x86_64/lib/Makefile.tau-icpc-papi-pdt-openmp-opari
 
 TAU_OPTIONS = -optKeepFiles -optVerbose
 
 CCFLAGS = ${TAU_OPTIONS} -O3
 CCLFLAGS = ${CCFLAGS}
-CC = ${TAU_COMPILER} icc
+CC = tau_cxx.sh
 
 # wavebench specific files
+H_FILES = CmdParams.h timer.h COO_mat.h mmio.h
+CPP_FILES = CmdParams.cpp timer.cpp COO_mat.cpp mmio.cpp wavebench-driver.cpp
+OBJS = CmdParams.o timer.o COO_mat.o mmio.o wavebench-driver.o
 
-UTIL_H_FILES = CmdParams.h timer.h COO_mat.h mmio.h
-UTIL_CPP_FILES = CmdParams.cpp timer.cpp COO_mat.cpp mmio.cpp
-UTIL_OBJS = CmdParams.o timer.o COO_mat.o mmio.o
+%.o : %.cpp
+	$(CC) -c $(CCFLAGS) $< -o $@
 
-%.o : %.cpp %.h
-	${CC} -c ${CCFLAGS} $< -o $@
-
-wavebench: ${UTIL_H_FILES} ${UTIL_OBJS} wavebench-driver.o
-	${CC} ${CCFLAGS} wavebench-driver.o ${UTIL_OBJS} -o wavebench
-
-# not sure why have to break this out but do on blacklight
-# maybe because of hyphen?
-wavebench-driver.o: wavebench-driver.cpp
-	${CC} -c ${CCFLAGS} $< -o $@
+wavebench-tau: $(H_FILES) $(OBJS)
+	$(CC) $(CCFLAGS) $(OBJS) -o wavebench-tau
 
 clean:
-	-/bin/rm -rf *.o *.inst.* *.pdb wavebench wavebench.dSYM 2> /dev/null
+	-/bin/rm -rf *.o *.inst.* *.pdb wavebench-tau 2> /dev/null

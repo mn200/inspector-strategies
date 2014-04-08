@@ -1,0 +1,20 @@
+#!/bin/csh
+#PBS -l ncpus=16
+#ncpus must be a multiple of 16
+#PBS -l walltime=2:00
+#PBS -j oe
+#PBS -q debug
+#PBS -m abe
+#PBS -M mstrout@cs.colostate.edu
+setenv COUNTER1 GET_TIME_OF_DAY
+setenv COUNTER2 PAPI_FP_INS
+setenv COUNTER3 PAPI_TOT_CYC
+set echo
+ja
+#move to my $SCRATCH directory
+cp inspector-strategies/benchmarks/wavebench/wavebench $SCRATCH/
+cd $SCRATCH
+#run my executables
+setenv OMP_NUM_THREADS 4
+omplace -nt $OMP_NUM_THREADS ./wavebench -d $SCRATCH -m audikw_1.mm
+ja -chlst
