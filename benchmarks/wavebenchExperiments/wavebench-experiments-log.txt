@@ -1,0 +1,109 @@
+4/2/14
+------
+time to get some wavefront experiment results for Friday's talk
+
+executor scalability graphs, one for a highly connected sparse matrix and another for a lightly connected sparse matrix, make sure both can fit into L3 so locality is not an issue
+    x-axis, number of threads
+    y-axis, speedup
+    different lines are different amount of work in loop, as amount of work goes up scaling should improve
+    
+machine
+    First gonna run on ganymede because it is empty.  Then might ask Wayne for another machine or might try Cray.
+    Actually apples is not busy and it is 8 core.
+apples	 HP-Z800-Xeon E5520-SATA	 8 core	 2.26G	 64 bit	 32KB	 256KB, also 2 x L3 8MB shared by 4 cores			 12GB RAM
+
+matrices, Looking at table in SMOReSthesis.pdf
+    Aiming for less than 16MB so they fit into the two L3s and so does the data array.
+    Want a sparse matrix that is already well ordered, again so that main issue is parallelism instead of data locality.
+    Want one with high percentage of non-zeros and one with low percentage.
+ 
+matrix rows nonzeros bandwidth prole % nonzeros MB   
+ex11 16,614 1,096,948 5,176 7,564,332 0.3974 13.2    
+    ./Davis/ex11.mm
+
+apache1 80,800 542,184 1,616 65,286,400 0.0083 6.8    
+    ./Davis/apache1.mm
+gridgena 48,962 512,084 809 15,753,140 0.0214 6.3    
+    ./Davis/gridgena.mm
+
+opt1 15,449 1,288,670 3,242 12,982,466 0.5399 15.5
+    ./Davis/opt1.mtx
+li 22,695 1,215,181 2,469 21,032,091 0.2359 14.7
+    ./Davis/li.MM
+mac econ fwd500 206,500 1,273,389 2,090 72,485,971 0.0030 16.1
+    ./Davis/mac_econ_fwd500.mm
+
+python pythonScripts/create_run.py apples.2Apr14.script ./wavebench 'd(/s/bach/e/proj/rtrt/Data/Davis)'  'w(0,1,2,4,8,16,32,64)' 'm(apache1.mm,gridgena.mm)'
+
+Those matrices are just too small.  The computation doesn't take long enough to matter and we actually don't have to have the whole matrix fit into L3, just the row and col indices.
+    row and col indices = 2*nnz*sizeof(int)
+    data size = nrows*sizeof(double)
+    working set size = 8*nnz + 8*nrows
+    
++ see the matrixinfo spreadsheet for info
+
++ going to try bigger sparse matrices above
+python pythonScripts/create_run.py opt1-li-fwd500.script ./wavebench 'd(/s/bach/e/proj/rtrt/Data/Davis)'  'w(0,1,2,4,8,16,32,64,128,256)' 'm(opt1.mtx,li.MM,mac_econ_fwd500.mm)'
+
++ opt1.mtx is not readable so had to switch to opt1.mm, but then that one has an unexpected EOF, argg
+
+ok how do I grab data subsets to do graphing in excel?
+    -want a long term solution so should probably make a python script
+    -want to be able to incorporate multiple runs and throw a flag if the differences between runs with the same parameters are more than 1%
+    -have to be able to locate a baseline
+    -also enable picking which machine, but should default to apples right now
+
+    resources
+    http://courses.cs.washington.edu/courses/cse140/13wi/csv-parsing.html
+    http://stackoverflow.com/questions/7605374/parsing-a-tab-delimited-file-into-separate-lists-or-strings
+    
+playing around with python
+import csv
+infile = open('opt1-li-fwd500.dat','r')
+infile_dict = csv.DictReader(infile)
+for row in infile_dict:
+     print row
+     
+If have field names at the top of the file, then this should work as expected.
+For each number of threads row['numthreads'] just need to make a tuple of row['matrixfilename'] and row['work'] and use that in another dictionary where plan to store a value that is a dictionary.  Want avgOrgTime, avgInsTime, and avgExecTime along with count of how many for each that we have so far.
+The original time will not be affected by number of threads.  Should do an initial pass where get it because we will need it for the baseline.
+
+
+4/3/14
+------
+The speedups are awful on those matrices until the amount of work per iteration is quite high.
+
+opt1 15,449 1,288,670 3,242 12,982,466 0.5399 15.5
+    ./Davis/opt1.mtx
+li 22,695 1,215,181 2,469 21,032,091 0.2359 14.7
+    ./Davis/li.MM
+mac econ fwd500 206,500 1,273,389 2,090 72,485,971 0.0030 16.1
+    ./Davis/mac_econ_fwd500.mm
+
+Want to look at memory footprint of row and col and data, percentage of non-zeros, number of wavefronts, average, min, and max number of items per wavefront.  I am guessing these just have a really high number of wavefronts.
+
++ scripts need to take name of input file on the command line
+
++ matrix script needs to only store the wavefront information once for each matrix
+    
++ probably going to need a sparse matrix that represents a regular 3D mesh connectivity, gonna try some of the larger matrices we already have.  Which
+matrix did well for FST?  thermal2
+
+../wavebench/pythonScripts/create_run.py larger-mats.script ./wavebench 'd(/s/bach/e/proj/rtrt/Data/Davis/)'  'w(0,1,2,4,8,16,32,64,128,256)' 'm(thermal2.mm,nd3k.MM,cage13.mm,cfd2.mm,1d5pt.mm)'
+
+python ../wavebench/pythonScripts/create_run.py larger-mats.script ./wavebench 'd(/s/bach/e/proj/rtrt/Data/Davis/)'  'w(0,1,2,4,8,16,32,64)' 'm(thermal2.mm,nd3k.MM,cage13.mm,cfd2.mm,1d5pt.mm)'
+
+Ok, now have much better results.
+Definitely get better results when the number of wavefronts needed is smaller.  memory footprint does not seem to impact things?
+
+The performance really seems to correlate with average parallelism, which is average number of iterations per wave.  Note that nd3k.MM has 2% non-zeros, which is a really high non-sparsity and it is in the middle in terms of performance.  FIXME: not sure the percentage of non-zeros is correct, because I need to check if these matrices are all square and symmetric for my computation of percentage of non-zeros to be correct.
+
+    
+
+
+------------------------
+Next time do experiments
+    - it would be nice to see the results print out as they run
+    - the python analysis scripts should have getting the .dat and .fields files into a list of dictionaries a utility function that is in util.py
+    - should split the script that generates inspector break even times away from executor speedup graph
+    - will want to setup benchmark so it can run multiple experiments on a single sparse matrix load

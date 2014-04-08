@@ -1,3 +1,4 @@
+datadir	matrixfilename	outfilename	workPerIter	inspectorStr	computername	datetime	numthreads	N	nnz	numwave	avgIterPerWave	stddevIterPerWave	minIterPerWave	maxIterPerWave	originalTime	inspectorTime	executorTime
 /s/bach/e/proj/rtrt/Data/Davis/	nd3k.MM	wavebench.dat	0	naive_inspector	apples	Wed 02 Apr 2014 06:26:06 PM MDT	1	9000	1644345	8236	 1.99653351e+02	 1.10616160e+02	1	513	 7.47704506e-03	 2.71790028e-02	 2.16269493e-02
 /s/bach/e/proj/rtrt/Data/Davis/	nd3k.MM	wavebench.dat	1	naive_inspector	apples	Wed 02 Apr 2014 06:26:08 PM MDT	1	9000	1644345	8236	 1.99653351e+02	 1.10616160e+02	1	513	 2.69238949e-02	 2.74200439e-02	 3.84781361e-02
 /s/bach/e/proj/rtrt/Data/Davis/	nd3k.MM	wavebench.dat	2	naive_inspector	apples	Wed 02 Apr 2014 06:26:09 PM MDT	1	9000	1644345	8236	 1.99653351e+02	 1.10616160e+02	1	513	 6.74109459e-02	 2.74631977e-02	 8.01970959e-02

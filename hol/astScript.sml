@@ -12,15 +12,17 @@ val _ = new_theory "ast";
 val _ = ParseExtras.tight_equality()
 
 val _ = Hol_datatype`
-  value = Int of int | Real of real | Array of value list | Bool of bool| Error
+  value = Int of int
+        | Real of real
+        | Array of value list
+        | Bool of bool
+        | Error
 `;
 
 val _ = Hol_datatype`
   expr = VarExp of string
        | ISub of string => expr
        | Opn of (value list -> value) => expr list
-       | Plus of expr => expr
-       | Const of value
        | Value of value
 `
 
@@ -61,6 +63,10 @@ val _ = type_abbrev ("memory", ``:string |-> value``)
 
 val _ = Hol_datatype`
   stmt = Assign of write => dexpr list => (value list -> value)(* => string *)
+       | AssignVar of vname => expr
+       | IfStmt of expr => stmt => stmt
+       | Malloc of aname => num => value
+       | Let of vname => expr
        | ForLoop of string => domain => stmt
        | ParLoop of string => domain => stmt
        | Seq of (memory # stmt) list
@@ -160,7 +166,7 @@ val (eval_rules, eval_ind, eval_cases) = Hol_reln`
       eval (m, lm, ParLoop vnm d body)
            (m, lm, Par (MAP (λdv. (lm |+ (vnm, dv), body)) (dvalues d)))) ∧
 
-  (∀llm llm' lm m m' pfx ps s s' sfx.
+  (∀llm lm m m' pfx ps s s' sfx.
       ps = pfx ++ [(llm, s)] ++ sfx ∧ eval (m, llm ⊌ lm, s) (m', llm ⊌ lm, s')
     ⇒
       eval (m, lm, Par ps) (m', lm, Par (pfx ++ [(llm, s')] ++ sfx))) ∧
@@ -173,6 +179,7 @@ val (eval_rules, eval_ind, eval_cases) = Hol_reln`
 `
 
 val incval_def = Define`
+  incval [Real j] = Real (j + 1) ∧
   incval [Int j] = Int (j + 1) ∧
   incval _ = Error
 `;
@@ -249,10 +256,10 @@ in
 end
 
 val par_t =
-    ``(FEMPTY |+ ("a", Array (GENLIST (λn. Int &(2 * n)) 10)), FEMPTY : memory,
+    ``(FEMPTY |+ ("a", Array (GENLIST (λn. Real &(2 * n)) 10)), FEMPTY : memory,
          ParLoop "i" (D 0 3) (Assign ("a", VarExp "i") [Read "a" (VarExp "i")] incval))``
 (*
-val res = chaineval 17 par_t;
+val res = chaineval 4 par_t;
 val _ = print ("Length of result is " ^ Int.toString (length res) ^ "\n")
 *)
 
