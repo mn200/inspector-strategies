@@ -3,7 +3,7 @@
 
 include ${TAU_ROOT_DIR}/x86_64/lib/Makefile.tau-icpc-papi-pdt-openmp-opari
 
-TAU_OPTIONS = -optKeepFiles -optVerbose
+TAU_OPTIONS = -optKeepFiles -optVerbose -optTauSelectFile=loop_instru.txt
 
 CCFLAGS = ${TAU_OPTIONS} -O3
 CCLFLAGS = ${CCFLAGS}

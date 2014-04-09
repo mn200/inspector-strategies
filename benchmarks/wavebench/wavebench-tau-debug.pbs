@@ -9,12 +9,14 @@
 setenv COUNTER1 GET_TIME_OF_DAY
 setenv COUNTER2 PAPI_FP_INS
 setenv COUNTER3 PAPI_TOT_CYC
+setenv COUNTER4 PAPI_L3_TCM
 set echo
 ja
 #move to my $SCRATCH directory
-cp inspector-strategies/benchmarks/wavebench/wavebench $SCRATCH/
+cp inspector-strategies/benchmarks/wavebench/wavebench-tau $SCRATCH/
 cd $SCRATCH
 #run my executables
 setenv OMP_NUM_THREADS 4
-omplace -nt $OMP_NUM_THREADS ./wavebench -d $SCRATCH -m audikw_1.mm
+#omplace -nt $OMP_NUM_THREADS ./wavebench -d $SCRATCH -m audikw_1.mm
+./wavebench-tau -d $SCRATCH -m audikw_1.mm
 ja -chlst
