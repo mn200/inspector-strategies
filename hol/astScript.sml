@@ -51,24 +51,22 @@ val destDValue_def = Define`
   destDValue (DValue v) = v
 `;
 
-val _ = Hol_datatype`
-  domain = D of int => int  (* lo/hi pair *)
-`
+val _ = Datatype`domain = D expr expr`  (* lo/hi pair *)
+
 
 (* dvalues : domain -> value list *)
 val dvalues_def = Define`
-  dvalues (D lo hi) = MAP Int [lo ..< hi]
+  dvalues m (D lo hi) = MAP Int [lo ..< hi]
 `;
 
 val _ = type_abbrev ("vname", ``:string``)
 val _ = type_abbrev ("memory", ``:vname |-> value``)
 
 val _ = Datatype`
-  stmt = Assign write (dexpr list) (value list -> value)(* => string *)
-       | AssignVar vname  expr
+  stmt = Assign write (dexpr list) (value list -> value)
+       | AssignVar vname  expr      (* for assignments to scalars, global or local *)
        | IfStmt expr stmt stmt
        | Malloc aname num value
-       | Let vname expr
        | ForLoop string domain stmt
        | ParLoop string domain stmt
        | Seq ((memory # stmt) list)
@@ -118,43 +116,58 @@ val evalexpr_def = tDefine "evalexpr" `
 
 val (eval_rules, eval_ind, eval_cases) = Hol_reln`
   (∀m0 lm0 llm s1 m s1' rest.
-    eval (m0, llm ⊌ lm0, s1) (m, llm ⊌ lm0, s1') ⇒
-    eval (m0, lm0, Seq ((llm,s1)::rest)) (m, lm0, Seq ((llm,s1')::rest))) ∧
+    eval (m0, llm ⊌ lm0, s1) (m, llm ⊌ lm0, s1')
+   ⇒
+    eval (m0, lm0, Seq ((llm,s1)::rest)) (m, lm0, Seq ((llm,s1')::rest)))
 
-  (∀m lm llm rest. eval (m, lm, Seq ((llm, Done) :: rest)) (m, lm, Seq rest)) ∧
+     ∧
 
-  (∀m lm. eval (m, lm, Seq []) (m, lm, Done)) ∧
+  (∀m lm llm rest.
+     eval (m, lm, Seq ((llm, Done) :: rest)) (m, lm, Seq rest))
 
-  (∀m m' lm lm' g t e b s.
-     eval (m,lm,if b then t else e) (m', lm', s) ∧
+     ∧
+
+  (∀m lm.
+     eval (m, lm, Seq []) (m, lm, Done))
+
+     ∧
+
+  (∀m lm g t e b.
      evalexpr (lm ⊌ m) g = Bool b
    ⇒
-     eval (m,lm,IfStmt g t e) (m', lm', s))
+     eval (m,lm,IfStmt g t e) (m, lm, if b then t else e))
 
-        ∧
+     ∧
 
   (∀m lm g t e.
-     (∀b. evalexpr (lm ⊌ m) g ≠ Bool b) ⇒
+     (∀b. evalexpr (lm ⊌ m) g ≠ Bool b)
+    ⇒
      eval (m,lm,IfStmt g t e) (m,lm,Abort))
 
-        ∧
+     ∧
 
   (∀rdes m0 m' lm0 aname i vf.
       EVERY isDValue rdes ∧
-      upd_array m0 aname i (vf (MAP destDValue rdes)) = SOME m' ⇒
-      eval (m0, lm0, Assign (aname, Value (Int i)) rdes vf)
-           (m', lm0, Done)) ∧
+      upd_array m0 aname i (vf (MAP destDValue rdes)) = SOME m'
+    ⇒
+      eval (m0, lm0, Assign (aname, Value (Int i)) rdes vf) (m', lm0, Done))
+
+     ∧
 
   (∀rdes m0 lm0 aname i vf.
       EVERY isDValue rdes ∧
       upd_array m0 aname i (vf (MAP destDValue rdes)) = NONE ⇒
       eval (m0, lm0, Assign (aname, Value (Int i)) rdes vf)
-           (m0, lm0, Abort))  ∧
+           (m0, lm0, Abort))
+
+     ∧
 
   (∀m0 lm aname expr rds vf.
       ¬isValue expr ⇒
       eval (m0, lm, Assign (aname, expr) rds vf)
-           (m0, lm, Assign (aname, Value (evalexpr (lm ⊌ m0) expr)) rds vf)) ∧
+           (m0, lm, Assign (aname, Value (evalexpr (lm ⊌ m0) expr)) rds vf))
+
+     ∧
 
   (∀rds pfx aname expr sfx w vf m lm.
       rds = pfx ++ [Read aname expr] ++ sfx /\ ¬isValue expr ⇒
@@ -162,7 +175,9 @@ val (eval_rules, eval_ind, eval_cases) = Hol_reln`
            (m, lm,
             Assign w
                   (pfx ++ [Read aname (Value (evalexpr (lm ⊌ m) expr))] ++ sfx)
-                  vf)) ∧
+                  vf))
+
+     ∧
 
   (∀rds pfx aname i sfx w vf lm m.
       rds = pfx ++ [Read aname (Value (Int i))] ++ sfx ⇒
@@ -188,6 +203,9 @@ val (eval_rules, eval_ind, eval_cases) = Hol_reln`
 
   (∀lm m. eval (m, lm, Par []) (m, lm, Done))
 `
+
+val _ = set_fixity "--->" (Infix(NONASSOC, 450))
+val _ = overload_on("--->", ``eval``)
 
 val incval_def = Define`
   incval [Real j] = Real (j + 1) ∧
