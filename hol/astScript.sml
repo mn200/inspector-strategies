@@ -6,24 +6,25 @@ open realTheory
 open finite_mapTheory
 open lcsymtacs
 open listRangeTheory
+open bagTheory
 
 val _ = new_theory "ast";
 
 val _ = ParseExtras.tight_equality()
 
-val _ = Hol_datatype`
-  value = Int of int
-        | Real of real
-        | Array of value list
-        | Bool of bool
+val _ = Datatype`
+  value = Int int
+        | Real real
+        | Array (value list)
+        | Bool bool
         | Error
 `;
 
-val _ = Hol_datatype`
-  expr = VarExp of string
-       | ISub of string => expr
-       | Opn of (value list -> value) => expr list
-       | Value of value
+val _ = Datatype`
+  expr = VarExp string
+       | ISub string expr
+       | Opn (value list -> value) (expr list)
+       | Value value
 `
 
 val isValue_def = Define`
@@ -36,10 +37,10 @@ val _ = type_abbrev ("write", ``:string # expr``)
 val _ = type_abbrev ("aname", ``:string``)
 val _ = disable_tyabbrev_printing "aname"
 
-val _ = Hol_datatype`
-  dexpr = DValue of value
-        | Read of aname => expr
-        | Convert of expr
+val _ = Datatype`
+  dexpr = DValue value
+        | Read aname expr
+        | Convert expr
 `
 
 val isDValue_def = Define`
@@ -53,11 +54,6 @@ val destDValue_def = Define`
 
 val _ = Datatype`domain = D expr expr`  (* lo/hi pair *)
 
-
-(* dvalues : domain -> value list *)
-val dvalues_def = Define`
-  dvalues m (D lo hi) = MAP Int [lo ..< hi]
-`;
 
 val _ = type_abbrev ("vname", ``:string``)
 val _ = type_abbrev ("memory", ``:vname |-> value``)
@@ -74,6 +70,26 @@ val _ = Datatype`
        | Abort
        | Done
 `
+
+val stmt_induction = store_thm(
+  "stmt_induction",
+  ``∀P.
+     (∀w ds vf. P (Assign w ds vf)) ∧
+     (∀v e. P (AssignVar v e)) ∧
+     (∀g t e. P t ∧ P e ⇒ P (IfStmt g t e)) ∧
+     (∀nm n value. P (Malloc nm n value)) ∧
+     (∀s d stmt. P stmt ⇒ P (ForLoop s d stmt)) ∧
+     (∀s d stmt. P stmt ⇒ P (ParLoop s d stmt)) ∧
+     (∀ms. (∀m s. MEM (m,s) ms ⇒ P s) ⇒ P (Seq ms)) ∧
+     (∀ms. (∀m s. MEM (m,s) ms ⇒ P s) ⇒ P (Par ms)) ∧
+     P Abort ∧ P Done
+    ⇒
+     ∀s. P s``,
+  ntac 2 strip_tac >>
+  `(∀s. P s) ∧ (∀l (m:memory) s. MEM (m,s) l ⇒ P s) ∧ (∀ms:memory#stmt. P (SND ms))`
+    suffices_by simp[] >>
+  ho_match_mp_tac (TypeBase.induction_of ``:stmt``) >>
+  simp[] >> dsimp[pairTheory.FORALL_PROD] >> metis_tac[]);
 
 (* lookup_array : memory -> string -> int -> value *)
 val lookup_array_def = Define`
@@ -113,6 +129,16 @@ val evalexpr_def = tDefine "evalexpr" `
 ` (WF_REL_TAC `inv_image (measure expr_size) SND` >>
    simp[] >> Induct >> rw[definition "expr_size_def"] >>
    res_tac >> simp[])
+
+(* dvalues : domain -> value list option *)
+val dvalues_def = Define`
+  dvalues m (D lo hi) =
+    case (evalexpr m lo, evalexpr m hi) of
+      | (Int lo, Int hi) =>
+          SOME (MAP Int (GENLIST (λn. &n + lo)
+                                 (if lo ≤ hi then Num(hi - lo) else 0)))
+      | _ => NONE
+`;
 
 val (eval_rules, eval_ind, eval_cases) = Hol_reln`
   (∀m0 lm0 llm s1 m s1' rest.
@@ -184,13 +210,33 @@ val (eval_rules, eval_ind, eval_cases) = Hol_reln`
       eval (m, lm, Assign w rds vf)
            (m, lm, Assign w (pfx ++ [DValue (lookup_array m aname i)] ++ sfx) vf)) ∧
 
-  (∀body d lm m vnm.
+  (∀body d lm m vnm iters.
+      dvalues (lm ⊌ m) d = SOME iters
+     ⇒
       eval (m, lm, ForLoop vnm d body)
-           (m, lm, Seq (MAP (λdv. (lm |+ (vnm, dv), body)) (dvalues d)))) ∧
+           (m, lm, Seq (MAP (λdv. (lm |+ (vnm, dv), body)) iters))) ∧
 
   (∀body d lm m vnm.
+      dvalues (lm ⊌ m) d = NONE
+     ⇒
+      eval (m, lm, ForLoop vnm d body) (m, lm, Abort))
+
+     ∧
+
+  (∀body d lm m vnm iters.
+      dvalues (lm ⊌ m) d = SOME iters
+     ⇒
       eval (m, lm, ParLoop vnm d body)
-           (m, lm, Par (MAP (λdv. (lm |+ (vnm, dv), body)) (dvalues d)))) ∧
+           (m, lm, Par (MAP (λdv. (lm |+ (vnm, dv), body)) iters)))
+
+     ∧
+
+  (∀body d lm m vnm.
+      dvalues (lm ⊌ m) d = NONE
+     ⇒
+      eval (m, lm, ParLoop vnm d body) (m, lm, Abort))
+
+     ∧
 
   (∀llm lm m m' pfx ps s s' sfx.
       ps = pfx ++ [(llm, s)] ++ sfx ∧ eval (m, llm ⊌ lm, s) (m', llm ⊌ lm, s')
@@ -233,7 +279,6 @@ val stmt_weight_def = tDefine "stmt_weight" `
      1 + expr_weight (SND w) + SUM (MAP dexpr_weight ds)) ∧
   (stmt_weight (AssignVar v e) = 1) ∧
   (stmt_weight (Malloc v d value) = 1) ∧
-  (stmt_weight (Let v e) = 1) ∧
   (stmt_weight (IfStmt g t e) = MAX (stmt_weight t) (stmt_weight e) + 1) ∧
   (stmt_weight (ForLoop v d s) = stmt_weight s + 1) ∧
   (stmt_weight (ParLoop v d s) = stmt_weight s + 1) ∧
@@ -246,51 +291,117 @@ val stmt_weight_def = tDefine "stmt_weight" `
    rpt strip_tac >> res_tac >> simp[])
 val _ = export_rewrites ["stmt_weight_def"]
 
-val loop_count_def = tDefine "loop_count" `
-  (loopbag Abort = {| |}) ∧
-  (loopbag Done = {| |}) ∧
+val loopbag_def = tDefine "loopbag" `
+  (loopbag Abort = {| 0 |}) ∧
+  (loopbag Done = {| 0 |}) ∧
   (loopbag (Assign w ds v) = {| 0 |}) ∧
   (loopbag (AssignVar v e) = {| 0 |}) ∧
   (loopbag (Malloc v d value) = {| 0 |}) ∧
-  (loopbag (Let v e) = {| 0 |}) ∧
   (loopbag (IfStmt g t e) = BAG_UNION (loopbag t) (loopbag e)) ∧
   (loopbag (ForLoop v d s) = BAG_IMAGE SUC (loopbag s)) ∧
   (loopbag (ParLoop v d s) = BAG_IMAGE SUC (loopbag s)) ∧
   (loopbag (Seq stmts) =
-     FOLDR (λms b. BAG_UNION (loopbag (SND ms)) b) {||} stmts) ∧
+     FOLDR (λms b. BAG_UNION (loopbag (SND ms)) b) {|0|} stmts) ∧
   (loopbag (Par stmts) =
-     FOLDR (λms b. BAG_UNION (loopbag (SND ms)) b) {||} stmts)
+     FOLDR (λms b. BAG_UNION (loopbag (SND ms)) b) {|0|} stmts)
 ` (WF_REL_TAC `measure stmt_size` >> simp[] >>
    Induct >> dsimp[definition "stmt_size_def"] >>
    rpt strip_tac >> res_tac >> simp[])
-val _ = export_rewrites ["loop_count_def"]
+val _ = export_rewrites ["loopbag_def"]
+
+val FINITE_loopbag = store_thm(
+  "FINITE_loopbag[simp]",
+  ``∀s. FINITE_BAG (loopbag s)``,
+  ho_match_mp_tac (theorem "loopbag_ind") >>
+  simp[] >> Induct >> simp[]);
+
+val loopbag_not_empty = store_thm(
+  "loopbag_not_empty[simp]",
+  ``∀s. loopbag s ≠ {||}``,
+  ho_match_mp_tac (theorem "loopbag_ind") >> simp[] >>
+  Induct >> simp[]);
 
 val MAX_PLUS = store_thm(
   "MAX_PLUS",
   ``MAX x y + z = MAX (x + z) (y + z)``,
   rw[arithmeticTheory.MAX_DEF]);
 
-val mlt_UNION_LCANCEL = store_thm(
-  "mlt_UNION_LCANCEL",
-  ``mlt R a b /\ FINITE_BAG c ==>
-    mlt R (BAG_UNION a c) (BAG_UNION b c)``,
+val transitive_LT = store_thm(
+  "transitive_LT[simp]",
+  ``transitive ((<) : num -> num -> bool)``,
+  simp[relationTheory.transitive_def]);
+
+
+val SUM_IMAGE_CONG = REWRITE_RULE [GSYM AND_IMP_INTRO] pred_setTheory.SUM_IMAGE_CONG
+val BAG_CARD_SUM_IMAGE = store_thm(
+  "BAG_CARD_SUM_IMAGE",
+  ``FINITE_BAG b ==>
+    (BAG_CARD b = SUM_IMAGE b { e | BAG_IN e b })``,
+  Q.ID_SPEC_TAC `b` THEN Induct_on `FINITE_BAG` THEN
+  SRW_TAC [][pred_setTheory.SUM_IMAGE_THM, BAG_CARD_THM] THEN
+  SIMP_TAC (srw_ss()) [BAG_INSERT, pred_setTheory.GSPEC_OR] THEN
+  `{ e | BAG_IN e b} = SET_OF_BAG b`
+    by SRW_TAC [][SET_OF_BAG, pred_setTheory.EXTENSION] THEN
+  SRW_TAC[][pred_setTheory.SUM_IMAGE_UNION,
+            pred_setTheory.SUM_IMAGE_THM] THEN
+  Cases_on `e IN SET_OF_BAG b` THENL [
+    SRW_TAC[][pred_setTheory.INSERT_INTER, pred_setTheory.SUM_IMAGE_THM] THEN
+    `SET_OF_BAG b = e INSERT (SET_OF_BAG b DELETE e)`
+      by (SRW_TAC[][pred_setTheory.EXTENSION] THEN METIS_TAC[IN_SET_OF_BAG])THEN
+    POP_ASSUM (fn th => ONCE_REWRITE_TAC [th]) THEN
+    SRW_TAC [][pred_setTheory.SUM_IMAGE_THM] THEN
+    SRW_TAC[ARITH_ss][] THEN
+    SRW_TAC[][Cong SUM_IMAGE_CONG],
+    SRW_TAC [][pred_setTheory.INSERT_INTER, pred_setTheory.SUM_IMAGE_THM] THEN
+    `!x. x IN SET_OF_BAG b ==> x <> e` by METIS_TAC[] THEN
+    SRW_TAC[][Cong SUM_IMAGE_CONG] THEN
+    `b e = 0` suffices_by SRW_TAC[ARITH_ss][] THEN
+    FULL_SIMP_TAC (srw_ss() ++ ARITH_ss) [BAG_IN, BAG_INN]
+  ]);
 
 val eval_terminates = store_thm(
   "eval_terminates",
   ``∀a b. eval a b ⇒ inv_image (mlt (<) LEX (<)) (λ(m,lm,s). (loopbag s, stmt_weight s)) b a``,
   Induct_on `eval a b` >> rpt strip_tac >>
   lfs[pairTheory.LEX_DEF, pred_setTheory.MAX_SET_THM]
-  >- (disj1_tac
-  >- (Cases_on `b` >> fs[] >> simp[])
-  >- (Cases_on `b` >> fs[]
-      >- (Cases_on `loop_count e = 0` >> simp[MAX_PLUS])
-      >- (Cases_on `loop_count t = 0` >> simp[MAX_PLUS]))
-  >- (Cases_on `expr` >> lfs[])
-  >- (Cases_on `expr` >> lfs[])
-
-
->> rpt strip_tac >>
-  Cases_on `expr` >> fs[isValue_def]);
+  >- (Induct_on `rest` >> simp[])
+  >- (Induct_on `rest` >> simp[])
+  >- (Cases_on `b` >> simp[])
+  >- (simp[mltLT_SING0] >> metis_tac[])
+  >- (Cases_on `expr` >> fs[isValue_def])
+  >- (simp[listTheory.SUM_APPEND] >> Cases_on `expr` >> fs[isValue_def])
+  >- simp[listTheory.SUM_APPEND]
+  >- (disj1_tac >> pop_assum kall_tac >>
+      simp[mlt_dominates_thm1, rich_listTheory.FOLDR_MAP] >>
+      conj_tac >- (Induct_on `iters` >> simp[]) >>
+      qexists_tac `BAG_IMAGE SUC (loopbag body)` >> simp[] >>
+      dsimp[dominates_def] >>
+      qho_match_abbrev_tac
+        `∀e1. BAG_IN e1 FF ⇒ ∃e2. BAG_IN e2 (loopbag body) /\ e1 < SUC e2` >>
+      `∀e. BAG_IN e FF ⇒ BAG_IN e (loopbag body) ∨ e = 0`
+        by (simp[Abbr`FF`] >> Induct_on `iters` >> simp[] >> metis_tac[]) >>
+      rpt strip_tac >> res_tac >- metis_tac[DECIDE ``x < SUC x``] >> simp[] >>
+      metis_tac[loopbag_not_empty, BAG_cases, BAG_IN_BAG_INSERT])
+  >- (simp[mltLT_SING0] >> metis_tac[])
+  >- (disj1_tac >> pop_assum kall_tac >>
+      simp[rich_listTheory.FOLDR_MAP, mlt_dominates_thm1] >>
+      conj_tac >- (Induct_on `iters` >> simp[]) >>
+      qexists_tac `BAG_IMAGE SUC (loopbag body)` >> simp[] >>
+      dsimp[dominates_def] >>
+      qho_match_abbrev_tac
+        `∀e1. BAG_IN e1 FF ⇒ ∃e2. BAG_IN e2 (loopbag body) ∧ e1 < SUC e2` >>
+      `∀e. BAG_IN e FF ⇒ BAG_IN e (loopbag body) ∨ e = 0`
+         by (simp[Abbr`FF`] >> Induct_on `iters` >> simp[] >> metis_tac[]) >>
+      rpt strip_tac >> res_tac >- metis_tac[DECIDE ``x < SUC x``] >>
+      simp[] >>
+      metis_tac[loopbag_not_empty, BAG_cases, BAG_IN_BAG_INSERT])
+  >- (simp[mltLT_SING0] >> metis_tac[])
+  >- (disj1_tac >> rw[] >> Induct_on `pfx` >> simp[] >>
+      Induct_on `sfx` >> simp[])
+  >- (disj2_tac >> simp[listTheory.SUM_APPEND] >> rw[] >>
+      Induct_on `pfx` >> simp[]) >>
+  disj1_tac >> rw[] >> Induct_on `pfx` >> simp[] >>
+  Induct_on `sfx` >> simp[])
 
 fun newrule t =
     eval_cases |> Q.SPEC `(m,lm,^t)` |> SIMP_RULE (srw_ss()) []
@@ -322,8 +433,11 @@ in
   map mkth ts
 end;
 
-val t0 = ``(FEMPTY |+ ("a", Array (GENLIST (λn. Int &n) 20)), FEMPTY : memory,
-         ForLoop "i" (D 0 10) (Assign ("a", VarExp "i") [Read "a" (VarExp "i")] incval))``
+val _ = overload_on ("VInt", ``\i. Value (Int i)``)
+
+val ser_t =
+    ``(FEMPTY |+ ("a", Array (GENLIST (λn. Int &n) 20)), FEMPTY : memory,
+       ForLoop "i" (D (VInt 0) (VInt 10)) (Assign ("a", VarExp "i") [Read "a" (VarExp "i")] incval))``
 
 fun chain m eq (f: 'a -> 'b list) (d: 'b -> 'a) s0 = let
   fun history_to_next h =
@@ -360,8 +474,9 @@ end
 
 val par_t =
     ``(FEMPTY |+ ("a", Array (GENLIST (λn. Real &(2 * n)) 10)), FEMPTY : memory,
-         ParLoop "i" (D 0 3) (Assign ("a", VarExp "i") [Read "a" (VarExp "i")] incval))``
+         ParLoop "i" (D (VInt 0) (VInt 3)) (Assign ("a", VarExp "i") [Read "a" (VarExp "i")] incval))``
 (*
+val serial_res = chaineval 52 ser_t;
 val res = chaineval 4 par_t;
 val _ = print ("Length of result is " ^ Int.toString (length res) ^ "\n")
 *)
