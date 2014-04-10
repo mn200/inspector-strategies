@@ -8,26 +8,21 @@ open primitives
 
 exception TooManyReads
 
-(*val defineSample = AssignStmt ("i",
-                               (fn i : int => i),
-                               [ fn i : int => i ],
-                               (fn xs => case xs of x::[] => x + 1.0),
-                               "A")*)
 val defineSample = AssignStmt ("A",VarExp("i"),
                                [ Read("A",VarExp("i")) ],
-                               (fn xs => case xs of x::[] => x + 1.0))
+                               (fn x::[] => x + 1.0))
 
 (* for (i=0; i<5; i++) { A[i] = A[i] + 1; } *)
 val incrLoop = ForLoop ( "i", 0, 5,
                          AssignStmt ("A",VarExp("i"),
                                [ Read("A",VarExp("i")) ],
-                               (fn xs => case xs of x::[] => x + 1.0)))
+                               (fn x::[] => x + 1.0)))
 
 (* for (i=0; i<5; i++) { A[i] = A[i] + 1; } *)
 val parincrLoop = ParForLoop ( "i", 0, 5,
                          AssignStmt ("A",VarExp("i"),
                                [ Read("A",VarExp("i")) ],
-                               (fn xs => case xs of x::[] => x + 1.0)))
+                               (fn x::[] => x + 1.0)))
 
 (* Initialize the environment *)
 (* A[i] = 0.0, forall i in [0,5) *)

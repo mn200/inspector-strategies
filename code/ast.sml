@@ -15,6 +15,9 @@ datatype iexp =
          (* iterator or parameter variable read *)
          VarExp of string
 
+         (* constant integer *)
+         | Const of int
+
          (* index array read, e.g., f(i) *)
          | ISub of string * iexp
 
@@ -52,11 +55,14 @@ datatype stmt =
 fun evaliexp exp env =
     case exp of
 
-         (* iterator or parameter variable read *)
-         VarExp id => getint(envlookup(env, id))
+        (* iterator or parameter variable read *)
+        VarExp id => getint(envlookup(env, id))
 
-         (* index array read, e.g., f(i) *)
-         | ISub(id,e) => isub( getivec(envlookup(env,id)), (evaliexp e env) )
+        (* constant integer value *) 
+        | Const x => x 
+
+        (* index array read, e.g., f(i) *)
+        | ISub(id,e) => isub( getivec(envlookup(env,id)), (evaliexp e env) )
 
 (* FIXME: right now returns a real, later should return DValue? *)
 fun evaldexp de env =

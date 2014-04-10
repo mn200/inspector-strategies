@@ -149,6 +149,7 @@ int main(int argc, char ** argv) {
         // sum = Sum_{k=0}^{w-1} 1 / exp( k * data[i] * data[j] )
         double sum = 0.0;
         for (int k=0; k<workPerIter; k++) {
+            if (debug) { printf("\tsum = %lf\n", sum); }
             sum += 1.0 / exp( (double)k * data_org[i] * data_org[j] );
         }
         data_org[ i ] += 1.0 + sum;
@@ -387,7 +388,7 @@ void diff_results(int N, double *data_org, double *data)
     diffsum=0.0;
     for(i=0;i<N;i++) {
         if (debug) {
-            printf("data_org[%d] = %f\n", i, data_org[i]);
+            printf("data_org[%d] = %lf\n", i, data_org[i]);
         }
         diff=abs(data_org[i]-data[i]);
         diffsum+=diff;
