@@ -10,11 +10,7 @@ open primitives
 
 (**** Original Computation ****)
 
-(* FIXME: want to be able to read the sparse matrix in from a file
- *        Current hardcoded sparse matrix is equivalent to small_test_5x5.mm 
- *)
-
-(* incoming parameter values *)
+(* incoming parameter values and small_test_5.5.mm sparse matrix *)
 val nnz = 13
 val N = 5
 val workPerIter = 4
@@ -58,4 +54,17 @@ val original_test = dvector_to_list( getrealvec(
                                              (evalstmt original initEnv),
                                              "data_org")) )
 
+
+(**** Wavefront Inspector and Executor ****)
+(* Using parameters nnz, N, row, col, and initEnv
+ * from above original computation. 
+ *)
+
+val inspector = SeqStmt(
+        [ Malloc("lw_iter", N, ~1, nnz) ] )
+
+val inspector_test = ivector_to_list( getivec( 
+                                          envlookup 
+                                              ( (evalstmt inspector initEnv)
+                                              "lw_iter" )) )
 

@@ -36,6 +36,9 @@ datatype stmt =
                        * dexp list              (* reads        *)
                        * ((real list) -> real)  (* vf           *)
 
+         (* Aname, num, initval, range *)
+         | Malloc of string * int * int * int 
+
          (* for ( lb <= i < ub ) body *)
          | ForLoop of string * int * int * stmt
 
@@ -85,6 +88,16 @@ fun evalstmt ast env =
             envupdate(env, Aname, 
                       RealVecVal(dupdate(Aval, (evaliexp wf env), rhs)))
         end
+
+      (* Allocate and initialize an int vector in environment. *)
+      (* FIXME: need to let initval type drive what is put in env *)
+      | Malloc (Aname, num, initval, range) =>
+        envupdate( env, Aname,
+                   IVecVal( 
+                       FOR (0,num)
+                           (fn i => fn ivec =>
+                               iupdate(ivec,i,initval))
+                           (empty_iv(num,range)) ) )
 
       (* Right now the interpretation of ForLoop assumes lb=0. *)
       | ForLoop (itername,lb,ub,bodyast) =>
