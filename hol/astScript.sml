@@ -30,6 +30,7 @@ val isValue_def = Define`
   isValue (Value _) = T ∧
   isValue _ = F
 `
+val _ = export_rewrites ["isValue_def"]
 
 val _ = type_abbrev ("write", ``:string # expr``)
 val _ = type_abbrev ("aname", ``:string``)
@@ -59,18 +60,19 @@ val dvalues_def = Define`
   dvalues (D lo hi) = MAP (Int o (&)) [lo ..< hi]
 `;
 
-val _ = type_abbrev ("memory", ``:string |-> value``)
+val _ = type_abbrev ("vname", ``:string``)
+val _ = type_abbrev ("memory", ``:vname |-> value``)
 
-val _ = Hol_datatype`
-  stmt = Assign of write => dexpr list => (value list -> value)(* => string *)
-       | AssignVar of vname => expr
-       | IfStmt of expr => stmt => stmt
-       | Malloc of aname => num => value
-       | Let of vname => expr
-       | ForLoop of string => domain => stmt
-       | ParLoop of string => domain => stmt
-       | Seq of (memory # stmt) list
-       | Par of (memory # stmt) list
+val _ = Datatype`
+  stmt = Assign write (dexpr list) (value list -> value)(* => string *)
+       | AssignVar vname  expr
+       | IfStmt expr stmt stmt
+       | Malloc aname num value
+       | Let vname expr
+       | ForLoop string domain stmt
+       | ParLoop string domain stmt
+       | Seq ((memory # stmt) list)
+       | Par ((memory # stmt) list)
        | Abort
        | Done
 `
@@ -108,11 +110,6 @@ val evalexpr_def = tDefine "evalexpr" `
          Int i => lookup_array m nm i
        | _ => Error) ∧
   (evalexpr m (VarExp nm) = lookup_v m nm) ∧
-  (evalexpr m (Const v) = v) ∧
-  (evalexpr m (Plus e1 e2) =
-       case (evalexpr m e1, evalexpr m e2) of
-           (Int i, Int j) => Int (i + j)
-         | _ => Error) ∧
   (evalexpr m (Opn vf elist) = vf (MAP (evalexpr m) elist)) ∧
   (evalexpr m (Value v) = v)
 ` (WF_REL_TAC `inv_image (measure expr_size) SND` >>
@@ -127,6 +124,20 @@ val (eval_rules, eval_ind, eval_cases) = Hol_reln`
   (∀m lm llm rest. eval (m, lm, Seq ((llm, Done) :: rest)) (m, lm, Seq rest)) ∧
 
   (∀m lm. eval (m, lm, Seq []) (m, lm, Done)) ∧
+
+  (∀m m' lm lm' g t e b s.
+     eval (m,lm,if b then t else e) (m', lm', s) ∧
+     evalexpr (lm ⊌ m) g = Bool b
+   ⇒
+     eval (m,lm,IfStmt g t e) (m', lm', s))
+
+        ∧
+
+  (∀m lm g t e.
+     (∀b. evalexpr (lm ⊌ m) g ≠ Bool b) ⇒
+     eval (m,lm,IfStmt g t e) (m,lm,Abort))
+
+        ∧
 
   (∀rdes m0 m' lm0 aname i vf.
       EVERY isDValue rdes ∧
@@ -184,10 +195,83 @@ val incval_def = Define`
   incval _ = Error
 `;
 
-val eval_irrefl = store_thm(
-  "eval_irrefl",
-  ``∀a b. eval a b ⇒ a ≠ b``,
-  Induct_on `eval a b` >> simp[] >> rpt strip_tac >>
+val expr_weight_def = Define`
+  (expr_weight (Value v) = 0:num) ∧
+  (expr_weight e = 1)
+`;
+val _ = export_rewrites ["expr_weight_def"]
+
+val dexpr_weight_def = Define`
+  (dexpr_weight (DValue v) = 0:num) ∧
+  (dexpr_weight (Read v e) = 1 + expr_weight e) ∧
+  (dexpr_weight (Convert e) = expr_weight e)
+`;
+val _ = export_rewrites ["dexpr_weight_def"]
+
+val stmt_weight_def = tDefine "stmt_weight" `
+  (stmt_weight Abort = 0) ∧
+  (stmt_weight Done = 0) ∧
+  (stmt_weight (Assign w ds v) =
+     1 + expr_weight (SND w) + SUM (MAP dexpr_weight ds)) ∧
+  (stmt_weight (AssignVar v e) = 1) ∧
+  (stmt_weight (Malloc v d value) = 1) ∧
+  (stmt_weight (Let v e) = 1) ∧
+  (stmt_weight (IfStmt g t e) = MAX (stmt_weight t) (stmt_weight e) + 1) ∧
+  (stmt_weight (ForLoop v d s) = stmt_weight s + 1) ∧
+  (stmt_weight (ParLoop v d s) = stmt_weight s + 1) ∧
+  (stmt_weight (Seq stmts) =
+    SUM (MAP (λms. stmt_weight (SND ms)) stmts) + 1 + LENGTH stmts) ∧
+  (stmt_weight (Par stmts) =
+    SUM (MAP (λms. stmt_weight (SND ms)) stmts) + 1 + LENGTH stmts)
+` (WF_REL_TAC `measure stmt_size` >> simp[] >>
+   Induct >> dsimp[definition "stmt_size_def"] >>
+   rpt strip_tac >> res_tac >> simp[])
+val _ = export_rewrites ["stmt_weight_def"]
+
+val loop_count_def = tDefine "loop_count" `
+  (loopbag Abort = {| |}) ∧
+  (loopbag Done = {| |}) ∧
+  (loopbag (Assign w ds v) = {| 0 |}) ∧
+  (loopbag (AssignVar v e) = {| 0 |}) ∧
+  (loopbag (Malloc v d value) = {| 0 |}) ∧
+  (loopbag (Let v e) = {| 0 |}) ∧
+  (loopbag (IfStmt g t e) = BAG_UNION (loopbag t) (loopbag e)) ∧
+  (loopbag (ForLoop v d s) = BAG_IMAGE SUC (loopbag s)) ∧
+  (loopbag (ParLoop v d s) = BAG_IMAGE SUC (loopbag s)) ∧
+  (loopbag (Seq stmts) =
+     FOLDR (λms b. BAG_UNION (loopbag (SND ms)) b) {||} stmts) ∧
+  (loopbag (Par stmts) =
+     FOLDR (λms b. BAG_UNION (loopbag (SND ms)) b) {||} stmts)
+` (WF_REL_TAC `measure stmt_size` >> simp[] >>
+   Induct >> dsimp[definition "stmt_size_def"] >>
+   rpt strip_tac >> res_tac >> simp[])
+val _ = export_rewrites ["loop_count_def"]
+
+val MAX_PLUS = store_thm(
+  "MAX_PLUS",
+  ``MAX x y + z = MAX (x + z) (y + z)``,
+  rw[arithmeticTheory.MAX_DEF]);
+
+val mlt_UNION_LCANCEL = store_thm(
+  "mlt_UNION_LCANCEL",
+  ``mlt R a b /\ FINITE_BAG c ==>
+    mlt R (BAG_UNION a c) (BAG_UNION b c)``,
+
+val eval_terminates = store_thm(
+  "eval_terminates",
+  ``∀a b. eval a b ⇒ inv_image (mlt (<) LEX (<)) (λ(m,lm,s). (loopbag s, stmt_weight s)) b a``,
+  Induct_on `eval a b` >> rpt strip_tac >>
+  lfs[pairTheory.LEX_DEF, pred_setTheory.MAX_SET_THM]
+  >- (disj1_tac
+  >- (Cases_on `b` >> fs[] >> simp[])
+  >- (Cases_on `b` >> fs[]
+      >- (Cases_on `loop_count e = 0` >> simp[MAX_PLUS])
+      >- (Cases_on `loop_count t = 0` >> simp[MAX_PLUS]))
+  >- (Cases_on `expr` >> lfs[])
+  >- (Cases_on `expr` >> lfs[])
+
+
+>> rpt strip_tac >>
   Cases_on `expr` >> fs[isValue_def]);
 
 fun newrule t =
@@ -196,7 +280,8 @@ fun newrule t =
 val evalths = [newrule ``Seq []``, newrule ``Done``, newrule ``Seq (h::t)``,
                newrule ``ForLoop v d b``, newrule ``Assign w rds vf``,
                newrule ``ParLoop v d b``, newrule ``Par []``,
-               newrule ``Par (h::t)``]
+               newrule ``Par (h::t)``, newrule ``AssignVar v e``,
+               newrule ``IfStmt g t e``, newrule ``Malloc v n value``]
 
 fun subeval t =
     SIMP_CONV (srw_ss()) (dvalues_def:: listRangeLHI_CONS :: isValue_def ::
