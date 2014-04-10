@@ -52,12 +52,12 @@ val destDValue_def = Define`
 `;
 
 val _ = Hol_datatype`
-  domain = D of num => num  (* lo/hi pair *)
+  domain = D of int => int  (* lo/hi pair *)
 `
 
 (* dvalues : domain -> value list *)
 val dvalues_def = Define`
-  dvalues (D lo hi) = MAP (Int o (&)) [lo ..< hi]
+  dvalues (D lo hi) = MAP Int [lo ..< hi]
 `;
 
 val _ = type_abbrev ("vname", ``:string``)
