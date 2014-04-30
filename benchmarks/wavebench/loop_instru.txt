@@ -1,0 +1,3 @@
+BEGIN_INSTRUMENT_SECTION
+loops file="wavebench-driver.cpp" routine="main"
+END_INSTRUMENT_SECTION
