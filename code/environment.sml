@@ -26,7 +26,7 @@ struct
 
   fun lookup key d =
      case (d key) of
-         NONE => raise VarNotFound(key)
+         NONE => ((print "key = "; print key); raise VarNotFound(key))
        | SOME value => value 
                                      
   (*** value union type ***)

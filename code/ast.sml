@@ -15,6 +15,9 @@ datatype iexp =
          (* iterator or parameter variable read *)
          VarExp of string
 
+         (* constant integer *)
+         | Const of int
+
          (* index array read, e.g., f(i) *)
          | ISub of string * iexp
 
@@ -32,6 +35,9 @@ datatype stmt =
          AssignStmt of string * iexp            (* wf           *)
                        * dexp list              (* reads        *)
                        * ((real list) -> real)  (* vf           *)
+
+         (* Aname, num, initval, range *)
+         | Malloc of string * int * int * int 
 
          (* for ( lb <= i < ub ) body *)
          | ForLoop of string * int * int * stmt
@@ -52,11 +58,14 @@ datatype stmt =
 fun evaliexp exp env =
     case exp of
 
-         (* iterator or parameter variable read *)
-         VarExp id => getint(envlookup(env, id))
+        (* iterator or parameter variable read *)
+        VarExp id => getint(envlookup(env, id))
 
-         (* index array read, e.g., f(i) *)
-         | ISub(id,e) => isub( getivec(envlookup(env,id)), (evaliexp e env) )
+        (* constant integer value *) 
+        | Const x => x 
+
+        (* index array read, e.g., f(i) *)
+        | ISub(id,e) => isub( getivec(envlookup(env,id)), (evaliexp e env) )
 
 (* FIXME: right now returns a real, later should return DValue? *)
 fun evaldexp de env =
@@ -79,6 +88,16 @@ fun evalstmt ast env =
             envupdate(env, Aname, 
                       RealVecVal(dupdate(Aval, (evaliexp wf env), rhs)))
         end
+
+      (* Allocate and initialize an int vector in environment. *)
+      (* FIXME: need to let initval type drive what is put in env *)
+      | Malloc (Aname, num, initval, range) =>
+        envupdate( env, Aname,
+                   IVecVal( 
+                       FOR (0,num)
+                           (fn i => fn ivec =>
+                               iupdate(ivec,i,initval))
+                           (empty_iv(num,range)) ) )
 
       (* Right now the interpretation of ForLoop assumes lb=0. *)
       | ForLoop (itername,lb,ub,bodyast) =>
