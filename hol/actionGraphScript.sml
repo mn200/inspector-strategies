@@ -3,26 +3,16 @@ open HolKernel Parse boolLib bossLib;
 open primitivesTheory pred_setTheory listRangeTheory listTheory
 open finite_mapTheory
 open lcsymtacs
-fun asimp thl = asm_simp_tac (srw_ss() ++ ARITH_ss) thl
-fun dsimp thl = asm_simp_tac (srw_ss() ++ boolSimps.DNF_ss) thl
-fun csimp thl = asm_simp_tac (srw_ss() ++ boolSimps.CONJ_ss) thl
 
 val _ = new_theory "actionGraph";
 
-
-
 val _ = Hol_datatype`
   action = <|
-    write : num ;
-    reads : num list ;
+    write : 'access ;
+    reads : 'access list ;
     expr : 'a list -> 'a;
     iter : num
   |>
-`;
-
-val apply_action_def = Define`
-  apply_action (a:'a action) (A:'a mvector) =
-    update A a.write (a.expr (MAP (vsub A) a.reads))
 `;
 
 val touches_def = Define`
@@ -46,21 +36,6 @@ val MAP_vsub = store_thm(
   ``¬MEM w reads ⇒ MAP ($' (update A w e)) reads = MAP ($' A) reads``,
   Induct_on `reads` >> simp[update_sub]);
 
-val nontouching_actions_commute = store_thm(
-  "nontouching_actions_commute",
-  ``¬touches a1 a2 ⇒
-    apply_action a1 (apply_action a2 A) = apply_action a2 (apply_action a1 A)``,
-  simp[touches_def, apply_action_def, vector_EQ] >> rpt strip_tac >>
-  map_every qabbrev_tac [`w1 = a1.write`, `w2 = a2.write`] >>
-  ONCE_REWRITE_TAC [update_sub] >> simp[] >>
-  Cases_on `i = w1` >> simp[]
-  >- (simp[SimpRHS, update_sub] >>
-      reverse (Cases_on `w1 < vsz A`) >>
-      simp[update_sub, MAP_vsub]) >>
-  simp[update_sub, MAP_vsub]);
-
-
-
 val touches_REFL = store_thm(
   "touches_REFL",
   ``touches a a``,
@@ -74,8 +49,8 @@ val touches_SYM = store_thm(
 
 val _ = Hol_datatype`
   action_graph0 = <|
-    nodes : 'a action set;
-    edges : 'a action -> 'a action set
+    nodes : ('a,'acc) action set;
+    edges : ('a,'acc) action -> ('a,'acc) action set
   |>
 `
 
@@ -116,8 +91,8 @@ val wfEQ_def = Define`
 
 val wfEQ_equiv = store_thm(
   "wfEQ_equiv",
-  ``(∃g:'a action_graph0. wfEQ g g) ∧
-    (∀x y:'a action_graph0. wfEQ x y ⇔ wfEQ x x ∧ wfEQ y y ∧ wfEQ x = wfEQ y)``,
+  ``(∃g:('a,'b) action_graph0. wfEQ g g) ∧
+    (∀x y:('a,'b) action_graph0. wfEQ x y ⇔ wfEQ x x ∧ wfEQ y y ∧ wfEQ x = wfEQ y)``,
   rw[wfEQ_def, FUN_EQ_THM] >- metis_tac[wfG_empty] >>
   rw[EQ_IMP_THM] >> simp[]);
 
@@ -142,18 +117,6 @@ val wfG_irrefl = store_thm(
 val empty_edges = prove(
   ``emptyG0.edges = REMPTY``,
   simp[emptyG0_def]);
-
-fun gen th = let
-  val t = concl th
-  val fvs = filter (fn v => type_of v = ``:'a action_graph0``) (free_vars t)
-  fun gen1 (t, th) =
-      th |> ADD_ASSUM ``^t IN respects wfEQ``
-         |> DISCH_ALL
-         |> GEN t
-         |> SIMP_RULE bool_ss [GSYM RES_FORALL_THM]
-in
-  foldl gen1 th fvs
-end
 
 val graph0_equality = prove(
   ``!G1 G2 :: respects wfEQ.

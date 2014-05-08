@@ -18,6 +18,24 @@ val eval_def = Define`
     update A (Wf i) (vf i (MAP (λf. vsub A (f i)) Rs))
 `;
 
+val apply_action_def = Define`
+  apply_action a (A:'a mvector) =
+    update A a.write (a.expr (MAP (vsub A) a.reads))
+`;
+
+val nontouching_actions_commute = store_thm(
+  "nontouching_actions_commute",
+  ``¬touches a1 a2 ⇒
+    apply_action a1 (apply_action a2 A) = apply_action a2 (apply_action a1 A)``,
+  simp[touches_def, apply_action_def, vector_EQ] >> rpt strip_tac >>
+  map_every qabbrev_tac [`w1 = a1.write`, `w2 = a2.write`] >>
+  ONCE_REWRITE_TAC [update_sub] >> simp[] >>
+  Cases_on `i = w1` >> simp[]
+  >- (simp[SimpRHS, update_sub] >>
+      reverse (Cases_on `w1 < vsz A`) >>
+      simp[update_sub, MAP_vsub]) >>
+  simp[update_sub, MAP_vsub]);
+
 val (evalG_rules,evalG_ind,evalG_cases) = Hol_reln`
   (∀A. evalG A emptyG A) ∧
   (∀a A0 G A.
@@ -48,6 +66,8 @@ val evalG_total = store_thm(
     by metis_tac[nonempty_wfG_has_points] >>
   `gCARD (G \\ a) = v` by simp[] >>
   metis_tac[evalG_rules]);
+
+
 
 val graphs_evaluate_deterministically = store_thm(
   "graphs_evaluate_deterministically",
@@ -534,7 +554,7 @@ val correctness = store_thm(
              `rfs` |-> `MAP (λf. f o (γ:num->num)) rds`,
              `wf` |-> `wf o γ`, `body` |-> `body o γ`]
             loop_to_graph_correct) >>
-  mp_tac same_graphs >> simp[] >>
+  mp_tac (INST_TYPE [alpha |-> ``:num``, beta |-> alpha] same_graphs) >> simp[] >>
   disch_then SUBST_ALL_TAC >>
   qabbrev_tac `G = loop_to_graph (0,N) wf rds body` >>
   `INJ δ (iterations G) UNIV`
