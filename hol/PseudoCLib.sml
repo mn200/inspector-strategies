@@ -1,9 +1,9 @@
-structure astLib =
+structure PseudoCLib =
 struct
 
 open HolKernel simpLib
 
-open listRangeTheory finite_mapTheory astTheory
+open listRangeTheory finite_mapTheory PseudoCTheory
 
 fun newrule t =
     eval_cases |> Q.SPEC `(m,lm,^t)` |> SIMP_RULE (srw_ss()) []
