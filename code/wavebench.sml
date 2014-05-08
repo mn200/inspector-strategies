@@ -68,3 +68,7 @@ val inspector_test = ivector_to_list( getivec(
                                               ( (evalstmt inspector initEnv)
                                               "lw_iter" )) )
 
+
+max_wave = MAX(max_wave,wave[p]);
+
+AssignVar("max_wave", Opn( [VarExp("max_wave"), Convert( 

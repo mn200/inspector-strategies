@@ -25,4 +25,5 @@ val env_test3 = envlookup (env, "there")
                 (print ("Var not found: " ^ var ^ "\n"); IntVal(0))
 
 
-val env_test4 = envlookup (envupdate (env, "hi", (RealVecVal(empty_dv(5, 0.0)))), "hi")
+val env_test4 = envlookup (
+        envupdate (env, "hi", (RealVecVal(empty_dv(Domain1D(0,5), 0.0)))), "hi")

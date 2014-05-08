@@ -15,12 +15,13 @@ use "primitives.sml";
 open primitives
 
 (* dump routines for debugging *)
-fun dump_dvector v vstr =
+(*fun dump_dvector v vstr =
     FOR (0,dsizex(v))
         (fn i => fn count =>
             (print(vstr^"["^Int.toString(i)^"]="^Int.toString(dsub(v,i))^"\n"); dsub(v,i)))
         0
-
+*)
+(*
 (* when dvector has a boolean value, ick *)
 fun dump_bvector v vstr =
     FOR (0,dsizex(v))
@@ -30,11 +31,11 @@ fun dump_bvector v vstr =
 
 
 fun dump_ivector v vstr =
-    FOR (0,isizex(v))
+    FOR (0,idomx(v))
         (fn i => fn count =>
             (print(vstr^"["^Int.toString(i)^"]="^Int.toString(isub(v,i))^"\n"); isub(v,i)))
         0
-
+*)
 
 (******************************************************************************)
 (* Original Code in C
@@ -44,7 +45,7 @@ fun dump_ivector v vstr =
  * }
  *)
 fun orgcode (B,C,f,g,N) =
-    FOR (0,N)
+    FOR (Domain1D(0,N))
         (fn i => fn B => dupdate(B, i, dsub(C, isub(f,i)) + dsub(C, isub(g,i))))
         B
 
@@ -100,10 +101,10 @@ fun orgcode (B,C,f,g,N) =
  * }
  *)
 (* constructs mrel for d2c = { [ x ] -> [ i ] | x=f(i) \/ x=g(i) } *)
-(* M is the domain size [0,M). *)
-(* N is the range size [0,N) or possible values of i. *)
+(* M is the domain  [0,M). *)
+(* N is the range  [0,N) or possible values of i. *)
 fun construct_explicit_relation (M,N,f,g) =
-    FOR (0,N)
+    FOR M
         (fn i => fn E => r_update(r_update(E,isub(f,i),i), isub(g,i),i))
         (empty_r (M,N))
 
@@ -111,13 +112,14 @@ fun construct_explicit_relation (M,N,f,g) =
 (* Using 0 and 1 for false and true because that is what mvector handles. *)
 fun cpack_inspector (E) =
     let 
-        val visited = empty_dv ( rsizey(E), false )
+        val visited = empty_dv ( rdomy(E), false )
         val count = 0
 
         (* pack y into dinv, count is current count of packed vals *)
         fun pack (dinv,visited,count,y) =
             if not( dsub(visited,y) )
-            then ( iupdate(dinv,count,y), dupdate(visited, y, true), count+1 )
+            then ( iupdate(dinv,Tuple1D(count),y), 
+                   dupdate(visited, y, true), count+1 ) 
             else ( dinv, visited, count )
 
         (* use the relation to pack values of y as seen 
@@ -127,12 +129,12 @@ fun cpack_inspector (E) =
                  (fn (x,y) => fn (dinv,visited,count) => 
                      pack(dinv,visited,count,y))
                  E
-                 (empty_iv(rsizey(E),rsizey(E)), visited, count)
+                 (empty_iv(rdomy(E),rdomy(E),Tuple1D(0)), visited, count)
 
         (* do cleanup on dinv to ensure all y's in relation have 
          * been ordered in dinv *)
         val (dinv,visited,count) =       
-            FOR (0,rsizey(E))
+            FOR (rdomy(E))
                 (fn y => fn (dinv,visited,count) => pack(dinv,visited,count,y))
                 (dinv,visited,count)
     in
@@ -142,11 +144,11 @@ fun cpack_inspector (E) =
 (* N is number of iterations, M is size of dataspaces *)
 fun codevariant1 (B,C,f,g,N,M) =
     let
-        val E = construct_explicit_relation(M,N,f,g)
+        val E = construct_explicit_relation(Domain1D(0,M),Domain1D(0,N),f,g)
         val dinv = cpack_inspector(E)
     in
 
-        FOR (0,N)
+        FOR (Domain1D(0,N))
             (fn j => fn B => 
                 let val i = isub(dinv,j) in
                     dupdate(B, i, dsub(C, isub(f,i)) + dsub(C, isub(g,i)))
@@ -163,7 +165,7 @@ fun codevariant1 (B,C,f,g,N,M) =
  *   }
  *)
 fun orgcode_with_deps (A,f,g,h,N) =
-    FOR (0,N)
+    FOR (Domain1D(0,N))
         (fn i => fn A => dupdate(A, isub(f,i), 
                                  dsub(A, isub(g,i)) + dsub(A, isub(h,i))))
         A
@@ -195,16 +197,16 @@ fun orgcode_with_deps (A,f,g,h,N) =
  *)
 
 (* construct_R_A creates the read access relation for A *)
-fun construct_R_A(N,M,g,h) = 
-    FOR (0,N)
+fun construct_R_A(compdom,datadom,g,h) = 
+    FOR compdom
         (fn i => fn E => r_update(r_update(E,i,isub(g,i)), i, isub(h,i)))
-        (empty_r (N,M))
+        (empty_r (compdom,datadom))
 
 (* construct_W_A creates the write access relation for A *)
-fun construct_W_A(N,M,f) = 
-    FOR (0,N)
+fun construct_W_A(compdom,datadom,f) = 
+    FOR compdom
         (fn i => fn E => r_update(E,i,isub(f,i)))
-        (empty_r (N,M))
+        (empty_r (compdom,datadom))
 
 (* construct_Deps creates Deps.*)
 fun construct_Deps (N,R_A,W_A) =
@@ -212,12 +214,12 @@ fun construct_Deps (N,R_A,W_A) =
     (* puts those pairs into acc relation and returns it *)
     let fun join_idx(rel1,rel2,acc) =
             RFOR X
-                 (fn (i1,y1) => fn (Deps) =>
+                 (fn (Tuple1D(i1),Tuple1D(y1)) => fn (Deps) =>
                      RFOR X
-                          (fn (i2,y2) => fn (Deps) =>
+                          (fn (Tuple1D(i2),Tuple1D(y2)) => fn (Deps) =>
                               if (i1<i2 andalso y1=y2) 
-                              then r_update(Deps, i1,i2)
-                              else Deps )
+                              then r_update(Deps,Tuple1D(i1),Tuple1D(i2))
+                              else Deps)
                           rel2
                           Deps)
                  rel1
@@ -250,11 +252,11 @@ fun topological_inspector(deps) =
                  (fn (x,y) => fn num_preds =>
                      dupdate(num_preds,y,dsub(num_preds,y)+1))
                  deps
-                 (empty_dv(rsizey(deps),0))
+                 (empty_dv(rdomy(deps),0))
 
         (* find those iterations with no predecessor and put them in queue *)
         val queue =
-            FOR (0,dsizex(num_preds))
+            FOR (0,ddomx(num_preds))
                 (fn y => fn queue =>
                     if dsub(num_preds,y)=0
                     then y::queue
@@ -292,36 +294,36 @@ fun topological_inspector(deps) =
                 end
     in
         BFS ( queue, num_preds, 
-              empty_iv(rsizey(deps), rsizey(deps)), (* init dinv *)
-              empty_dv(rsizey(deps), false), (* init visited *)
+              empty_iv(rdomy(deps), rdomy(deps)), (* init dinv *)
+              empty_dv(rdomy(deps), false), (* init visited *)
               0 )
     end
 *)
     let
         (* find wavefront of iterations that can executed, 
-         * reduction so can't pack as we look,
-         * could check visited, but have to recheck that in pack_wavefront anyway *)
-        fun find_wavefront ( dinv, visited, count ) =
+         * reduction so can't pack as we look, could check visited,
+         * but have to recheck that in pack_wavefront anyway *)
+        fun find_wavefront ( dinv, visited  ) =
             RFOR X
                  (fn (i1,i2) => fn (ready) =>
                      (* if predecessor not visited then not ready *)
                      dupdate(ready,i2,dsub(visited, i1) andalso dsub(ready,i2)))
                  deps
-                 (empty_dv(rsizey(deps),true)) (* initially all ready *)
+                 (empty_dv(rdomy(deps),true)) (* initially all ready *)
 
         (* recursively pack all wavefronts  *)
         fun pack_wavefront ( dinv, visited, count ) =
-            if count >= rsizey(deps)
+            if count >= size_domain(rdomy(deps))
             then dinv
             else
-                let val ready = find_wavefront( dinv, visited, count )
+                let val ready = find_wavefront( dinv, visited )
                     (* have to check if visited here because can't assume
                      * any (v,i) entries in deps *)
                     val (dinv,visited,count) =
-                        FOR (0,dsizex(ready))
+                        FOR (ddomx(ready))
                             (fn i => fn (dinv, visited, count ) =>
                                 if dsub(ready,i) andalso not (dsub(visited,i))
-                                then (iupdate(dinv,count,i),
+                                then (iupdate(dinv,Tuple1D(count),i),
                                       dupdate(visited,i,true),
                                       count+1)
                                 else (dinv,visited,count))
@@ -332,18 +334,22 @@ fun topological_inspector(deps) =
 
     in
         (* initial dinv, visited, and count *)
-        pack_wavefront ( empty_iv(rsizex(deps),rsizex(deps)), 
-                         empty_dv(rsizex(deps),false), 
+        pack_wavefront ( empty_iv(rdomx(deps),rdomx(deps),Tuple1D(0)), 
+                         empty_dv(rdomx(deps),false), 
                          0 )
     end
 (* N is number of iterations, M is size of dataspaces *)
 fun codevariant2 (A,f,g,h,N,M) =
     let
-        val deps = construct_Deps(N,construct_R_A(N,M,g,h),construct_W_A(N,M,f))
+        val calcdom = Domain1D(0,N)
+        val datadom = Domain1D(0,M)
+        val deps = construct_Deps(calcdom,
+                                  construct_R_A(calcdom,datadom,g,h),
+                                  construct_W_A(calcdom,datadom,f))
         val dinv = topological_inspector(deps)
     in
 
-        FOR (0,N)
+        FOR calcdom
             (fn j => fn A => 
                 let val i = isub(dinv,j) in
                     dupdate(A, isub(f,i), 
@@ -389,13 +395,13 @@ fun fast_top_inspector(R_A,W_A) =
     (* assuming R_A and W_A have same domains and same ranges *)
     let
         (* wavefront number for iteration i *)
-        val wave = empty_dv(rsizex(R_A),rsizex(R_A)-1)
+        val wave = empty_dv(rdomx(R_A),size_domain(rdomx(R_A))-1)
 
         (*  last iteration to write to this data location *)
-        val lw_iter = empty_dv(rsizey(R_A),~1)
+        val lw_iter = empty_dv(rdomy(R_A),~1)
 
         (*  last iteration to read from this data location *)
-        val lr_iter = empty_dv(rsizey(R_A),~1)
+        val lr_iter = empty_dv(rdomy(R_A),~1)
 
         (* i is iteration, y is data location *)
         fun handle_read i y (wave,lw_iter,lr_iter) =
@@ -404,7 +410,7 @@ fun fast_top_inspector(R_A,W_A) =
             (* just update lr_iter *)
             then (wave,lw_iter,dupdate(lr_iter,y,i))
             (* wave[i] = wave[lw_iter[y]] + 1 *)
-            else (dupdate(wave,i,dsub(wave,dsub(lw_iter,y)+1)),
+            else (dupdate(wave,Tuple1D(i),dsub(wave,Tuple1D(dsub(lw_iter,y)+1))),
                   lw_iter,
                   dupdate(lr_iter,y,i))
 
@@ -418,25 +424,25 @@ fun fast_top_inspector(R_A,W_A) =
             else 
                 let 
                     val write_wave = if dsub(lw_iter,y)>=0
-                                     then dsub(wave,dsub(lw_iter,y))
+                                     then dsub(wave,Tuple1D(dsub(lw_iter,y)))
                                      else ~1
                     val read_wave = if dsub(lr_iter,y)>=0
-                                    then dsub(wave,dsub(lr_iter,y))
+                                    then dsub(wave,Tuple1D(dsub(lr_iter,y)))
                                     else ~1
                     val w = if (write_wave+1) > (read_wave+1)
                             then (write_wave+1)
                             else (read_wave+1)
                 in
-                    (dupdate(wave,i,w), dupdate(lw_iter,y,i), lr_iter)
+                    (dupdate(wave,Tuple1D(i),w), dupdate(lw_iter,y,i), lr_iter)
                 end
 
         (* assign wavefront numbers to iterations *)
         fun find_waves (wave,lw_iter,lr_iter) =
             (* NOTE, can't use RFORX, have to visit both R_A and W_A *)
-            FOR (0,rsizex(R_A))
-                (fn i => fn (wave,lw_iter,lr_iter) =>
-                    RFOR_AT_X (handle_write i) W_A i
-                              (RFOR_AT_X (handle_read i) R_A i
+            FOR (rdomx(R_A))
+                (fn Tuple1D(i) => fn (wave,lw_iter,lr_iter) =>
+                    RFOR_AT_X (handle_write i) W_A (Tuple1D(i))
+                              (RFOR_AT_X (handle_read i) R_A (Tuple1D(i))
                                          (wave,lw_iter,lr_iter)))
                 (wave,lw_iter,lr_iter)
 
@@ -445,7 +451,7 @@ fun fast_top_inspector(R_A,W_A) =
 
         (* Compute the maximum wave value *)
         val max_wave =
-            FOR (0,dsizex(wave))
+            FOR (ddomx(wave))
                 (fn w => fn (curr_max) =>
                     if dsub(wave,w)>curr_max 
                     then dsub(wave,w) 
@@ -457,7 +463,7 @@ fun fast_top_inspector(R_A,W_A) =
         fun pack_waves_simple ( dinv, wave ) =
             let
                 (* change wave to ivector *)
-                val iwave = intdvector_to_ivector (wave,max_wave+1)
+                val iwave = intdvector_to_ivector (wave,Domain1D(0,max_wave+1))
 
                 (* change wave ivector to an mrel *)
                 val rwave = ivector_to_mrel iwave
@@ -466,7 +472,7 @@ fun fast_top_inspector(R_A,W_A) =
                  * and pack iterations as we see them into dinv *)
                 val (dinv,count) = RFOR Y
                     (fn (i,w) => fn (dinv,count) =>
-                        (iupdate(dinv,count,i), count+1))
+                        (iupdate(dinv,Tuple1D(count),i), count+1))
                     rwave
                     (dinv,0)     
             in
@@ -478,29 +484,31 @@ fun fast_top_inspector(R_A,W_A) =
             let
                 (* iterate over wave and count how many iters per wave *)
                 val wcount =
-                    FOR (0,dsizex(wave))
+                    FOR (ddomx(wave))
                         (fn i => fn (wcount) =>
-                            let val w = dsub(wave,i)
+                            let val w = Tuple1D(dsub(wave,i))
                             in dupdate(wcount,w,dsub(wcount,w)+1)
                             end)
-                        (empty_dv (max_wave+1,0))
+                        (empty_dv (Domain1D(0,max_wave+1),0))
 
                 (* determine where to start putting iterations for each wave *)
                 val wstart =
-                    FOR (1,dsizex(wcount))
-                        (fn i => fn wstart =>
-                            dupdate(wstart,i,
-                                    dsub(wstart,i-1)+dsub(wcount,i-1)))
-                        (empty_dv (dsizex(wcount),0))
+                    FOR (ddomx(wcount))
+                        (fn Tuple1D(i) => fn wstart =>
+                            dupdate(wstart,Tuple1D(i),
+                                    dsub(wstart,Tuple1D(i-1))
+                                    +dsub(wcount,Tuple1D(i-1))))
+                        (empty_dv (ddomx(wcount),0))
 
                 (* use wavestart and another pass over wave to create dinv *)
                 val (dinv,wcount) =
-                    FOR (0,dsizex(wave))
+                    FOR (ddomx(wave))
                         (fn i => fn (dinv,wstart) =>
                             let val w = dsub(wave,i)
-                                val j = dsub(wstart,w)
+                                val j = dsub(wstart,Tuple1D(w))
                             in
-                                (iupdate(dinv,j,i), dupdate(wstart,w,j+1))
+                                (iupdate(dinv,Tuple1D(j),i), 
+                                 dupdate(wstart,Tuple1D(w),j+1))
                             end)
                         (dinv, wstart)
 
@@ -509,10 +517,10 @@ fun fast_top_inspector(R_A,W_A) =
             end
 
     in
-(*        pack_waves_fast ( empty_iv(rsizex(R_A),0),    (* init dinv *)
+(*        pack_waves_fast ( empty_iv(rdomx(R_A),0),    (* init dinv *)
                           wave )                      (* wave number per iter *)
 *)
-        pack_waves_simple ( empty_iv(rsizex(R_A),0), wave )
+        pack_waves_simple ( empty_iv(rdomx(R_A),rdomx(R_A),Tuple1D(0)), wave )
     end
 
 (* N is number of iterations, M is size of dataspaces *)
@@ -522,11 +530,11 @@ fun fast_top_inspector(R_A,W_A) =
  *)
 fun codevariant3 (A,f,g,h,N,M) =
     let
-        val R_A = construct_R_A(N,M,g,h)
-        val W_A = construct_W_A(N,M,f)
+        val R_A = construct_R_A(Domain1D(0,N),Domain1D(0,M),g,h)
+        val W_A = construct_W_A(Domain1D(0,N),Domain1D(0,M),f)
         val dinv = fast_top_inspector(R_A,W_A)
     in
-        FOR (0,N)
+        FOR (Domain1D(0,N))
             (fn j => fn A => 
                 let val i = isub(dinv,j) in
                     dupdate(A, isub(f,i), 
@@ -544,9 +552,9 @@ fun codevariant3 (A,f,g,h,N,M) =
  *)
 
 fun reorder_data(A,sinv) =
-    FOR (0,dsizex(A))
+    FOR (ddomx(A))
         (fn x => fn Aprime => dupdate(Aprime, x, dsub(A, isub(sinv,x))))
-        (empty_dv(dsizex(A),dsub(A,0)))
+        (empty_dv(ddomx(A),dsub(A,Tuple1D(0))))
 
 fun data_permute_inspector(R_A,W_A,A) =
     let
@@ -559,15 +567,15 @@ fun data_permute_inspector(R_A,W_A,A) =
                        (RFOR X
                              (fn (i,x) => fn c2d => r_update(c2d,i,x))
                              W_A
-                             (empty_r(rsizex(R_A),rsizex(W_A))))
+                             (empty_r(rdomx(R_A),rdomx(W_A))))
 
         val sinv = cpack_inspector(c2d)
 
         (* need routine for doing inverse of an ivector *)
-        val s = FOR (0,isizex(sinv))
+        val s = FOR (idomx(sinv))
                     (fn i => fn s =>
                         iupdate (s, isub(sinv,i), i))
-                    (empty_iv (isizey(sinv),isizex(sinv)))
+                    (empty_iv (idomy(sinv),idomx(sinv),Tuple1D(0)))
 
         val Aprime = reorder_data(A,sinv)
 
@@ -579,20 +587,20 @@ fun data_permute_inspector(R_A,W_A,A) =
 (* Parameters are the reordered data array and the reordering. *)
 (* s is old2new mapping. *)
 fun post_computation_inspector (Aprime,s) =
-    FOR (0,dsizex(Aprime))
+    FOR (ddomx(Aprime))
         (fn x => fn A =>
             dupdate(A,x,dsub(Aprime,isub(s,x))))
-        (empty_dv (dsizex(Aprime),dsub(Aprime,0)))
+        (empty_dv (ddomx(Aprime),dsub(Aprime,Tuple1D(0))))
 
 (* N is number of iterations, M is size of dataspaces *)
 fun codevariant4 (A,f,g,h,N,M) =
     let
-        val R_A = construct_R_A(N,M,g,h)
-        val W_A = construct_W_A(N,M,f)
+        val R_A = construct_R_A(Domain1D(0,N),Domain1D(0,M),g,h)
+        val W_A = construct_W_A(Domain1D(0,N),Domain1D(0,M),f)
         val (Aprime,s) = data_permute_inspector(R_A,W_A,A)
     
         val Aprime =
-            FOR (0,N)
+            FOR (Domain1D(0,N))
                 (fn i => fn Aprime =>
                     dupdate(Aprime, isub(s,isub(f,i)), 
                             dsub(Aprime, isub(s, isub(g,i))) 
@@ -627,7 +635,7 @@ fun codevariant4 (A,f,g,h,N,M) =
  *)
 fun find_waves_deps (R_A : mrelation, W_A : mrelation) =
     let
-        val deps = construct_Deps(rsizex(R_A),R_A,W_A)
+        val deps = construct_Deps(rdomx(R_A),R_A,W_A)
 
         (* find wavefront of iterations that can executed, 
          * reduction so can't pack as we look,
@@ -638,21 +646,21 @@ fun find_waves_deps (R_A : mrelation, W_A : mrelation) =
                      (* if predecessor not visited then not ready *)
                      dupdate(ready,i2,dsub(visited, i1) andalso dsub(ready,i2)))
                  deps
-                 (empty_dv(rsizey(deps),true)) (* initially all ready *)
+                 (empty_dv(rdomy(deps),true)) (* initially all ready *)
 
         (* assign all iterations to a wavefront *)
         fun assign_waves ( wave, visited, iter_count, wave_count ) =
-            if iter_count >= rsizey(deps)
+            if iter_count >= size_domain(rdomy(deps))
             then wave (* FIXME efficiency: could pack wave here *)
             else
                 let val ready = find_wavefront( visited )
                     (* have to check if visited here because can't assume
                      * any (v,i) entries in deps *)
                     val (wave,visited,iter_count,wave_count) =
-                        FOR (0,dsizex(ready))
+                        FOR (ddomx(ready))
                             (fn i => fn (wave,visited,iter_count,wave_count ) =>
                                 if dsub(ready,i) andalso not (dsub(visited,i))
-                                then (iupdate(wave,i,wave_count),
+                                then (iupdate(wave,i,Tuple1D(wave_count)),
                                       dupdate(visited,i,true),
                                       iter_count+1,wave_count)
                                 else (wave,visited,iter_count,wave_count))
@@ -661,8 +669,9 @@ fun find_waves_deps (R_A : mrelation, W_A : mrelation) =
                     assign_waves( wave, visited, iter_count, wave_count+1 )
                 end
     in
-        assign_waves( empty_iv(rsizex(R_A),rsizex(R_A)), (* overest of waves*)
-                      empty_dv(rsizex(R_A),false), (* init visited *)
+        assign_waves( empty_iv(rdomx(R_A),rdomx(R_A),Tuple1D(0)), 
+                          (* overest of waves*)
+                      empty_dv(rdomx(R_A),false), (* init visited *)
                       0,  (* initial iteration count *)
                       0 ) (* initial wave count *)
     end
@@ -716,17 +725,17 @@ fun find_waves_fast (R_A, W_A) =
     let
         (* wavefront number for iteration i *)
         (* initially all put into wave 0 and range is overapproximated *)
-        val wave = empty_iv(rsizex(R_A),rsizex(R_A))
+        val wave = empty_iv(rdomx(R_A),rdomx(R_A),Tuple1D(0))
 
         (*  last iteration to write to this data location *)
-        val lw_iter = empty_dv(rsizey(R_A),~1)
+        val lw_iter = empty_dv(rdomy(R_A),~1)
         (*  last iteration to read from this data location *)
-        val lr_iter = empty_dv(rsizey(R_A),~1)
+        val lr_iter = empty_dv(rdomy(R_A),~1)
 
         (* if indexing wave with -1, then return -1 for value so +1 works *)
         fun wave_val (wave, idx) =
             if idx>=0
-            then isub(wave,idx)
+            then let val Tuple1D(w) = isub(wave,Tuple1D(idx)) in w end
             else ~1
 
         (* i is iteration, y is data location *)
@@ -751,10 +760,10 @@ fun find_waves_fast (R_A, W_A) =
         (* assign wavefront numbers to iterations *)
         val (wave,_,_,_) =
             (* NOTE, can't use RFORX, have to visit both R_A and W_A *)
-            FOR (0,rsizex(R_A))
-                (fn i => fn (wave,lw_iter,lr_iter,max_prev_wave) =>
-                    RFOR_AT_X (handle_write i) W_A i
-                              (RFOR_AT_X (handle_read i) R_A i
+            FOR (rdomx(R_A))
+                (fn (Tuple1D(i)) => fn (wave,lw_iter,lr_iter,max_prev_wave) =>
+                    RFOR_AT_X (handle_write i) W_A (Tuple1D(i))
+                              (RFOR_AT_X (handle_read i) R_A (Tuple1D(i))
                                          (wave,lw_iter,lr_iter,max_prev_wave)))
                 (* init max_prev_wave to -1 *)
                 (wave,lw_iter,lr_iter,~1)
@@ -780,9 +789,9 @@ fun pack_waves_simple wave =
          * and pack iterations as we see them into dinv *)
         val (dinv,count) = RFOR Y
                                 (fn (i,w) => fn (dinv,count) =>
-                                    (iupdate(dinv,count,i), count+1))
+                                    (iupdate(dinv,Tuple1D(count),i), count+1))
                                 rwave
-                                (empty_iv(isizex(wave),isizey(wave)),0)
+                                (empty_iv(idomx(wave),idomy(wave),Tuple1D(0)),0)
     in
         dinv
     end
@@ -794,31 +803,32 @@ fun pack_waves_fast wave =
     let
         (* iterate over wave and count how many iters per wave *)
         val wcount =
-            FOR (0,isizex(wave))
+            FOR (idomx(wave))
                 (fn i => fn (wcount) =>
                     let val w = isub(wave,i)
                     in dupdate(wcount,w,dsub(wcount,w)+1)
                     end)
-                (empty_dv (isizey(wave),0))
+                (empty_dv (idomy(wave),0))
 
         (* determine where to start putting iterations for each wave *)
         val wstart =
-            FOR (1,dsizex(wcount))
-                (fn i => fn wstart =>
-                    dupdate(wstart,i,
-                            dsub(wstart,i-1)+dsub(wcount,i-1)))
-                (empty_dv (dsizex(wcount),0))
+            FOR (ddomx(wcount))
+                (fn Tuple1D(i) => fn wstart =>
+                    dupdate(wstart,Tuple1D(i),
+                            dsub(wstart,Tuple1D(i-1))
+                            +dsub(wcount,Tuple1D(i-1))))
+                (empty_dv(ddomx(wcount),0))
 
         (* use wavestart and another pass over wave to create dinv *)
         val (dinv,wcount) =
-            FOR (0,isizex(wave))
+            FOR (idomx(wave))
                 (fn i => fn (dinv,wstart) =>
                     let val w = isub(wave,i)
                         val j = dsub(wstart,w)
                     in
-                        (iupdate(dinv,j,i), dupdate(wstart,w,j+1))
+                        (iupdate(dinv,Tuple1D(j),i), dupdate(wstart,w,j+1))
                     end)
-                (empty_iv(isizex(wave),isizey(wave)), wstart)
+                (empty_iv(idomx(wave),idomy(wave),Tuple1D(0)), wstart)
 
     in
         dinv
@@ -834,9 +844,9 @@ fun pack_waves_fast wave =
  *)
 (* Assuming f and g have the same range and domain. *)
 fun construct_R_A_nodeps (f,g) =
-    FOR (0,isizex(f))
+    FOR (idomx(f))
         (fn i => fn R_A => r_update(r_update(R_A,i,isub(f,i)),i, isub(g,i)))
-        (empty_r (isizex(f),isizey(f)))
+        (empty_r (idomx(f),idomy(f)))
 
 (* Iteration Reordering, DOPAR Loop *)
 (* Input:
@@ -853,7 +863,7 @@ fun codevariant_dopar_reord (B,C,f,g, reordf) =
         val R_A = construct_R_A_nodeps(f,g)
         val dinv = reordf(R_A)
     in
-        FOR (0,isizex(f))
+        FOR (idomx(f))
             (fn j => fn B => 
                 let val i = isub(dinv,j) in
                     dupdate(B, i, dsub(C, isub(f,i)) + dsub(C, isub(g,i)))
@@ -883,11 +893,11 @@ fun doacross_reord ( R_A, W_A, wavef, packf ) =
 
 fun codevariant_doacross_reord (A,f,g,h,N,M, wavef, packf) =
     let
-        val R_A = construct_R_A(N,M,g,h)
-        val W_A = construct_W_A(N,M,f)
+        val R_A = construct_R_A(Domain1D(0,N),Domain1D(0,M),g,h)
+        val W_A = construct_W_A(Domain1D(0,N),Domain1D(0,M),f)
         val dinv = doacross_reord(R_A, W_A, wavef, packf)
     in
-        FOR (0,N)
+        FOR (Domain1D(0,N))
             (fn j => fn A => 
                 let val i = isub(dinv,j) in
                     dupdate(A, isub(f,i), 
@@ -905,12 +915,12 @@ fun codevariant_doacross_reord (A,f,g,h,N,M, wavef, packf) =
 fun codevariant_data_reord (A,f,g,h, data_permutef) =
     let
         (* assuming f, g, and h have same domain and range *)
-        val R_A = construct_R_A(isizex(f),isizey(f),g,h)
-        val W_A = construct_W_A(isizex(f),isizey(f),f)
+        val R_A = construct_R_A(idomx(f),idomy(f),g,h)
+        val W_A = construct_W_A(idomx(f),idomy(f),f)
         val (Aprime,s) = data_permutef(R_A,W_A,A)
     
         val Aprime =
-            FOR (0,dsizex(A))
+            FOR (ddomx(A))
                 (fn i => fn Aprime =>
                     dupdate(Aprime, isub(s,isub(f,i)), 
                             dsub(Aprime, isub(s, isub(g,i))) 

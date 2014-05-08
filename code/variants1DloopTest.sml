@@ -3,7 +3,8 @@ use "variants1Dloop.sml";
 (******************************************************************************)
 (* Some testing for primitives *)
 val iupdate_test1 =
-    ivector_to_list( iupdate( empty_iv(3,7), 2, 42)) = [0,0,42]
+    ivector_to_list( iupdate( empty_iv(Domain1D(0,3),Domain1D(0,7),Tuple1D(0)),
+                              Tuple1D(2), 42)) = [0,0,42]
 
 val dupdate_test1 =
     dvector_to_list( dupdate( empty_dv(3,false), 1, true)) = [false,true,false]
