@@ -139,6 +139,15 @@ val add_action0_def = Define`
                              src = a ∧ touches a tgt ∧ tgt ∈ G.nodes) |>
 `;
 
+val add_postaction0_def = Define`
+  add_postaction0 a G =
+    if a.iter ∈ iterations0 G then G
+    else
+      <| nodes := a INSERT G.nodes ;
+         edges := (λsrc tgt. G.edges src tgt ∨
+                             src ∈ G.nodes ∧ touches a tgt ∧ tgt = a) |>
+`;
+
 val _ = IndDefLib.export_rule_induction "relation.TC_STRONG_INDUCT"
 val TC_in_R = store_thm(
   "TC_in_R",
@@ -201,6 +210,37 @@ val wfG_add_action0 = prove(
 val wfEQ_add_action0 = prove(
   ``a1 = a2 ∧ wfEQ g1 g2 ⇒ wfEQ (add_action0 a1 g1) (add_action0 a2 g2)``,
   csimp[wfEQ_def, wfG_add_action0]);
+
+val add_postaction0_lemma = prove(
+  ``(∀a1 a2. R' a1 a2 ⇒ R a1 a2 ∨ a2 = a ∧ a1 ≠ a) ∧ (∀b. ¬R a b ∧ ¬R b a) ⇒
+     ∀a1 a2. R'⁺ a1 a2 ⇒ a1 ≠ a ∧ a2 = a ∨ R⁺ a1 a2``,
+  strip_tac >> Induct_on `R'⁺ a1 a2` >> conj_tac
+  >- metis_tac[relationTheory.TC_SUBSET] >>
+  rpt strip_tac >> simp[]
+  >- metis_tac[TC_in_R]
+  >- metis_tac[TC_in_R] >>
+  metis_tac[relationTheory.TC_RULES]);
+
+(*
+val wfG_add_postaction0 = prove(
+  ``wfG G ⇒ wfG (add_postaction0 a G)``,
+  rw[add_postaction0_def] >>
+  qabbrev_tac `
+    R' = (λsrc tgt. G.edges src tgt ∨ src ∈ G.nodes ∧ touches a tgt ∧ tgt = a)
+  ` >>
+  `∀x y. G.edges x y ∨ x ∈ G.nodes ∧ touches a y ∧ y = a <=> R' x y`
+    by simp[Abbr`R'`] >>
+  markerLib.RM_ALL_ABBREVS_TAC >>
+  fs[wfG_def, iterations0_def] >> reverse (rpt strip_tac)
+  >- (fs[INJ_THM] >> metis_tac[])
+  >- (`∀b. ¬G.edges a b ∧ ¬G.edges b a` by metis_tac[] >>
+      `∀a1 a2. R' a1 a2 ⇒ G.edges a1 a2 ∨ a2 = a ∧ a1 ≠ a`
+        by metis_tac[] >>
+      pop_assum (fn c1 => pop_assum
+        (fn c2 => mp_tac (MATCH_MP add_postaction0_lemma (CONJ c1 c2)))) >>
+      metis_tac[]) >>
+  metis_tac[TC_in_R, touches_SYM]
+*)
 
 val IN_add_action0 = prove(
   ``x ∈ (add_action0 a G).nodes <=>
