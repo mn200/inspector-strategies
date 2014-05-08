@@ -151,4 +151,26 @@ val eval_terminates = store_thm(
   disj1_tac >> rw[] >> Induct_on `pfx` >> simp[] >>
   Induct_on `sfx` >> simp[])
 
+(* ----------------------------------------------------------------------
+    Create an action graph from a PseudoC program.
+
+    Function is partial to allow for possibility that actions
+    parallelised underneath a Par may be touching/conflicting. If this
+    happens, the result has to be NONE.
+   ---------------------------------------------------------------------- *)
+
+(*
+val graphOf_def = Define`
+  (graphOf lm m G0 (IfStmt g t e) =
+     case evalexpr (lm ⊌ m) g of
+       | Bool T => graphOf lm m G0 t
+       | Bool F => graphOf lm m G0 e
+       | _ => NONE) ∧
+  (graphOf lm0 m G0 (Seq cmds) =
+     case cmds of
+       | [] => G0
+       | (lm,c) :: rest => graphOf (lm ⊌ lm0) m (graphOf lm0
+
+`
+*)
 val _ = export_theory();
