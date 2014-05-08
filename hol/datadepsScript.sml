@@ -6,9 +6,6 @@ open lcsymtacs
 
 open actionGraphTheory
 
-fun asimp thl = asm_simp_tac (srw_ss() ++ ARITH_ss) thl
-fun dsimp thl = asm_simp_tac (srw_ss() ++ boolSimps.DNF_ss) thl
-fun csimp thl = asm_simp_tac (srw_ss() ++ boolSimps.CONJ_ss) thl
 fun fds thl = full_simp_tac (srw_ss() ++ boolSimps.DNF_ss) thl
 
 val _ = new_theory "datadeps";
@@ -135,7 +132,7 @@ val loop_to_graph_FOLDR = store_thm(
             emptyG
             [lo ..< hi]``,
   Induct_on `hi - lo` >>
-  asimp[Once loop_to_graph_def,listRangeLHI_EMPTY, listRangeLHI_CONS]);
+  simp[Once loop_to_graph_def,listRangeLHI_EMPTY, listRangeLHI_CONS]);
 
 val eval_apply_action = store_thm(
   "eval_apply_action",
@@ -506,7 +503,7 @@ val same_graphs = store_thm(
     [FOLD_add_action_edges_ALL_DISTINCT, EL_listRangeLHI, EL_MAP] >>
   map_every qx_gen_tac [`a1`, `a2`] >> eq_tac >| [
     disch_then (qx_choosel_then [`i`, `j`] strip_assume_tac) >>
-    map_every qexists_tac [`γ i`, `γ j`] >> asimp[] >>
+    map_every qexists_tac [`γ i`, `γ j`] >> simp[] >>
     qpat_assum `∀i0 i. i < N ∧ ddepR wf rsf i0 i ⇒ δ i0 < δ i`
       (qspecl_then [`γ j`, `γ i`] mp_tac) >>
     simp[ddepR_def] >>
