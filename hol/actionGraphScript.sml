@@ -11,7 +11,7 @@ val _ = Hol_datatype`
     write : 'access ;
     reads : 'access list ;
     expr : 'a list -> 'a;
-    iter : num
+    iter : 'iter
   |>
 `;
 
@@ -49,8 +49,8 @@ val touches_SYM = store_thm(
 
 val _ = Hol_datatype`
   action_graph0 = <|
-    nodes : ('a,'acc) action set;
-    edges : ('a,'acc) action -> ('a,'acc) action set
+    nodes : ('a,'acc,'iter) action set;
+    edges : ('a,'acc,'iter) action -> ('a,'acc,'iter) action set
   |>
 `
 
@@ -60,7 +60,7 @@ val wfG_def = Define`
       (∀a1 a2. G.edges a1 a2 ⇒ touches a1 a2 ∧ a1 ∈ G.nodes ∧ a2 ∈ G.nodes) ∧
       (∀a1 a2. a1 ∈ G.nodes ∧ a2 ∈ G.nodes ∧ touches a1 a2 ∧ a1 ≠ a2 ⇒ (¬G.edges a1 a2 ⇔ G.edges a2 a1)) ∧
       (∀a1 a2. a1 ∈ G.nodes ∧ a2 ∈ G.nodes ∧ G.edges⁺ a1 a2 ⇒ ¬G.edges⁺ a2 a1) ∧
-      INJ (λa. a.iter) G.nodes univ(:num)
+      INJ (λa. a.iter) G.nodes univ(:'iter)
 `;
 
 val touching_actions_link0 = prove(
@@ -91,8 +91,8 @@ val wfEQ_def = Define`
 
 val wfEQ_equiv = store_thm(
   "wfEQ_equiv",
-  ``(∃g:('a,'b) action_graph0. wfEQ g g) ∧
-    (∀x y:('a,'b) action_graph0. wfEQ x y ⇔ wfEQ x x ∧ wfEQ y y ∧ wfEQ x = wfEQ y)``,
+  ``(∃g:('a,'b,'c) action_graph0. wfEQ g g) ∧
+    (∀x y:('a,'b,'c) action_graph0. wfEQ x y ⇔ wfEQ x x ∧ wfEQ y y ∧ wfEQ x = wfEQ y)``,
   rw[wfEQ_def, FUN_EQ_THM] >- metis_tac[wfG_empty] >>
   rw[EQ_IMP_THM] >> simp[]);
 
@@ -559,6 +559,5 @@ val wave_thm = store_thm(
   ``wave G i = MAX_SET { wave G j + 1 | j | j -<G>#-> i }``,
   simp[SimpLHS, Once wave_def] >> AP_TERM_TAC >>
   simp[EXTENSION]);
-
 
 val _ = export_theory();
