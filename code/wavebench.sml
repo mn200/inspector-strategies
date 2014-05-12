@@ -18,20 +18,24 @@ val rowlist = [ 0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 4, 4 ]
 val collist = [ 0, 1, 2, 1, 2, 3, 2, 3, 4, 3, 4, 0, 4 ]
 
 (* put data_org array of reals into environment *)
-val initEnv = envupdate ( empty_env, "data_org", RealVecVal(empty_dv(N,1.0)) )
-val initEnv = envupdate ( initEnv, "sum", RealVecVal(empty_dv(1,0.0)) )
+val initEnv = envupdate ( empty_env, "data_org", 
+                          RealVecVal(empty_dv(Domain1D(0,N),1.0)) )
+val initEnv = envupdate ( initEnv, "sum",
+                          RealVecVal(empty_dv(Domain1D(0,1),0.0)) )
 
 (* put row and col index arrays into environment *)
-val initEnv = envupdate ( initEnv, "row", (IVecVal (list_to_ivector rowlist)) )
-val initEnv = envupdate ( initEnv, "col", (IVecVal (list_to_ivector collist)) )
+val initEnv = envupdate ( initEnv, "row", 
+                          (IVecVal (list_to_ivector rowlist (Domain1D(0,N)))) )
+val initEnv = envupdate ( initEnv, "col", 
+                          (IVecVal (list_to_ivector collist (Domain1D(0,N)))) )
 
 (* Specification of the original computation *)
 val summation = AssignStmt("sum",Const(0),
                            [Read("data_org",ISub("row",VarExp("p"))),
                             Read("data_org",ISub("col",VarExp("p")))],
                            (fn xi::xj::[] =>
-                                FOR (0,workPerIter)
-                                    (fn k => fn sum =>
+                                FOR (Domain1D(0,workPerIter))
+                                    (fn Tuple1D(k) => fn sum =>
 (print ("sum = " ^ (Real.toString(sum))^"\n");
                                         sum + (1.0 / Math.exp(real(k)*xi*xj))) )
                                     0.0 ) )
@@ -59,7 +63,7 @@ val original_test = dvector_to_list( getrealvec(
 (* Using parameters nnz, N, row, col, and initEnv
  * from above original computation. 
  *)
-
+(*
 val inspector = SeqStmt(
         [ Malloc("lw_iter", N, ~1, nnz) ] )
 
@@ -72,3 +76,4 @@ val inspector_test = ivector_to_list( getivec(
 max_wave = MAX(max_wave,wave[p]);
 
 AssignVar("max_wave", Opn( [VarExp("max_wave"), Convert( 
+*)

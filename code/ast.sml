@@ -59,10 +59,10 @@ fun evaliexp exp env =
     case exp of
 
         (* iterator or parameter variable read *)
-        VarExp id => getint(envlookup(env, id))
+        VarExp id => Tuple1D(getint(envlookup(env, id)))
 
         (* constant integer value *) 
-        | Const x => x 
+        | Const x => Tuple1D(x) 
 
         (* index array read, e.g., f(i) *)
         | ISub(id,e) => isub( getivec(envlookup(env,id)), (evaliexp e env) )
@@ -70,7 +70,8 @@ fun evaliexp exp env =
 (* FIXME: right now returns a real, later should return DValue? *)
 fun evaldexp de env =
     case de of
-        Convert (exp) => Real.fromInt(evaliexp exp env)
+        Convert (exp) => let val Tuple1D(i) = evaliexp exp env 
+                         in Real.fromInt(i) end
       | Read (id,exp) => dsub(getrealvec(envlookup(env,id)),(evaliexp exp env))
       | DValue(v) => v 
 
@@ -92,17 +93,19 @@ fun evalstmt ast env =
       (* Allocate and initialize an int vector in environment. *)
       (* FIXME: need to let initval type drive what is put in env *)
       | Malloc (Aname, num, initval, range) =>
-        envupdate( env, Aname,
-                   IVecVal( 
-                       FOR (0,num)
+        envupdate( env, Aname, IVecVal( 
+                       empty_iv(Domain1D(0,num),Domain1D(0,range),
+                                Tuple1D(initval)) ) )
+(*
+                       FOR (Domain1D(0,num))
                            (fn i => fn ivec =>
-                               iupdate(ivec,i,initval))
+                               iupdate(ivec,i,Tuple1D(initval)))
                            (empty_iv(num,range)) ) )
-
+*)
       (* Right now the interpretation of ForLoop assumes lb=0. *)
       | ForLoop (itername,lb,ub,bodyast) =>
-        FOR (0,ub)
-            (fn iterval => fn env =>
+        FOR (Domain1D(0,ub))
+            (fn Tuple1D(iterval) => fn env =>
                 let 
                     val env = envupdate(env, itername, IntVal(iterval))
                 in 
@@ -114,8 +117,8 @@ fun evalstmt ast env =
       (* FIXME: need some way of doing random ordering of evaluations to
        * model concurrency. *)
       | ParForLoop (itername,lb,ub,bodyast) =>
-        FOR (0,ub)
-            (fn iterval => fn env =>
+        FOR (Domain1D(0,ub))
+            (fn Tuple1D(iterval) => fn env =>
                 let 
                     val env = envupdate(env, itername, IntVal(iterval))
                 in 
