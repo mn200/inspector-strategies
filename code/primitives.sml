@@ -83,17 +83,19 @@ struct
       ((fn Tuple1D(i) => Vector.sub(Vector.fromList l,i)), Domain1D(0,length l))
 
   (* specific to Domain1D *)
-  fun list_to_ivector l =
+  fun list_to_ivector l valdom =
       let val vec = Vector.fromList l
+          val firstval = Vector.sub(vec,0)
       in
 	  ((fn Tuple1D(i) => Tuple1D(Vector.sub(vec,i))), 
 	   Domain1D(0,length l),
-	   (* compute the max value for values, assume 0 is min *)
-           Domain1D(0,
-	            foldl (fn (v,max) => if v>max then v else max)
-		          0 
-		          l
-	           ) )
+           valdom)
+(*
+	   (* compute the min and max value for values, not always sufficient
+              because function being modeled might not be onto *)
+           Domain1D((foldl (fn (v,min) => if v<min then v else min) firstval l),
+                    (foldl (fn (v,max) => if v>max then v else max) firstval l)
+                   ) *)
       end
 
 
@@ -163,6 +165,17 @@ struct
             0
 
     end
+
+  (* assumes a dvector of ints and prints them, evals to count *)
+  fun dump_ivector  v vstr =
+      FOR (idomx v)
+          (fn Tuple1D(i) => fn count =>
+              let val Tuple1D(j) = isub(v,Tuple1D(i))
+              in
+                  (print(vstr^"["^Int.toString(i)^"]="
+                         ^Int.toString(j)^"\n"); count+1 ) 
+              end )
+            0
 
 end
 

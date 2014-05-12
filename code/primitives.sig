@@ -57,7 +57,7 @@ sig
   (* utility functions for testing and initialization *)
   (* FIXME: interface would have to change for other than 1D domains *)
   val list_to_dvector : 'a list -> 'a dvector
-  val list_to_ivector : int list -> ivector
+  val list_to_ivector : int list -> domain -> ivector (* value domain *)
   val dvector_to_list : 'a dvector -> 'a list
   val ivector_to_list : ivector -> int list
   val list_to_mrel : (domain*domain) -> (int * int) list -> mrelation
@@ -103,4 +103,5 @@ sig
 
   (* debugging routines *)
   val dump_dvector : int dvector -> string -> int
+  val dump_ivector : ivector -> string -> int
 end

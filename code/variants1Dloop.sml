@@ -15,12 +15,6 @@ use "primitives.sml";
 open primitives
 
 (* dump routines for debugging *)
-(*fun dump_dvector v vstr =
-    FOR (0,dsizex(v))
-        (fn i => fn count =>
-            (print(vstr^"["^Int.toString(i)^"]="^Int.toString(dsub(v,i))^"\n"); dsub(v,i)))
-        0
-*)
 (*
 (* when dvector has a boolean value, ick *)
 fun dump_bvector v vstr =
@@ -104,10 +98,15 @@ fun orgcode (B,C,f,g,N) =
 (* M is the domain  [0,M). *)
 (* N is the range  [0,N) or possible values of i. *)
 fun construct_explicit_relation (M,N,f,g) =
-    FOR M
+let val debug = dump_ivector f "f = "
+    val debug = dump_ivector g "g = "
+    val Domain1D(lb,ub) = M
+    val Domain1D(lb,ub) = N
+in
+    FOR N
         (fn i => fn E => r_update(r_update(E,isub(f,i),i), isub(g,i),i))
         (empty_r (M,N))
-
+end
 
 (* Using 0 and 1 for false and true because that is what mvector handles. *)
 fun cpack_inspector (E) =
@@ -130,7 +129,6 @@ fun cpack_inspector (E) =
                      pack(dinv,visited,count,y))
                  E
                  (empty_iv(rdomy(E),rdomy(E),Tuple1D(0)), visited, count)
-
         (* do cleanup on dinv to ensure all y's in relation have 
          * been ordered in dinv *)
         val (dinv,visited,count) =       
@@ -567,7 +565,7 @@ fun data_permute_inspector(R_A,W_A,A) =
                        (RFOR X
                              (fn (i,x) => fn c2d => r_update(c2d,i,x))
                              W_A
-                             (empty_r(rdomx(R_A),rdomx(W_A))))
+                             (empty_r(rdomx(R_A),rdomy(R_A))))
 
         val sinv = cpack_inspector(c2d)
 
@@ -809,10 +807,10 @@ fun pack_waves_fast wave =
                     in dupdate(wcount,w,dsub(wcount,w)+1)
                     end)
                 (empty_dv (idomy(wave),0))
-
         (* determine where to start putting iterations for each wave *)
         val wstart =
-            FOR (ddomx(wcount))
+            (* FIXME: assuming that ddomx starts at 0 *)
+            FOR (Domain1D(1,size_domain(ddomx(wcount))))
                 (fn Tuple1D(i) => fn wstart =>
                     dupdate(wstart,Tuple1D(i),
                             dsub(wstart,Tuple1D(i-1))
