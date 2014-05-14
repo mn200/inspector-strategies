@@ -162,7 +162,7 @@ int main(int argc, char ** argv) {
     timer_start(&inspector_timer);
     
     //===== find_waves_fast variant, see 3/17/14 in SPFproofs-log.txt
-    // possible optimizations: could do a single calloc for below
+    // see 5/14/14 for optimizations, combining mallocs hurt perf on Mac
     
     // need lw_iter and lr_iter for each element in data array
     int* lw_iter=(int*)malloc(sizeof(int)*(mat->nrows));
