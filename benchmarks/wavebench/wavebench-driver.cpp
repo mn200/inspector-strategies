@@ -173,8 +173,6 @@ int main(int argc, char ** argv) {
     int* wave=(int*)malloc(sizeof(int)*nnz);
     for (int i=0; i<nnz; i++) { wave[i] = 0; }
     // will keep a count per wave, max number of waves is number of iterations
-//    int* count=(int*)malloc(sizeof(int)*nnz);
-//    for (int i=1; i<nnz; i++) { count[i] = 0; }
     int max_wave = 0;
     
     // Iterating over iterations and how those iterations access data
@@ -184,7 +182,6 @@ int main(int argc, char ** argv) {
     // are put into each wave.
     // p=0 will always be in wave 0 and its lr_iter and lw_iter will
     // be taken care of when p=1.
-//    count[0] = 1; // iteration p=0 is in wave 0
     for (int p=1; p<nnz; p++) {
         // last iteration read and wrote row[p-1] and col[p-1]
         lr_iter[row[p-1]] = p-1;
@@ -206,7 +203,6 @@ int main(int argc, char ** argv) {
 
         // count up number of iterations in each wave
         max_wave = MAX(max_wave,wave[p]);
-//        count[wave[p]]++;   
     }
     
     // collect iterations per wave in CSR-like data structure
@@ -233,25 +229,7 @@ int main(int argc, char ** argv) {
             printf("w=%d, wavestart[w]=%d, p=%d\n", w, wavestart[w], p);
         }
     }
-    
-    /* Old version of this using count
-    // possible optimization: wavestart can reuse count storage
-    wavestart[0] = 0;  // where the iterations for wave 0 start
-    for (int w=1; w<max_wave+2; w++) {
-        // where the iterations for wave w start
-        wavestart[w] = wavestart[w-1] + count[w-1];
-    }
-    int* wavefronts=(int*)malloc(sizeof(int)*nnz);
-    for (int p=nnz-1; p>=0; p--) {
-        int w = wave[p];
-        count[w]--;
-        wavefronts[wavestart[w]+count[w]] = p;
-        if (debug) {
-            printf("w=%d, wavestart[w]=%d, count[w]=%d, p=%d\n",
-                    w, wavestart[w], count[w], p);
-        }
-    } */ 
-    
+        
     timer_end(&inspector_timer);    
 
     // The wavefront executor
