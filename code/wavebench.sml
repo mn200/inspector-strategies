@@ -85,20 +85,65 @@ val original_test = print (genCstmt original 0)
 (* Using parameters nnz, N, row, col, and initEnv
  * from above original computation. 
  *)
-(*
+
 val inspector = SeqStmt(
-        [ Malloc("lw_iter", Domain1D(0,N), Domain1D(~1,nnz), Tuple1D(~1)),
-          Malloc("lr_iter", Domain1D(0,N), Domain1D(~1,nnz), Tuple1D(~1)),
-          Malloc("wave", Domain1D(0,nnz), Domain1D(0,nnz), Tuple1D(0)),
-          Malloc("count", Domain1D(0,nnz), Domain1D(0,nnz), Tuple1D(0))
+        [ Malloc("lw_iter", VarExp("N"), Int(~1)),
+          Malloc("lr_iter", VarExp("N"), Int(~1)),
+          Malloc("wave", VarExp("nnz"), Int(0)),
+          AssignVar("max_wave",Value(Int(0))),
+          ForLoop("p",D1D(Value(Int(1)),VarExp("nnz")),
+                  SeqStmt([
+                    Assign("lr_iter",
+                           ARead("row",Minus(VarExp("p"),Value(Int(1)))),
+                           Minus(VarExp("p"),Value(Int(1)))),
+                    Assign("lr_iter",
+                           ARead("col",Minus(VarExp("p"),Value(Int(1)))),
+                           Minus(VarExp("p"),Value(Int(1)))),
+                    Assign("lw_iter",
+                           ARead("row",Minus(VarExp("p"),Value(Int(1)))),
+                           Minus(VarExp("p"),Value(Int(1)))),
+                    Assign("lw_iter",
+                           ARead("col",Minus(VarExp("p"),Value(Int(1)))),
+                           Minus(VarExp("p"),Value(Int(1)))),
+                    AssignVar("r",ARead("row",VarExp("p"))),
+                    AssignVar("c",ARead("col",VarExp("p"))),
+                    IfStmt(CmpGTE(ARead("lw_iter",VarExp("r")),Value(Int(0))),
+                           Assign("wave",VarExp("p"),
+                                  Max(ARead("wave",VarExp("p")),
+                                      Plus(ARead("wave",
+                                                 ARead("lw_iter",VarExp("r"))),
+                                           Value(Int(1))))),
+                          SeqStmt([])),
+                    IfStmt(CmpGTE(ARead("lr_iter",VarExp("r")),Value(Int(0))),
+                           Assign("wave",VarExp("p"),
+                                  Max(ARead("wave",VarExp("p")),
+                                      Plus(ARead("wave",
+                                                 ARead("lw_iter",VarExp("r"))),
+                                           Value(Int(1))))),
+                          SeqStmt([])),
+                    IfStmt(CmpGTE(ARead("lw_iter",VarExp("c")),Value(Int(0))),
+                           Assign("wave",VarExp("p"),
+                                  Max(ARead("wave",VarExp("p")),
+                                      Plus(ARead("wave",
+                                                 ARead("lw_iter",VarExp("c"))),
+                                           Value(Int(1))))),
+                          SeqStmt([])),
+                    IfStmt(CmpGTE(ARead("lr_iter",VarExp("c")),Value(Int(0))),
+                           Assign("wave",VarExp("p"),
+                                  Max(ARead("wave",VarExp("p")),
+                                      Plus(ARead("wave",
+                                                 ARead("lr_iter",VarExp("c"))),
+                                           Value(Int(1))))),
+                          SeqStmt([])),
+                    AssignVar("max_wave",Max(VarExp("max_wave"),
+                                             ARead("wave",VarExp("p"))))
+                         ]) ),
+          Malloc("wavestart",  VarExp("max_wave"), Int(0))
         ]
  )
 
-val inspector_test = ivector_to_list( getivec( 
-                                          envlookup 
-                                              ( (evalstmt inspector initEnv),
-                                              "lr_iter" )) )
-*)
+val inspector_test = print (genCstmt inspector 0)
+
 (*
 max_wave = MAX(max_wave,wave[p]);
 

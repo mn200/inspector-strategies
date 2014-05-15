@@ -39,6 +39,9 @@ datatype expr =
          | Exp of expr      (* exponent function *)
          | Convert of expr  (* convert an integer to a double *)
 
+         (* comparison operations *)
+         | CmpGTE of expr * expr
+
 
 datatype domain =
          D1D of expr * expr
@@ -60,8 +63,12 @@ datatype stmt =
          (* Assignment to scalar *)
          | AssignVar of string * expr        (* var = rhs *)
 
-         (* Aname, size, initval *)
-         | Malloc of string * int * value
+         (* If-the-else statement *)
+         | IfStmt of expr * stmt * stmt
+
+         (* Aname, size expression, initval *)
+         (* initval is not an expression so can easily get type info *)
+         | Malloc of string * expr * value
 
          (* for ( lb <= i < ub ) body *)
          (* one string for one iterator *)
@@ -96,6 +103,8 @@ fun genCexpr ast =
       | Exp(e1) => "exp("^(genCexpr e1)^")"
       | Convert(e1) => "(double)("^(genCexpr e1)^")"
 
+      | CmpGTE(e1,e2) => "("^(genCexpr e1)^")>=("^(genCexpr e2)^")"
+
 (* lvl specifies the current tab level, should usually start at 0 *)
 fun genCstmt ast lvl =
     (* 4 spaces of indentation per level *)
@@ -112,6 +121,12 @@ fun genCstmt ast lvl =
 
           | AssignVar(var,rhs) =>
             (indent lvl) ^ var^" = "^(genCexpr rhs)^";\n"
+
+          | IfStmt(e,thenbody,elsebody) =>
+            (indent lvl) ^"if ("^(genCexpr e)^") {\n"
+            ^(genCstmt thenbody (lvl+1))
+            ^(genCstmt elsebody (lvl+1))
+            ^(indent lvl)^"}\n"
 
           (* FIXME: output init code *)                               
           | Malloc(id,sz,Int(n)) =>
