@@ -862,100 +862,12 @@ val FOLDR_add_iterupd = store_thm(
   fs[]);
 
 (* ----------------------------------------------------------------------
-    Merging graphs, second graph is added to the "back" of the first.
+    Generic graph "evaluation"
    ---------------------------------------------------------------------- *)
-
-val (merge_graphR_rules, merge_graphR_ind, merge_graphR_cases) = Hol_reln`
-  (∀g. merge_graphR g emptyG g)
-
-     ∧
-
-  (∀a g g1 g2.
-     a ∈ g2 ∧ (∀a'. a' ∈ g2 ⇒ a' -<g2>/-> a) ∧
-     merge_graphR (add_postaction a g1) (g2 \\ a) g ⇒
-     merge_graphR g1 g2 g)
-`;
-
-val merge_graphR_total = store_thm(
-  "merge_graphR_total",
-  ``!g1 g2. ∃g. merge_graphR g1 g2 g``,
-  Induct_on `gCARD g2` >- dsimp[Once merge_graphR_cases] >>
-  rpt strip_tac >> `ag_nodes g2 ≠ ∅` by (strip_tac >> fs[]) >>
-  `∃a. a ∈ g2 ∧ ∀a'. a' ∈ g2 ⇒ a' -<g2>/-> a`
-    by metis_tac[nonempty_wfG_has_points] >>
-  `gCARD (g2 \\ a) = v` by simp[] >>
-  metis_tac[merge_graphR_rules]);
-
-val merge_graphR_det = store_thm(
-  "merge_graphR_det",
-  ``∀g1 g g'. merge_graphR g1 g2 g ∧ merge_graphR g1 g2 g' ⇒ g' = g``,
-  completeInduct_on `gCARD g2` >> qx_gen_tac `g2` >>
-  qmatch_rename_tac `n = gCARD g2 ⇒ XX` ["XX"] >> strip_tac >>
-  map_every qx_gen_tac [`g1`, `g`, `g'`] >> strip_tac >>
-  Cases_on `g2 = emptyG`
-  >- (RULE_ASSUM_TAC (ONCE_REWRITE_RULE [merge_graphR_cases]) >> fs[]) >>
-  `0 < gCARD g2`
-    by (simp[] >> spose_not_then assume_tac >>
-        fs[DECIDE ``¬(0 < n) ⇔ n = 0``]) >>
-  Q.UNDISCH_THEN `merge_graphR g1 g2 g` mp_tac >>
-  simp[Once merge_graphR_cases] >>
-  disch_then (qx_choose_then `a1` strip_assume_tac) >>
-  Q.UNDISCH_THEN `merge_graphR g1 g2 g'` mp_tac >>
-  simp[Once merge_graphR_cases] >>
-  disch_then (qx_choose_then `a2` strip_assume_tac) >>
-  Cases_on `a1 = a2`
-  >- (`gCARD (g2 \\ a2) < n` by simp[] >> metis_tac[]) >>
-  `¬touches a1 a2` by metis_tac[touching_actions_link] >>
-  `a1.iter ≠ a2.iter` by metis_tac[iter_11] >>
-  `a2 ∈ g2 \\ a1 ∧ a1 ∈ g2 \\ a2` by simp[] >>
-  `g2 \\ a2 \\ a1 = g2 \\ a1 \\ a2`
-    by (simp[graph_equality] >> metis_tac[]) >>
-  `∀a'. a' ∈ g2 \\ a2 ⇒ a' -<g2 \\ a2>/-> a1` by simp[] >>
-  `∀a'. a' ∈ g2 \\ a1 ⇒ a' -<g2 \\ a1>/-> a2` by simp[] >>
-  `∃G. merge_graphR (add_postaction a1 (add_postaction a2 g1))
-                    (g2 \\ a2 \\ a1) G`
-     by metis_tac[merge_graphR_total] >>
-  `add_postaction a1 (add_postaction a2 g1) =
-   add_postaction a2 (add_postaction a1 g1)`
-    by (simp[graph_equality] >> conj_tac
-        >- dsimp[EQ_IMP_THM] >>
-        simp[add_postaction_edges, EQ_IMP_THM] >> rw[] >> fs[] >>
-        metis_tac[touches_SYM]) >>
-  `gCARD (g2 \\ a1) < n ∧ gCARD (g2 \\ a2) < n` by simp[] >>
-  metis_tac[merge_graphR_rules])
-
-val merge_graph_def = new_specification(
-  "merge_graph_def", ["merge_graph"],
-  SIMP_RULE bool_ss [SKOLEM_THM] merge_graphR_total);
-
-val merge_graph_thm = store_thm(
-  "merge_graph_thm",
-  ``merge_graph g1 emptyG = g1 ∧
-    (a.iter ∉ iterations g2 ⇒
-     merge_graph g1 (add_action a g2) = merge_graph (add_postaction a g1) g2)``,
-  conj_tac
-  >- (`merge_graphR g1 emptyG g1` by simp[merge_graphR_rules] >>
-      metis_tac[merge_graph_def, merge_graphR_det]) >>
-  strip_tac >>
-  `a ∈ a ⊕ g2` by simp[] >>
-  `a ∉ g2` by (strip_tac >> fs[iterations_thm]) >>
-  `∀a'. a' ∈ a ⊕ g2 ⇒ a' -<a ⊕ g2>/-> a`
-    by (dsimp[add_action_edges] >>
-        simp[] >> qx_gen_tac `b` >> rpt strip_tac >>
-        `b -<g2>/-> a` suffices_by simp[] >> strip_tac >>
-        metis_tac [IN_edges]) >>
-  `merge_graphR (add_postaction a g1) g2
-      (merge_graph (add_postaction a g1) g2)`
-    by metis_tac[merge_graph_def] >>
-  `(a ⊕ g2) \\ a = g2`
-    by (csimp[graph_equality, add_action_edges] >> metis_tac[IN_edges]) >>
-  `merge_graphR g1 (a ⊕ g2) (merge_graph (add_postaction a g1) g2)`
-    by metis_tac[merge_graphR_rules] >>
-  metis_tac[merge_graphR_det, merge_graph_def]);
 
 val (genEvalG_rules, genEvalG_ind, genEvalG_cases) = Hol_reln`
   (∀s. genEvalG ap s emptyG s) ∧
-  (∀s0 g.
+  (∀s0 g a s.
      a ∈ g ∧ (∀a'. a' ∈ g ⇒ a' -<g>/-> a) ∧
      genEvalG ap (ap a s0) (g \\ a) s  ⇒
      genEvalG ap s0 g s)
@@ -978,7 +890,8 @@ val genEvalG_total = store_thm(
 
 val genEvalG_det = store_thm(
   "genEvalG_det",
-  ``(∀a1 a2 s. ¬touches a1 a2 ⇒ ap a2 (ap a1 s) = ap a1 (ap a2 s)) ⇒
+  ``(∀a1 a2 s. ¬touches a1 a2 ∧ a1.iter ≠ a2.iter ⇒
+               ap a2 (ap a1 s) = ap a1 (ap a2 s)) ⇒
     ∀s0 g s1 s2. genEvalG ap s0 g s1 ∧ genEvalG ap s0 g s2 ⇒ s1 = s2``,
   strip_tac >> rpt gen_tac >> map_every qid_spec_tac [`s0`, `s1`, `s2`] >>
   completeInduct_on `gCARD g` >> qx_gen_tac `g` >>
@@ -1008,5 +921,55 @@ val genEvalG_det = store_thm(
   `ap a1 (ap a2 s0) = ap a2 (ap a1 s0)` by metis_tac[] >>
   `gCARD (g \\ a1) < n ∧ gCARD (g \\ a2) < n` by simp[] >>
   metis_tac[genEvalG_rules])
+
+(* ----------------------------------------------------------------------
+    Merging graphs, second graph is added to the "back" of the first.
+   ---------------------------------------------------------------------- *)
+
+val merge_graph_exists =
+    genEvalG_total |> SPEC_ALL |> Q.GENL [`g`, `s0`, `ap`]
+                   |> Q.ISPEC `add_postaction`
+                   |> SIMP_RULE bool_ss [SKOLEM_THM]
+
+val add_postaction_commutes = store_thm(
+  "add_postaction_commutes",
+  ``∀a1 a2 g. ¬touches a1 a2 ∧ a1.iter ≠ a2.iter ⇒
+              add_postaction a2 (add_postaction a1 g) =
+              add_postaction a1 (add_postaction a2 g)``,
+  rpt strip_tac >>
+  simp[graph_equality, add_postaction_edges] >> conj_tac
+  >- dsimp[EQ_IMP_THM] >>
+  simp[EQ_IMP_THM] >> rw[] >> fs[] >> metis_tac[touches_SYM])
+
+val merge_graph_def = new_specification(
+  "merge_graph_def", ["merge_graph"], merge_graph_exists)
+
+val mergeR_det = MATCH_MP genEvalG_det add_postaction_commutes
+
+val merge_graph_thm = store_thm(
+  "merge_graph_thm",
+  ``merge_graph g1 emptyG = g1 ∧
+    (a.iter ∉ iterations g2 ⇒
+     merge_graph g1 (add_action a g2) = merge_graph (add_postaction a g1) g2)``,
+  conj_tac
+  >- (`genEvalG add_postaction g1 emptyG g1` by simp[genEvalG_rules] >>
+      metis_tac[merge_graph_def, mergeR_det]) >>
+  strip_tac >>
+  `a ∈ a ⊕ g2` by simp[] >>
+  `a ∉ g2` by (strip_tac >> fs[iterations_thm]) >>
+  `∀a'. a' ∈ a ⊕ g2 ⇒ a' -<a ⊕ g2>/-> a`
+    by (dsimp[add_action_edges] >>
+        simp[] >> qx_gen_tac `b` >> rpt strip_tac >>
+        `b -<g2>/-> a` suffices_by simp[] >> strip_tac >>
+        metis_tac [IN_edges]) >>
+  `genEvalG add_postaction (add_postaction a g1) g2
+      (merge_graph (add_postaction a g1) g2)`
+    by metis_tac[merge_graph_def] >>
+  `(a ⊕ g2) \\ a = g2`
+    by (csimp[graph_equality, add_action_edges] >> metis_tac[IN_edges]) >>
+  `genEvalG add_postaction g1 (a ⊕ g2)
+       (merge_graph (add_postaction a g1) g2)`
+    by metis_tac[genEvalG_rules] >>
+  metis_tac[mergeR_det, merge_graph_def]);
 
 val _ = export_theory();
