@@ -953,4 +953,60 @@ val merge_graph_thm = store_thm(
     by metis_tac[merge_graphR_rules] >>
   metis_tac[merge_graphR_det, merge_graph_def]);
 
+val (genEvalG_rules, genEvalG_ind, genEvalG_cases) = Hol_reln`
+  (∀s. genEvalG ap s emptyG s) ∧
+  (∀s0 g.
+     a ∈ g ∧ (∀a'. a' ∈ g ⇒ a' -<g>/-> a) ∧
+     genEvalG ap (ap a s0) (g \\ a) s  ⇒
+     genEvalG ap s0 g s)
+`
+
+val genEvalG_empty = store_thm(
+  "genEvalG_empty[simp]",
+  ``genEvalG ap s1 emptyG s2 ⇔ (s1 = s2)``,
+  simp[Once genEvalG_cases] >> metis_tac[]);
+
+val genEvalG_total = store_thm(
+  "genEvalG_total",
+  ``∀g s0. ∃s. genEvalG ap s0 g s``,
+  gen_tac >> Induct_on `gCARD g` >> simp[] >>
+  rpt strip_tac >> `ag_nodes g ≠ ∅` by (strip_tac >> fs[]) >>
+  `∃a. a ∈ g ∧ ∀a'. a' ∈ g ⇒ a' -<g>/-> a`
+    by metis_tac[nonempty_wfG_has_points] >>
+  `gCARD (g \\ a) = v` by simp[] >>
+  metis_tac[genEvalG_rules]);
+
+val genEvalG_det = store_thm(
+  "genEvalG_det",
+  ``(∀a1 a2 s. ¬touches a1 a2 ⇒ ap a2 (ap a1 s) = ap a1 (ap a2 s)) ⇒
+    ∀s0 g s1 s2. genEvalG ap s0 g s1 ∧ genEvalG ap s0 g s2 ⇒ s1 = s2``,
+  strip_tac >> rpt gen_tac >> map_every qid_spec_tac [`s0`, `s1`, `s2`] >>
+  completeInduct_on `gCARD g` >> qx_gen_tac `g` >>
+  qmatch_rename_tac `n = gCARD g ⇒ XX` ["XX"] >> strip_tac >>
+  map_every qx_gen_tac [`s2`, `s1`, `s0`] >> strip_tac >>
+  Cases_on `g = emptyG`
+  >- (RULE_ASSUM_TAC (ONCE_REWRITE_RULE [genEvalG_cases]) >> fs[]) >>
+  `0 < gCARD g`
+    by (simp[] >> spose_not_then assume_tac >> fs[]) >>
+  Q.UNDISCH_THEN `genEvalG ap s0 g s1` mp_tac >>
+  simp[Once genEvalG_cases] >>
+  disch_then (qx_choose_then `a1` strip_assume_tac) >>
+  Q.UNDISCH_THEN `genEvalG ap s0 g s2` mp_tac >>
+  simp[Once genEvalG_cases] >>
+  disch_then (qx_choose_then `a2` strip_assume_tac) >>
+  Cases_on `a1 = a2`
+  >- (`gCARD (g \\ a2) < n` by simp[] >> metis_tac[]) >>
+  `¬touches a1 a2` by metis_tac[touching_actions_link] >>
+  `a1.iter ≠ a2.iter` by metis_tac[iter_11] >>
+  `a2 ∈ g \\ a1 ∧ a1 ∈ g \\ a2` by simp[] >>
+  `g \\ a2 \\ a1 = g \\ a1 \\ a2`
+    by (simp[graph_equality] >> metis_tac[]) >>
+  `∀a'. a' ∈ g \\ a2 ⇒ a' -<g \\ a2>/-> a1` by simp[] >>
+  `∀a'. a' ∈ g \\ a1 ⇒ a' -<g \\ a1>/-> a2` by simp[] >>
+  `∃s. genEvalG ap (ap a1 (ap a2 s0)) (g \\ a2 \\ a1) s`
+     by metis_tac[genEvalG_total] >>
+  `ap a1 (ap a2 s0) = ap a2 (ap a1 s0)` by metis_tac[] >>
+  `gCARD (g \\ a1) < n ∧ gCARD (g \\ a2) < n` by simp[] >>
+  metis_tac[genEvalG_rules])
+
 val _ = export_theory();
