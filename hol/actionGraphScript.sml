@@ -922,6 +922,34 @@ val genEvalG_det = store_thm(
   `gCARD (g \\ a1) < n ∧ gCARD (g \\ a2) < n` by simp[] >>
   metis_tac[genEvalG_rules])
 
+val genEvalG_imap_irrelevance = store_thm(
+  "genEvalG_imap_irrelevance",
+  ``(∀a f s. ap (a with iter updated_by f) s = ap a s) ⇒
+    ∀s0 G s.
+      genEvalG ap s0 G s ⇒
+      ∀f. INJ f (iterations G) UNIV ⇒ genEvalG ap s0 (imap f G) s``,
+  strip_tac >> Induct_on `genEvalG` >> rpt strip_tac >> simp[imap_emptyG] >>
+  match_mp_tac (genEvalG_rules |> SPEC_ALL |> CONJUNCT2) >>
+  dsimp[imap_edges] >>
+  qexists_tac `a` >> simp[] >>
+  `∀a1 a2. a1 ∈ G ∧ a2 ∈ G ⇒
+           (a1 with iter updated_by f = a2 with iter updated_by f ⇔
+            a1 = a2)`
+    by (rpt strip_tac >> fds[INJ_THM, iterations_thm] >> simp[EQ_IMP_THM] >>
+        simp[action_component_equality]) >>
+  reverse conj_tac
+  >- (`INJ f (iterations (G \\ a)) UNIV` by fds[INJ_THM, iterations_thm] >>
+      `imap f G \\ (a with iter updated_by f) = imap f (G \\ a)`
+         suffices_by simp[] >>
+      dsimp[graph_equality, imap_edges, EQ_IMP_THM, IN_imap] >> csimp[] >>
+      rpt strip_tac
+      >- (ntac 2 (pop_assum mp_tac) >> imp_res_tac IN_edges >> simp[] >>
+          metis_tac[]) >>
+      metis_tac[IN_edges]) >>
+  rpt gen_tac >>
+  qmatch_rename_tac `a0 ∈ G ⇒ a1' -<G>/-> a2' ∨ XX` ["XX"] >> strip_tac >>
+  Cases_on `a1' -<G>-> a2'` >> simp[] >> metis_tac[IN_edges]);
+
 (* ----------------------------------------------------------------------
     Merging graphs, second graph is added to the "back" of the first.
    ---------------------------------------------------------------------- *)

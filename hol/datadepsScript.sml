@@ -33,77 +33,13 @@ val nontouching_actions_commute = store_thm(
       simp[update_sub, MAP_vsub]) >>
   simp[update_sub, MAP_vsub]);
 
-val (evalG_rules,evalG_ind,evalG_cases) = Hol_reln`
-  (∀A. evalG A emptyG A) ∧
-  (∀a A0 G A.
-      a ∈ G ∧ (∀a'. a' ∈ G ⇒ a' -<G>/-> a) ∧
-      evalG (apply_action a A0) (G \\ a) A ⇒
-      evalG A0 G A)
-`;
-
-val evalG_EMPTY = store_thm(
-  "evalG_EMPTY",
-  ``evalG A0 emptyG A ⇔ A = A0``,
-  simp[Once evalG_cases]);
-val _ = export_rewrites ["evalG_EMPTY"]
-
-val INSERT_11 = store_thm(
-  "INSERT_11",
-  ``e ∉ s1 ∧ e ∉ s2 ⇒ (e INSERT s1 = e INSERT s2 ⇔ s1 = s2)``,
-  simp[EQ_IMP_THM] >> simp[EXTENSION] >> metis_tac[]);
-
-val evalG_total = store_thm(
-  "evalG_total",
-  ``∃A'. evalG A G A'``,
-  qid_spec_tac `A` >> Induct_on `gCARD G`
-  >- (simp[Once evalG_cases] >> metis_tac[gCARD_EQ_0]) >>
-  rpt strip_tac >>
-  `ag_nodes G ≠ ∅` by (strip_tac >> fs[]) >>
-  `∃a. a ∈ G ∧ ∀a'. a' ∈ G ⇒ a' -<G>/-> a`
-    by metis_tac[nonempty_wfG_has_points] >>
-  `gCARD (G \\ a) = v` by simp[] >>
-  metis_tac[evalG_rules]);
-
-
+val _ = overload_on("evalG", ``genEvalG apply_action``)
+val evalG_rules = genEvalG_rules |> Q.ISPEC `apply_action`
 
 val graphs_evaluate_deterministically = store_thm(
   "graphs_evaluate_deterministically",
   ``evalG A0 G A ⇒ ∀A'. evalG A0 G A' ⇒ A' = A``,
-  map_every qid_spec_tac [`A0`, `A`] >>
-  completeInduct_on `gCARD G` >> qx_gen_tac `G` >>
-  qmatch_rename_tac `n = gCARD G ⇒ XX` ["XX"] >> strip_tac >>
-  map_every qx_gen_tac [`A`, `A0`] >> strip_tac >>
-  qx_gen_tac `A'` >> strip_tac >>
-  fds [AND_IMP_INTRO, GSYM CONJ_ASSOC] >> rw[] >>
-  qpat_assum `evalG A0 G A` mp_tac >>
-  simp[Once evalG_cases] >>
-  disch_then (DISJ_CASES_THEN2
-                strip_assume_tac
-                (qx_choose_then `a1` strip_assume_tac))
-  >- fs[] >>
-  `G ≠ emptyG` by (strip_tac >> fs[]) >>
-  qpat_assum `evalG XX YY A'` mp_tac >>
-  simp[Once evalG_cases] >>
-  disch_then (qx_choose_then `a2` strip_assume_tac) >>
-  Cases_on `a2 = a1`
-  >- (rw[] >> first_x_assum (qspecl_then [`G \\ a1`, `A'`] match_mp_tac) >>
-      qexists_tac `apply_action a1 A0` >> simp[] >>
-      metis_tac[NOT_IN_EMPTY, emptyG_nodes, gCARD_EQ_0,
-                DECIDE ``¬(0 < x) ⇔ x = 0``]) >>
-  `apply_action a1 (apply_action a2 A0) = apply_action a2 (apply_action a1 A0)`
-    by (match_mp_tac nontouching_actions_commute >>
-        metis_tac [touching_actions_link]) >>
-  `∃A2. evalG (apply_action a1 (apply_action a2 A0)) (G \\ a1 \\ a2) A2`
-    by metis_tac[evalG_total] >>
-  `evalG (apply_action a1 A0) (G \\ a1) A2 ∧
-   evalG (apply_action a2 A0) (G \\ a2) A2`
-    by (conj_tac >> match_mp_tac (CONJUNCT2 evalG_rules) >| [
-          qexists_tac `a2`, qexists_tac `a1`] >> simp[] >>
-        metis_tac[gDELETE_commutes]) >>
-  `gCARD (G \\ a1) < gCARD G ∧ gCARD (G \\ a2) < gCARD G` suffices_by
-     metis_tac[] >>
-  simp[] >>
-  metis_tac [gCARD_EQ_0, IN_emptyG, DECIDE ``¬(0 < x) ⇔ x = 0``])
+  metis_tac [genEvalG_det, nontouching_actions_commute]);
 
 val mkEAction_def = Define`
   mkEAction wf rfs body i =
@@ -210,31 +146,10 @@ val apply_action_ignores_iter = store_thm(
   simp[apply_action_def]);
 val _ = export_rewrites ["apply_action_ignores_iter"]
 
-val imap_irrelevance = store_thm(
+val imap_irrelevance = save_thm(
   "imap_irrelevance",
-  ``∀A0 G A.
-      evalG A0 G A ⇒
-      ∀f. INJ f (iterations G) UNIV ⇒ evalG A0 (imap f G) A``,
-  Induct_on `evalG` >> rpt strip_tac >> simp[imap_emptyG] >>
-  match_mp_tac (CONJUNCT2 evalG_rules) >> dsimp[imap_edges] >>
-  qexists_tac `a` >> simp[] >>
-  `∀a1 a2. a1 ∈ G ∧ a2 ∈ G ⇒
-           (a1 with iter updated_by f = a2 with iter updated_by f ⇔
-            a1 = a2)`
-    by (rpt strip_tac >> fds[INJ_THM, iterations_thm] >> simp[EQ_IMP_THM] >>
-        simp[action_component_equality]) >>
-  reverse conj_tac
-  >- (`INJ f (iterations (G \\ a)) UNIV` by fds[INJ_THM, iterations_thm] >>
-      `imap f G \\ (a with iter updated_by f) = imap f (G \\ a)`
-         suffices_by simp[] >>
-      dsimp[graph_equality, imap_edges, EQ_IMP_THM, IN_imap] >> csimp[] >>
-      rpt strip_tac
-      >- (ntac 2 (pop_assum mp_tac) >> imp_res_tac IN_edges >> simp[] >>
-          metis_tac[]) >>
-      metis_tac[IN_edges]) >>
-  rpt gen_tac >>
-  qmatch_rename_tac `a0 ∈ G ⇒ a1' -<G>/-> a2' ∨ XX` ["XX"] >> strip_tac >>
-  Cases_on `a1' -<G>-> a2'` >> simp[] >> metis_tac[IN_edges]);
+  genEvalG_imap_irrelevance
+    |> C MATCH_MP (apply_action_ignores_iter |> Q.GENL [`A`, `f`, `a`]))
 
 val INJ_COMPOSE' = prove(
   ``¬INJ f s UNIV ⇒ ¬INJ (g o f) s UNIV``,
