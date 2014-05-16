@@ -49,39 +49,29 @@ val summation = SeqStmt(
         ])
 
 
-(*
-                           [ARead("data_org",ARead("row",VarExp("p"))),
-                            ARead("data_org",ARead("col",VarExp("p")))],
-                           (fn xi::xj::[] =>
-                                ForLoop("k",D1D(Value(Int(0)),
-                                                VarExp("workPerIter")),
-                                        DAssign("
-                                    (fn Tuple1D(k) => fn sum =>
-                                        sum + (1.0 / Math.exp(real(k)*xi*xj))) )
-                                    0.0 ) )
-*)
 val summation_test = print (genCstmt summation 0)
 
-(*
-val original = ForLoop(["p"],Domain1D(0,nnz),
-                       SeqStmt([summation,
-                                AssignStmt("data_org",ISub("row",VarExp("p")),
-                                       [Read("data_org",
-                                             ISub("row",VarExp("p"))),
-                                        Read("sum",Const(0))],
-                                       (fn xi::sum::[] => xi + 1.0 + sum) ),
-                                AssignStmt("data_org",ISub("col",VarExp("p")),
-                                       [Read("data_org",
-                                             ISub("col",VarExp("p"))),
-                                         Read("sum",Const(0))],
-                                       (fn xj::sum::[] => xj + 1.0 + sum) )]) )
-*)
 
-(*val original = DAssign("hello",Value(Int(0)),
-                       [],(fn [] => Value(Int(7))))
+val orgbody = 
+    SeqStmt(
+        [
+          summation,
+          Assign("data_org",ARead("row",VarExp("p")),
+                 Plus(
+                     ARead("data_org",ARead("row",VarExp("p"))),
+                     Plus(Value(Real(1.0)),VarExp("sum")))),
+          Assign("data_org",ARead("col",VarExp("p")),
+                 Plus(
+                     ARead("data_org",ARead("col",VarExp("p"))),
+                     Plus(Value(Real(1.0)),VarExp("sum"))))
+        ]
+    )
+
+val original = ForLoop("p",D1D(Value(Int(0)),VarExp("nnz")),orgbody)
+
 
 val original_test = print (genCstmt original 0)
-*)
+
 
 (**** Wavefront Inspector and Executor in PseudoC****)
 (* Using parameters nnz, N, row, col, and initEnv
@@ -171,8 +161,17 @@ val inspector = SeqStmt(
 
 val inspector_test = print (genCstmt inspector 0)
 
-(*
-max_wave = MAX(max_wave,wave[p]);
 
-AssignVar("max_wave", Opn( [VarExp("max_wave"), Convert( 
-*)
+val executor =
+    ForLoop("w",D1D(Value(Int(0)),VarExp("max_wave")),
+            ParForLoop("k",D1D(ARead("wavestart",VarExp("w")),
+                               ARead("wavestart",Plus(VarExp("w"),
+                                                      Value(Int(1))))),
+                       SeqStmt(
+                           [
+                             AssignVar("p",ARead("wavefronts",VarExp("k"))),
+                             orgbody
+                           ]
+                       )))
+
+val executor_test = print (genCstmt executor 0)

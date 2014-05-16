@@ -128,8 +128,12 @@ fun genCstmt ast lvl =
             ^(genCstmt body (lvl+1))
             ^(indent lvl) ^"}\n"
 
-(*            | ParForLoop of string * domain * stmt
-*)
+          | ParForLoop(iter,D1D(lb,ub),body) =>
+            (indent lvl) ^"#pragma omp parallel for\n"
+            ^(indent lvl) ^"for (int "^iter^"=("^(genCexpr lb)^"); "
+            ^iter^"<("^(genCexpr ub)^"); "^iter^"++) {\n"
+            ^(genCstmt body (lvl+1))
+            ^(indent lvl) ^"}\n"
 
          | SeqStmt(s::slist) =>
            (genCstmt s lvl)^(genCstmt (SeqStmt(slist)) lvl)
