@@ -27,7 +27,7 @@ datatype expr =
          (* array read, e.g., f(i) *)
          | ARead of string* expr
 
-         (* constant integer *)
+         (* constant value *)
          | Value of value
 
          (* operations needed so far for wavebench example *)
@@ -49,19 +49,12 @@ datatype domain =
 
 (* Statements in PseudoC *)
 datatype stmt =
-         (* Array element define statement in input computation.
-          * Reads and writes to arrays (where scalars are 1 element arrays)
-          * are broken out to enable creation of the action/deps graph. *)
-         DAssign of string * expr            (* write: array and index expr *)
-                    * expr list              (* AReads *)
-                    * (expr list -> expr)    (* fn plugs in ARead exprs *)
-
-         (* Array element define in inspector. *)
-         | Assign of string * expr           (* write: array and index expr *)
-                     * expr                  (* rhs *)
+         (* Array element definition *)
+         Assign of string * expr           (* write: array and index expr *)
+                   * expr                  (* rhs *)
 
          (* Assignment to scalar *)
-         | AssignVar of string * expr        (* var = rhs *)
+         | AssignVar of string * expr      (* var = rhs *)
 
          (* If-the-else statement *)
          | IfStmt of expr * stmt * stmt
@@ -111,12 +104,7 @@ fun genCstmt ast lvl =
     let fun indent lvl = if lvl>0 then "    "^(indent (lvl-1)) else ""
     in
         case ast of
-            DAssign(id,idx,rlist,vf) =>
-            (indent lvl) ^ id^"["^(genCexpr idx)^"] = "
-            ^(genCexpr (vf rlist))^";\n"
-
-
-          | Assign(id,idx,rhs) =>
+            Assign(id,idx,rhs) =>
             (indent lvl) ^ id^"["^(genCexpr idx)^"] = "^(genCexpr rhs)^";\n"
 
           | AssignVar(var,rhs) =>
@@ -130,7 +118,8 @@ fun genCstmt ast lvl =
 
           (* FIXME: output init code *)                               
           | Malloc(id,sz,Int(n)) =>
-            (indent lvl) ^ id^" = (int*)malloc(sizeof(int)*"^Int.toString(n)
+            (indent lvl) ^ id^" = (int*)malloc(sizeof(int)*"
+            ^(genCexpr sz)
             ^");\n"
 
           | ForLoop(iter,D1D(lb,ub),body) =>

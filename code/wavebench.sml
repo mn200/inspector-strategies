@@ -30,20 +30,22 @@ val initEnv = envupdate ( initEnv, "col",
 
 val summation = SeqStmt(
         [
-          DAssign("sum",Value(Int(0)),[],(fn []=>Value(Real(0.0)))),
+          AssignVar("sum",Value(Real(0.0))),
           ForLoop("k",D1D(Value(Int(0)),VarExp("workPerIter")),
-                  DAssign("sum",Value(Int(0)),
-                          [ARead("data_org",ARead("row",VarExp("p"))),
-                           ARead("data_org",ARead("col",VarExp("p"))),
-                           ARead("sum",Value(Int(0)))],
-                          (fn di::dj::sum::[]=>
-                              Plus(sum,
-                                   Divide(Value(Real(1.0)),
-                                          Exp(
-                                              Mult(
-                                                  Mult(
-                                                      Convert(VarExp("k")),di),
-                                                  dj))))) ) )
+                  AssignVar(
+                      "sum",
+                      Plus(
+                          VarExp("sum"),
+                          Divide(
+                              Value(Real(1.0)),
+                              Exp(
+                                  Mult(
+                                      Mult(
+                                          Convert(VarExp("k")),
+                                          ARead("data_org",
+                                                ARead("row",VarExp("p")))),
+                                      ARead("data_org",
+                                            ARead("col",VarExp("p")))))))))
         ])
 
 
@@ -75,16 +77,19 @@ val original = ForLoop(["p"],Domain1D(0,nnz),
                                        (fn xj::sum::[] => xj + 1.0 + sum) )]) )
 *)
 
-val original = DAssign("hello",Value(Int(0)),
+(*val original = DAssign("hello",Value(Int(0)),
                        [],(fn [] => Value(Int(7))))
 
 val original_test = print (genCstmt original 0)
-
+*)
 
 (**** Wavefront Inspector and Executor in PseudoC****)
 (* Using parameters nnz, N, row, col, and initEnv
  * from above original computation. 
  *)
+
+(* Comments for the below code are in 
+ * benchmarks/wavebench/wavebench-driver.cpp *)
 
 val inspector = SeqStmt(
         [ Malloc("lw_iter", VarExp("N"), Int(~1)),
@@ -138,7 +143,29 @@ val inspector = SeqStmt(
                     AssignVar("max_wave",Max(VarExp("max_wave"),
                                              ARead("wave",VarExp("p"))))
                          ]) ),
-          Malloc("wavestart",  VarExp("max_wave"), Int(0))
+          Malloc("wavestart",  Plus(VarExp("max_wave"),Value(Int(2))), Int(0)),
+          ForLoop("p",D1D(Value(Int(0)),VarExp("nnz")),
+                   Assign("wavestart",ARead("wave",VarExp("p")),
+                          Plus(ARead("wavestart",ARead("wave",VarExp("p"))),
+                               Value(Int(1))))),
+          ForLoop("w",D1D(Value(Int(1)),Plus(VarExp("max_wave"),Value(Int(2)))),
+                   Assign("wavestart",VarExp("w"),
+                          Plus(ARead("wavestart",
+                                     Minus(VarExp("w"),Value(Int(1)))),
+                               ARead("wavestart",VarExp("w"))))),
+          Malloc("wavefronts",  VarExp("nnz"), Int(0)),
+          ForLoop("prev",D1D(Value(Int(1)),Plus(VarExp("nnz"),Value(Int(1)))),
+                  SeqStmt([
+                             AssignVar("p",Minus(VarExp("nnz"),VarExp("prev"))),
+                             AssignVar("w",ARead("wave",VarExp("p"))),
+                             Assign("wavestart",VarExp("w"),
+                                    Minus(ARead("wavestart",VarExp("w")),
+                                          Value(Int(1)))),
+                             Assign("wavefronts",
+                                    ARead("wavestart",VarExp("w")),
+                                    VarExp("p"))
+                         ]))
+
         ]
  )
 
