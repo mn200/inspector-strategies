@@ -34,12 +34,14 @@ val _ = export_rewrites ["isValue_def"]
 
 val _ = type_abbrev ("write", ``:string # expr``)
 val _ = type_abbrev ("aname", ``:string``)
+val _ = type_abbrev ("vname", ``:string``)
 val _ = disable_tyabbrev_printing "aname"
+val _ = disable_tyabbrev_printing "vname"
 
 val _ = Datatype`
   dexpr = DValue value
-        | Read aname expr
-        | Convert expr
+        | ARead aname expr
+        | VRead vname
 `
 
 val isDValue_def = Define`
@@ -113,6 +115,7 @@ val lookup_v_def = Define`
   lookup_v m v =
     case FLOOKUP m v of
         NONE => Error
+      | SOME (Array _) => Error
       | SOME v => v
 `;
 
@@ -174,14 +177,15 @@ val (eval_rules, eval_ind, eval_cases) = Hol_reln`
   (∀rdes m0 m' lm0 aname i vf.
       EVERY isDValue rdes ∧
       upd_array m0 aname i (vf (MAP destDValue rdes)) = SOME m'
-    ⇒
+     ⇒
       eval (m0, lm0, Assign (aname, Value (Int i)) rdes vf) (m', lm0, Done))
 
      ∧
 
   (∀rdes m0 lm0 aname i vf.
       EVERY isDValue rdes ∧
-      upd_array m0 aname i (vf (MAP destDValue rdes)) = NONE ⇒
+      upd_array m0 aname i (vf (MAP destDValue rdes)) = NONE
+     ⇒
       eval (m0, lm0, Assign (aname, Value (Int i)) rdes vf)
            (m0, lm0, Abort))
 
@@ -195,19 +199,30 @@ val (eval_rules, eval_ind, eval_cases) = Hol_reln`
      ∧
 
   (∀rds pfx aname expr sfx w vf m lm.
-      rds = pfx ++ [Read aname expr] ++ sfx /\ ¬isValue expr ⇒
+      rds = pfx ++ [ARead aname expr] ++ sfx /\ ¬isValue expr ⇒
       eval (m, lm, Assign w rds vf)
            (m, lm,
             Assign w
-                  (pfx ++ [Read aname (Value (evalexpr (lm ⊌ m) expr))] ++ sfx)
+                  (pfx ++ [ARead aname (Value (evalexpr (lm ⊌ m) expr))] ++ sfx)
                   vf))
 
      ∧
 
   (∀rds pfx aname i sfx w vf lm m.
-      rds = pfx ++ [Read aname (Value (Int i))] ++ sfx ⇒
+      rds = pfx ++ [ARead aname (Value (Int i))] ++ sfx ⇒
       eval (m, lm, Assign w rds vf)
-           (m, lm, Assign w (pfx ++ [DValue (lookup_array m aname i)] ++ sfx) vf)) ∧
+           (m, lm,
+            Assign w (pfx ++ [DValue (lookup_array m aname i)] ++ sfx) vf))
+
+     ∧
+
+  (∀rds pfx vname sfx w vf lm.
+      rds = pfx ++ [VRead vname] ++ sfx ⇒
+      eval (m, lm, Assign w rds vf)
+           (m, lm,
+            Assign w (pfx ++ [DValue (lookup_v (lm ⊌ m) vname)] ++ sfx) vf))
+
+     ∧
 
   (∀body d lm m vnm iters.
       dvalues (lm ⊌ m) d = SOME iters
