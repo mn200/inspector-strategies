@@ -236,13 +236,6 @@ val stackInc_def = Define`
   (stackInc (h::t) = h + 1n :: t)
 `;
 
-val ap1_def = Define`ap1 f (x,y) = (f x, y)`;
-val ap2_def = Define`ap2 f (x,y) = (x, f y)`;
-val ap3_def = Define`
-  ap3 f (x,y,z) = (x,y,f z)
-`;
-val _ = export_rewrites ["ap1_def", "ap2_def", "ap3_def"]
-
 val selapf_def = Define`
   selapf a lm =
     if actRWName a.write ∈ FDOM lm then

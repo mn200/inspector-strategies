@@ -64,10 +64,10 @@ val _ = Datatype`
        | AssignVar vname  expr      (* for assignments to scalars, global or local *)
        | IfStmt expr stmt stmt
        | Malloc aname num value
-       | ForLoop string domain stmt
-       | ParLoop string domain stmt
-       | Seq ((memory # stmt) list)
-       | Par ((memory # stmt) list)
+       | ForLoop vname domain stmt
+       | ParLoop vname domain stmt
+       | Seq (stmt list)
+       | Par (stmt list)
        | Abort
        | Done
 `
@@ -81,14 +81,13 @@ val stmt_induction = store_thm(
      (∀nm n value. P (Malloc nm n value)) ∧
      (∀s d stmt. P stmt ⇒ P (ForLoop s d stmt)) ∧
      (∀s d stmt. P stmt ⇒ P (ParLoop s d stmt)) ∧
-     (∀ms. (∀m s. MEM (m,s) ms ⇒ P s) ⇒ P (Seq ms)) ∧
-     (∀ms. (∀m s. MEM (m,s) ms ⇒ P s) ⇒ P (Par ms)) ∧
+     (∀stmts. (∀m s. MEM s stmts ⇒ P s) ⇒ P (Seq stmts)) ∧
+     (∀stmts. (∀m s. MEM s stmts ⇒ P s) ⇒ P (Par stmts)) ∧
      P Abort ∧ P Done
     ⇒
      ∀s. P s``,
   ntac 2 strip_tac >>
-  `(∀s. P s) ∧ (∀l (m:memory) s. MEM (m,s) l ⇒ P s) ∧ (∀ms:memory#stmt. P (SND ms))`
-    suffices_by simp[] >>
+  `(∀s. P s) ∧ (∀l s. MEM s l ⇒ P s)` suffices_by simp[] >>
   ho_match_mp_tac (TypeBase.induction_of ``:stmt``) >>
   simp[] >> dsimp[pairTheory.FORALL_PROD] >> metis_tac[]);
 
@@ -142,126 +141,179 @@ val dvalues_def = Define`
       | _ => NONE
 `;
 
+val esubst_def = tDefine "esubst" `
+  (esubst vnm value (VarExp vnm') = if vnm = vnm' then Value value
+                                    else VarExp vnm') ∧
+  (esubst vnm value (ISub vn e) = ISub vn (esubst vnm value e)) ∧
+  (esubst vnm value (Opn f vs) = Opn f (MAP (esubst vnm value) vs)) ∧
+  (esubst vnm value (Value v) = Value v)
+`
+  (WF_REL_TAC `measure (λ(vnm,value,e). expr_size e)` >> simp[] >>
+   Induct >> dsimp[definition "expr_size_def"] >> rpt strip_tac >>
+   res_tac >> simp[])
+
+val ap1_def = Define`ap1 f (x,y) = (f x, y)`;
+val ap2_def = Define`ap2 f (x,y) = (x, f y)`;
+val ap3_def = Define`
+  ap3 f (x,y,z) = (x,y,f z)
+`;
+val _ = export_rewrites ["ap1_def", "ap2_def", "ap3_def"]
+
+val dsubst_def = Define`
+  (dsubst vnm value (DValue v) = DValue v) ∧
+  (dsubst vnm value (ARead anm e) = ARead anm (esubst vnm value e)) ∧
+  (dsubst vnm value (VRead vnm') = if vnm = vnm' then DValue value
+                                   else VRead vnm')
+`;
+
+val ssubst_def = tDefine "ssubst" `
+  (ssubst vnm value (Assign w ds opf) =
+     Assign (ap2 (esubst vnm value) w) (MAP (dsubst vnm value) ds) opf) ∧
+  (ssubst vnm value (AssignVar vnm' e) = AssignVar vnm' (esubst vnm value e)) ∧ (* maybe abort if vnm = vnm' ? *)
+  (ssubst vnm value (IfStmt g t e) =
+     IfStmt (esubst vnm value g) (ssubst vnm value t) (ssubst vnm value e)) ∧
+  (ssubst vnm value (Malloc vnm' n value') = Malloc vnm' n value') ∧
+  (ssubst vnm value (ForLoop vnm' (D lo hi) s) =
+     ForLoop vnm' (D (esubst vnm value lo) (esubst vnm value hi))
+             (if vnm = vnm' then s else ssubst vnm value s)) ∧
+  (ssubst vnm value (ParLoop vnm' (D lo hi) s) =
+     ParLoop vnm' (D (esubst vnm value lo) (esubst vnm value hi))
+             (if vnm = vnm' then s else ssubst vnm value s)) ∧
+  (ssubst vnm value (Seq slist) = Seq (MAP (ssubst vnm value) slist)) ∧
+  (ssubst vnm value (Par slist) = Par (MAP (ssubst vnm value) slist)) ∧
+  (ssubst vnm value Abort = Abort) ∧
+  (ssubst vnm value Done = Done)
+`
+  (WF_REL_TAC `measure (λ(vnm,value,s). stmt_size s)` >> simp[] >>
+   Induct >> dsimp[definition "stmt_size_def"] >> rpt strip_tac >>
+   res_tac >> simp[])
+
 val (eval_rules, eval_ind, eval_cases) = Hol_reln`
-  (∀m0 lm0 llm s1 m s1' rest.
-    eval (m0, llm ⊌ lm0, s1) (m, llm ⊌ lm0, s1')
+  (∀m0 s1 m s1' rest.
+    eval (m0, s1) (m, s1')
    ⇒
-    eval (m0, lm0, Seq ((llm,s1)::rest)) (m, lm0, Seq ((llm,s1')::rest)))
+    eval (m0, Seq (s1::rest)) (m, Seq (s1'::rest)))
 
      ∧
 
-  (∀m lm llm rest.
-     eval (m, lm, Seq ((llm, Done) :: rest)) (m, lm, Seq rest))
+  (∀m rest.
+     eval (m, Seq (Done :: rest)) (m, Seq rest))
 
      ∧
 
-  (∀m lm.
-     eval (m, lm, Seq []) (m, lm, Done))
+  (∀m.
+     eval (m, Seq []) (m, Done))
 
      ∧
 
-  (∀m lm g t e b.
-     evalexpr (lm ⊌ m) g = Bool b
+  (∀m g t e b.
+     evalexpr m g = Bool b
    ⇒
-     eval (m,lm,IfStmt g t e) (m, lm, if b then t else e))
+     eval (m,IfStmt g t e) (m, if b then t else e))
 
      ∧
 
-  (∀m lm g t e.
-     (∀b. evalexpr (lm ⊌ m) g ≠ Bool b)
+  (∀m g t e.
+     (∀b. evalexpr m g ≠ Bool b)
     ⇒
-     eval (m,lm,IfStmt g t e) (m,lm,Abort))
+     eval (m,IfStmt g t e) (m,Abort))
 
      ∧
 
-  (∀rdes m0 m' lm0 aname i vf.
+  (∀rdes m0 m' aname i vf.
       EVERY isDValue rdes ∧
       upd_array m0 aname i (vf (MAP destDValue rdes)) = SOME m'
      ⇒
-      eval (m0, lm0, Assign (aname, Value (Int i)) rdes vf) (m', lm0, Done))
+      eval (m0, Assign (aname, Value (Int i)) rdes vf) (m', Done))
 
      ∧
 
-  (∀rdes m0 lm0 aname i vf.
+  (∀rdes m0 aname i vf.
       EVERY isDValue rdes ∧
       upd_array m0 aname i (vf (MAP destDValue rdes)) = NONE
      ⇒
-      eval (m0, lm0, Assign (aname, Value (Int i)) rdes vf)
-           (m0, lm0, Abort))
+      eval (m0, Assign (aname, Value (Int i)) rdes vf)
+           (m0, Abort))
 
      ∧
 
-  (∀m0 lm aname expr rds vf.
+  (∀m0 aname expr rds vf.
       ¬isValue expr ⇒
-      eval (m0, lm, Assign (aname, expr) rds vf)
-           (m0, lm, Assign (aname, Value (evalexpr (lm ⊌ m0) expr)) rds vf))
+      eval (m0, Assign (aname, expr) rds vf)
+           (m0, Assign (aname, Value (evalexpr m0 expr)) rds vf))
 
      ∧
 
-  (∀rds pfx aname expr sfx w vf m lm.
+  (∀rds pfx aname expr sfx w vf m.
       rds = pfx ++ [ARead aname expr] ++ sfx /\ ¬isValue expr ⇒
-      eval (m, lm, Assign w rds vf)
-           (m, lm,
+      eval (m, Assign w rds vf)
+           (m,
             Assign w
-                  (pfx ++ [ARead aname (Value (evalexpr (lm ⊌ m) expr))] ++ sfx)
+                  (pfx ++ [ARead aname (Value (evalexpr m expr))] ++ sfx)
                   vf))
 
      ∧
 
-  (∀rds pfx aname i sfx w vf lm m.
+  (∀rds pfx aname i sfx w vf m.
       rds = pfx ++ [ARead aname (Value (Int i))] ++ sfx ⇒
-      eval (m, lm, Assign w rds vf)
-           (m, lm,
+      eval (m, Assign w rds vf)
+           (m,
             Assign w (pfx ++ [DValue (lookup_array m aname i)] ++ sfx) vf))
 
      ∧
 
-  (∀rds pfx vname sfx w vf lm.
+  (∀rds pfx vname sfx w vf.
       rds = pfx ++ [VRead vname] ++ sfx ⇒
-      eval (m, lm, Assign w rds vf)
-           (m, lm,
-            Assign w (pfx ++ [DValue (lookup_v (lm ⊌ m) vname)] ++ sfx) vf))
+      eval (m, Assign w rds vf)
+           (m,
+            Assign w (pfx ++ [DValue (lookup_v m vname)] ++ sfx) vf))
 
      ∧
 
-  (∀body d lm m vnm iters.
-      dvalues (lm ⊌ m) d = SOME iters
+  (∀body d m vnm iters.
+      dvalues m d = SOME iters
      ⇒
-      eval (m, lm, ForLoop vnm d body)
-           (m, lm, Seq (MAP (λdv. (lm |+ (vnm, dv), body)) iters))) ∧
-
-  (∀body d lm m vnm.
-      dvalues (lm ⊌ m) d = NONE
-     ⇒
-      eval (m, lm, ForLoop vnm d body) (m, lm, Abort))
+      eval (m, ForLoop vnm d body)
+           (m, Seq (MAP (λdv. ssubst vnm dv body) iters)))
 
      ∧
 
-  (∀body d lm m vnm iters.
-      dvalues (lm ⊌ m) d = SOME iters
+  (∀body d m vnm.
+      dvalues m d = NONE
      ⇒
-      eval (m, lm, ParLoop vnm d body)
-           (m, lm, Par (MAP (λdv. (lm |+ (vnm, dv), body)) iters)))
+      eval (m, ForLoop vnm d body) (m, Abort))
 
      ∧
 
-  (∀body d lm m vnm.
-      dvalues (lm ⊌ m) d = NONE
+  (∀body d m vnm iters.
+      dvalues m d = SOME iters
      ⇒
-      eval (m, lm, ParLoop vnm d body) (m, lm, Abort))
+      eval (m, ParLoop vnm d body)
+           (m, Par (MAP (λdv. ssubst vnm dv body) iters)))
 
      ∧
 
-  (∀llm lm m m' pfx ps s s' sfx.
-      ps = pfx ++ [(llm, s)] ++ sfx ∧ eval (m, llm ⊌ lm, s) (m', llm ⊌ lm, s')
+  (∀body d m vnm.
+      dvalues m d = NONE
+     ⇒
+      eval (m, ParLoop vnm d body) (m, Abort))
+
+     ∧
+
+  (∀m m' pfx ps s s' sfx.
+      ps = pfx ++ [s] ++ sfx ∧ eval (m, s) (m', s')
     ⇒
-      eval (m, lm, Par ps) (m', lm, Par (pfx ++ [(llm, s')] ++ sfx))) ∧
+      eval (m, Par ps) (m', Par (pfx ++ [s'] ++ sfx)))
 
-  (∀llm lm m pfx ps sfx.
-      ps = pfx ++ [(llm, Done)] ++ sfx ⇒
-      eval (m, lm, Par ps) (m, lm, Par (pfx ++ sfx))) ∧
+     ∧
 
-  (∀lm m. eval (m, lm, Par []) (m, lm, Done))
+  (∀m pfx ps sfx.
+      ps = pfx ++ [Done] ++ sfx ⇒
+      eval (m, Par ps) (m, Par (pfx ++ sfx)))
+
+     ∧
+
+  (∀m. eval (m, Par []) (m, Done))
 `
 
 val _ = set_fixity "--->" (Infix(NONASSOC, 450))
