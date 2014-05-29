@@ -699,46 +699,73 @@ val apply_action_commutes = store_thm(
   rpt (findOptionCases >> simp[]) >> TRY eqNONE_tac >>
   success_case)
 
+val commutes_lemma = prove(
+  ``∀a1 a2 s.
+      ¬(a1 ∼ₜ a2) ∧ a1.iter ≠ a2.iter ⇒
+      apply_action a2 (apply_action a1 s) =
+      apply_action a1 (apply_action a2 s)``,
+  simp[apply_action_commutes]);
+
+val pcg_eval_def = Define`
+  pcg_eval g s = gEVAL apply_action s g
+`;
+
+val pcg_eval_thm = save_thm(
+  "pcg_eval_thm",
+  MATCH_MP gEVAL_thm commutes_lemma
+           |> REWRITE_RULE [GSYM pcg_eval_def]);
+
+val pop_scope_def = Define`
+  pop_scope old nested new =
+    DRESTRICT new (COMPL (FDOM nested)) ⊌ old
+`;
+
 val graphOf_def = tDefine "graphOf" `
 
-  (graphOf i lm m G0 (IfStmt g t e) =
+  (graphOf i lm m (IfStmt g t e) =
      case evalexpr (lm ⊌ m) g of
-       | Bool T => graphOf i lm m G0 t
-       | Bool F => graphOf i lm m G0 e
+       | Bool T => graphOf i lm m t
+       | Bool F => graphOf i lm m e
        | _ => NONE) ∧
 
-  (graphOf i lm0 m0 G0 (ForLoop vnm d body) =
+  (graphOf i lm0 m0 (ForLoop vnm d body) =
      do
        dvs <- dvalues (lm0 ⊌ m0) d;
-       graphOf i lm0 m0 G0 (Seq (MAP (λv. (FEMPTY |+ (vnm,v),body)) dvs))
+       graphOf i lm0 m0 (Seq (MAP (λv. (FEMPTY |+ (vnm,v),body)) dvs))
      od) ∧
 
-  (graphOf i lm0 m0 G0 (Seq cmds) =
+  (graphOf i lm0 m0 (Seq cmds) =
      case cmds of
-       | [] => SOME (lm0, m0, G0)
+       | [] => SOME (lm0, m0, emptyG)
        | (lm,c) :: rest =>
          do
-           (lm', m', G') <- graphOf i (lm ⊌ lm0) m0 G0 c;
-           graphOf (stackInc i) lm0 m' G' (Seq rest)
+           (lm1, m1, G1) <- graphOf i (lm ⊌ lm0) m0 c;
+           lm1' <- SOME (pop_scope lm0 lm lm1);
+           (lm2, m2, G2) <- graphOf (stackInc i) lm1' m1 (Seq rest);
+           SOME(lm2,m2,merge_graph G1 G2)
          od) ∧
 
-  (graphOf i lm0 m0 G0 (ParLoop vnm d body) =
+  (graphOf i lm0 m0 (ParLoop vnm d body) =
      do
        dvs <- dvalues (lm0 ⊌ m0) d;
-       graphOf i lm0 m0 G0 (Par (MAP (λv. (FEMPTY |+ (vnm,v), body)) dvs))
+       graphOf i lm0 m0 (Par (MAP (λv. (FEMPTY |+ (vnm,v), body)) dvs))
      od) ∧
 
-  (graphOf i lm0 m0 G0 (Par cmds) =
+  (graphOf i lm0 m0 (Par cmds) =
      do
-       ps0 <- OPT_SEQUENCE (MAP (λ(lm,c). graphOf i (lm ⊌ lm0) m0 G0 c) cmds);
-       ps <- SOME (GENLIST (λn. ap3 (pushG n) (EL n ps0)) (LENGTH ps0));
-       assert(∀i j. i < j ∧ j < LENGTH ps ⇒
-                    ¬gtouches (SND (SND (EL i ps))) (SND (SND (EL j ps))));
-       SOME(lm0, (@m. ∃lm. eval (lm0, m0, Par cmds) (lm, m, Done)),
-            FOLDR (λ(lm,m,G) aG. merge_graph aG G) (pushG (LENGTH ps0) G0) ps)
+       ps0 <-
+         OPT_SEQUENCE
+           (MAP
+              (λ(lm,c). OPTION_MAP (SND o SND) (graphOf i (lm ⊌ lm0) m0 c))
+              cmds);
+       ps <- SOME (GENLIST (λn. pushG n (EL n ps0)) (LENGTH ps0));
+       assert(∀i j. i < j ∧ j < LENGTH ps ⇒ ¬gtouches (EL i ps) (EL j ps));
+       g <- SOME (FOLDR merge_graph emptyG ps);
+       (lm,m) <- pcg_eval g (SOME(lm0,m0));
+       SOME(lm, m, merge_graph (pushG (LENGTH ps0) G0) g)
      od) ∧
 
-  (graphOf iter lm0 m0 G0 (Assign w ds opn) =
+  (graphOf iter lm0 m0 (Assign w ds opn) =
      do (aname,i_e) <- SOME w;
         i <- (some i. evalexpr (lm0 ⊌ m0) i_e = Int i);
         rds <- getReads (lm0 ⊌ m0) ds;
@@ -748,17 +775,24 @@ val graphOf_def = tDefine "graphOf" `
                      iter := iter |> ;
         rvs <- OPT_SEQUENCE (MAP (evalDexpr (lm0 ⊌ m0)) ds);
         m' <- upd_array m0 aname i (opn rvs);
-        SOME(lm0, m', add_postaction a G0)
+        SOME(lm0, m', a ⊕ emptyG)
      od)
 
 ` (WF_REL_TAC
-     `inv_image (mlt (<) LEX (<)) (λ(i,lm,m,g,s). (loopbag s, stmt_weight s))` >>
+     `inv_image (mlt (<) LEX (<)) (λ(i,lm,m,s). (loopbag s, stmt_weight s))` >>
    simp[WF_mlt1, rich_listTheory.FOLDR_MAP, mlt_loopbag_lemma] >>
    rpt strip_tac
    >- (imp_res_tac MEM_FOLDR_mlt >> pop_assum (qspec_then `SND` mp_tac) >>
        rw[] >> simp[] >> pop_assum kall_tac >> pop_assum mp_tac >>
        map_every qid_spec_tac [`lm`, `c`] >> Induct_on `cmds` >> dsimp[] >>
        rpt strip_tac >> res_tac >> decide_tac))
+
+
+(*val graphOf_correct = store_thm(
+  "graphOf_correct",
+  ``...``
+*)
+
 
 
 val _ = export_theory();
