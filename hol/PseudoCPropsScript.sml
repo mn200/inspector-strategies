@@ -34,9 +34,9 @@ val stmt_weight_def = tDefine "stmt_weight" `
   (stmt_weight (ForLoop v d s) = stmt_weight s + 1) ∧
   (stmt_weight (ParLoop v d s) = stmt_weight s + 1) ∧
   (stmt_weight (Seq stmts) =
-    SUM (MAP (λms. stmt_weight (SND ms)) stmts) + 1 + LENGTH stmts) ∧
+    SUM (MAP stmt_weight stmts) + 1 + LENGTH stmts) ∧
   (stmt_weight (Par stmts) =
-    SUM (MAP (λms. stmt_weight (SND ms)) stmts) + 1 + LENGTH stmts)
+    SUM (MAP stmt_weight stmts) + 1 + LENGTH stmts)
 ` (WF_REL_TAC `measure stmt_size` >> simp[] >>
    Induct >> dsimp[stmt_size_def] >>
    rpt strip_tac >> res_tac >> simp[])
@@ -52,9 +52,9 @@ val loopbag_def = tDefine "loopbag" `
   (loopbag (ForLoop v d s) = BAG_IMAGE SUC (loopbag s)) ∧
   (loopbag (ParLoop v d s) = BAG_IMAGE SUC (loopbag s)) ∧
   (loopbag (Seq stmts) =
-     FOLDR (λms b. BAG_UNION (loopbag (SND ms)) b) {|0|} stmts) ∧
+     FOLDR (λms b. BAG_UNION (loopbag ms) b) {|0|} stmts) ∧
   (loopbag (Par stmts) =
-     FOLDR (λms b. BAG_UNION (loopbag (SND ms)) b) {|0|} stmts)
+     FOLDR (λms b. BAG_UNION (loopbag ms) b) {|0|} stmts)
 ` (WF_REL_TAC `measure stmt_size` >> simp[] >>
    Induct >> dsimp[stmt_size_def] >>
    rpt strip_tac >> res_tac >> simp[])
@@ -129,10 +129,24 @@ val mlt_loopbag_lemma = store_thm(
   rpt strip_tac >> res_tac >- metis_tac[DECIDE ``x < SUC x``] >> simp[] >>
   metis_tac[loopbag_not_empty, BAG_cases, BAG_IN_BAG_INSERT]);
 
+val FORALL_domain = store_thm(
+  "FORALL_domain",
+  ``(∀d. P d) ⇔ ∀e1 e2. P (D e1 e2)``,
+  simp[EQ_IMP_THM] >> strip_tac >> Cases >> simp[]);
+
+val loopbag_ssubst = store_thm(
+  "loopbag_ssubst[simp]",
+  ``loopbag (ssubst vnm value s) = loopbag s``,
+  qid_spec_tac `s` >> ho_match_mp_tac stmt_induction >>
+  asm_simp_tac (srw_ss() ++ boolSimps.COND_elim_ss)
+    [ssubst_def, FORALL_domain] >>
+  simp[rich_listTheory.FOLDR_MAP,
+      Cong (SPEC_ALL
+              (REWRITE_RULE [GSYM AND_IMP_INTRO] listTheory.FOLDR_CONG))]);
 
 val eval_terminates = store_thm(
   "eval_terminates",
-  ``∀a b. eval a b ⇒ inv_image (mlt (<) LEX (<)) (λ(m,lm,s). (loopbag s, stmt_weight s)) b a``,
+  ``∀a b. eval a b ⇒ inv_image (mlt (<) LEX (<)) (λ(m,s). (loopbag s, stmt_weight s)) b a``,
   Induct_on `eval a b` >> rpt strip_tac >>
   lfs[pairTheory.LEX_DEF, MAX_SET_THM, listTheory.SUM_APPEND]
   >- (Cases_on `b` >> simp[])
