@@ -593,6 +593,24 @@ val _ = export_rewrites ["edges_WF", "IN_add_action", "IN_add_postaction",
                          "emptyG_edges", "nodes_gDELETE", "nodes_FINITE",
                          "gDELETE_edges", "edges_irrefl"]
 
+val gtouches_def = Define`
+  gtouches (g1:(α,β,γ)action_graph) (g2:(α,β,γ)action_graph) ⇔
+    ∃a1 a2. a1 ∈ g1 ∧ a2 ∈ g2 ∧ touches a1 a2
+`;
+
+val gtouches_empty = store_thm(
+  "gtouches_empty[simp]",
+  ``(gtouches emptyG g ⇔ F) ∧ (gtouches g emptyG ⇔ F)``,
+  simp[gtouches_def]);
+
+val gtouches_add_action = store_thm(
+  "gtouches_add_action[simp]",
+  ``(gtouches (a ⊕ g1) g2 ⇔
+       a.iter ∉ iterations g1 ∧ (∃b. b ∈ g2 ∧ touches a b) ∨ gtouches g1 g2) ∧
+    (gtouches g1 (a ⊕ g2) ⇔
+       a.iter ∉ iterations g2 ∧ (∃b. b ∈ g1 ∧ touches b a) ∨ gtouches g1 g2)``,
+  simp[gtouches_def] >> metis_tac[]);
+
 val iterations_add_action = store_thm(
   "iterations_add_action[simp]",
   ``iterations (add_action a G) = a.iter INSERT iterations G``,
@@ -872,7 +890,6 @@ val (genEvalG_rules, genEvalG_ind, genEvalG_cases) = Hol_reln`
      genEvalG ap (ap a s0) (g \\ a) s  ⇒
      genEvalG ap s0 g s)
 `
-
 val genEvalG_empty = store_thm(
   "genEvalG_empty[simp]",
   ``genEvalG ap s1 emptyG s2 ⇔ (s1 = s2)``,
@@ -951,13 +968,66 @@ val genEvalG_imap_irrelevance = store_thm(
   Cases_on `a1' -<G>-> a2'` >> simp[] >> metis_tac[IN_edges]);
 
 (* ----------------------------------------------------------------------
-    Merging graphs, second graph is added to the "back" of the first.
+    Define a gEVAL constant to be the function of the relation
    ---------------------------------------------------------------------- *)
 
-val merge_graph_exists =
-    genEvalG_total |> SPEC_ALL |> Q.GENL [`g`, `s0`, `ap`]
-                   |> Q.ISPEC `add_postaction`
-                   |> SIMP_RULE bool_ss [SKOLEM_THM]
+val gEVAL_def = new_specification(
+  "gEVAL_def", ["gEVAL"],
+  genEvalG_total |> SPEC_ALL |> Q.GENL [`g`, `s0`, `ap`]
+                 |> SIMP_RULE bool_ss[SKOLEM_THM]);
+
+val gEVAL_thm = store_thm(
+  "gEVAL_thm",
+  ``(∀a1 a2 s. ¬touches a1 a2 ∧ a1.iter ≠ a2.iter ⇒
+               ap a2 (ap a1 s) = ap a1 (ap a2 s)) ⇒
+    (∀s0. gEVAL ap s0 emptyG = s0) ∧
+    (∀a s0. a.iter ∉ iterations g ⇒
+            gEVAL ap s0 (a ⊕ g) = gEVAL ap (ap a s0) g)``,
+  rpt strip_tac
+  >- (`genEvalG ap s0 emptyG s0` by simp[genEvalG_rules] >>
+      metis_tac[gEVAL_def, genEvalG_det]) >>
+  `a ∈ a ⊕ g` by simp[] >>
+  `a ∉ g` by (strip_tac >> fs[iterations_thm]) >>
+  `∀a'. a' ∈ a ⊕ g ⇒ a' -<a ⊕ g>/-> a`
+     by (dsimp[add_action_edges] >> metis_tac[IN_edges]) >>
+  `genEvalG ap (ap a s0) g (gEVAL ap (ap a s0) g)` by metis_tac[gEVAL_def] >>
+  `(a ⊕ g) \\ a = g`
+    by (csimp[graph_equality, add_action_edges] >> metis_tac[IN_edges]) >>
+  `genEvalG ap s0 (a ⊕ g) (gEVAL ap (ap a s0) g)`
+    by metis_tac[genEvalG_rules] >>
+  metis_tac[genEvalG_det, gEVAL_def]);
+
+val graph_ind = store_thm(
+  "graph_ind",
+  ``∀P. P emptyG ∧ (∀a g. P g ∧ a ∉ g ∧ a.iter ∉ iterations g ⇒ P (a ⊕ g)) ⇒
+        ∀g. P g``,
+  rpt strip_tac >>
+  Induct_on `gCARD g` >> simp[] >> rpt strip_tac >>
+  `ag_nodes g ≠ ∅` by (strip_tac >> fs[]) >>
+  `∃a. a ∈ g ∧ ∀b. b -<g>/-> a`
+     by metis_tac[nonempty_wfG_has_points, IN_edges] >>
+  qmatch_assum_rename_tac `SUC n = gCARD g` [] >>
+  `gCARD (g \\ a) = n` by simp[gCARD_gDELETE] >>
+  `a ⊕ (g \\ a) = g`
+    by (dsimp[graph_equality, iterations_thm, gDELETE_edges,
+              add_action_edges] >> conj_tac
+        >- metis_tac[iter_11] >>
+        dsimp[EQ_IMP_THM] >> rpt strip_tac
+        >- metis_tac[touching_actions_link] >>
+        qmatch_assum_rename_tac `a1 -<g>-> a2` [] >>
+        `a ≠ a2` by metis_tac[] >> simp[] >>
+        Cases_on `a = a1` >> simp[] >>
+        metis_tac[IN_edges, iter_11]) >>
+  `a.iter ∉ iterations (g \\ a)`
+    by (dsimp[iterations_thm] >> metis_tac[iter_11]) >>
+  `P (g \\ a)` by metis_tac[] >>
+  `a ∉ g \\ a` by simp[] >>
+  `P (a ⊕ g \\ a)` by metis_tac[] >>
+  metis_tac[]);
+
+(* ----------------------------------------------------------------------
+    Merging graphs, second graph is added to the "back" of the first.
+   ---------------------------------------------------------------------- *)
 
 val add_postaction_commutes = store_thm(
   "add_postaction_commutes",
@@ -969,35 +1039,91 @@ val add_postaction_commutes = store_thm(
   >- dsimp[EQ_IMP_THM] >>
   simp[EQ_IMP_THM] >> rw[] >> fs[] >> metis_tac[touches_SYM])
 
-val merge_graph_def = new_specification(
-  "merge_graph_def", ["merge_graph"], merge_graph_exists)
+val merge_graph_def = Define`merge_graph = gEVAL add_postaction`;
 
-val mergeR_det = MATCH_MP genEvalG_det add_postaction_commutes
-
-val merge_graph_thm = store_thm(
+val merge_graph_thm = save_thm(
   "merge_graph_thm",
-  ``merge_graph g1 emptyG = g1 ∧
-    (a.iter ∉ iterations g2 ⇒
-     merge_graph g1 (add_action a g2) = merge_graph (add_postaction a g1) g2)``,
-  conj_tac
-  >- (`genEvalG add_postaction g1 emptyG g1` by simp[genEvalG_rules] >>
-      metis_tac[merge_graph_def, mergeR_det]) >>
-  strip_tac >>
-  `a ∈ a ⊕ g2` by simp[] >>
-  `a ∉ g2` by (strip_tac >> fs[iterations_thm]) >>
-  `∀a'. a' ∈ a ⊕ g2 ⇒ a' -<a ⊕ g2>/-> a`
-    by (dsimp[add_action_edges] >>
-        simp[] >> qx_gen_tac `b` >> rpt strip_tac >>
-        `b -<g2>/-> a` suffices_by simp[] >> strip_tac >>
-        metis_tac [IN_edges]) >>
-  `genEvalG add_postaction (add_postaction a g1) g2
-      (merge_graph (add_postaction a g1) g2)`
-    by metis_tac[merge_graph_def] >>
-  `(a ⊕ g2) \\ a = g2`
-    by (csimp[graph_equality, add_action_edges] >> metis_tac[IN_edges]) >>
-  `genEvalG add_postaction g1 (a ⊕ g2)
-       (merge_graph (add_postaction a g1) g2)`
-    by metis_tac[genEvalG_rules] >>
-  metis_tac[mergeR_det, merge_graph_def]);
+  MATCH_MP gEVAL_thm add_postaction_commutes
+           |> REWRITE_RULE [GSYM merge_graph_def])
+
+val IN_merge_graph = store_thm(
+  "IN_merge_graph[simp]",
+  ``a ∈ merge_graph g1 g2 ⇔
+     a ∈ g1 ∨ a.iter ∉ iterations g1 ∧ a ∈ g2``,
+  map_every qid_spec_tac [`a`, `g1`, `g2`] >> ho_match_mp_tac graph_ind >>
+  simp[merge_graph_thm] >> rpt gen_tac >> strip_tac >>
+  dsimp[EQ_IMP_THM] >> rpt strip_tac >>
+  qmatch_assum_rename_tac `b.iter ∉ iterations g1` [] >>
+  Cases_on `a.iter = b.iter` >> fs[iterations_thm]);
+
+val iterations_merge_graph = store_thm(
+  "iterations_merge_graph[simp]",
+  ``iterations (merge_graph g1 g2) = iterations g1 ∪ iterations g2``,
+  dsimp[iterations_thm, EXTENSION] >> metis_tac[iter_11]);
+
+val add_postaction_empty = store_thm(
+  "add_postaction_empty[simp]",
+  ``add_postaction a emptyG = a ⊕ emptyG``,
+  simp[graph_equality, add_postaction_edges, add_action_edges]);
+
+val add_action_add_postaction_ASSOC = store_thm(
+  "add_action_add_postaction_ASSOC",
+  ``a.iter ≠ b.iter ⇒
+    add_postaction b (a ⊕ g) = a ⊕ (add_postaction b g)``,
+  dsimp[graph_equality, IN_add_postaction, add_postaction_edges,
+        add_action_edges, iterations_thm] >> metis_tac[]);
+
+val merge_graph_postaction_ASSOC = store_thm(
+  "merge_graph_postaction_ASSOC",
+  ``merge_graph g1 (add_postaction a g2) =
+    add_postaction a (merge_graph g1 g2)``,
+  Cases_on `a.iter ∈ iterations g2`
+  >- (`add_postaction a g2 = g2`
+        by simp[graph_equality, add_postaction_edges] >>
+      `add_postaction a (merge_graph g1 g2) = merge_graph g1 g2`
+        by simp[graph_equality, add_postaction_edges] >>
+      simp[]) >>
+  pop_assum mp_tac >>
+  map_every qid_spec_tac [`a`, `g1`, `g2`] >> ho_match_mp_tac graph_ind >>
+  simp[merge_graph_thm] >> map_every qx_gen_tac [`a`, `g2`] >> strip_tac >>
+  map_every qx_gen_tac [`g1`, `b`] >> strip_tac >>
+  simp[add_action_add_postaction_ASSOC, merge_graph_thm]);
+
+val merge_graph_addaction_ASSOC = store_thm(
+  "merge_graph_addaction_ASSOC",
+  ``a.iter ∉ iterations g2 ⇒ merge_graph (a ⊕ g1) g2 = a ⊕ merge_graph g1 g2``,
+  map_every qid_spec_tac [`a`, `g1`, `g2`] >> ho_match_mp_tac graph_ind >>
+  simp[merge_graph_thm, add_action_add_postaction_ASSOC]);
+
+val merge_graph_ASSOC = store_thm(
+  "merge_graph_ASSOC",
+  ``merge_graph g1 (merge_graph g2 g3) = merge_graph (merge_graph g1 g2) g3``,
+  map_every qid_spec_tac [`g1`, `g2`, `g3`] >> ho_match_mp_tac graph_ind >>
+  simp[merge_graph_thm, merge_graph_postaction_ASSOC]);
+
+val merge_graph_emptyL = store_thm(
+  "merge_graph_emptyL",
+  ``∀g. merge_graph emptyG g = g``,
+  ho_match_mp_tac graph_ind >>
+  simp[merge_graph_thm, merge_graph_addaction_ASSOC]);
+
+val merge_graph_empty = store_thm(
+  "merge_graph_empty[simp]",
+  ``merge_graph emptyG g = g ∧ merge_graph g emptyG = g``,
+  simp[merge_graph_thm, merge_graph_emptyL]);
+
+val add_postaction_EQ_add_action = store_thm(
+  "add_postaction_EQ_add_action",
+  ``∀g. (∀b. b ∈ g ⇒ ¬touches a b) ⇒ add_postaction a g = a ⊕ g``,
+  simp[graph_equality, add_postaction_edges, add_action_edges, EQ_IMP_THM] >>
+  rpt strip_tac >> simp[] >> rw[] >> metis_tac[touches_SYM]);
+
+val nontouching_merge_COMM = store_thm(
+  "nontouching_merge_COMM",
+  ``∀g1 g2. ¬gtouches g1 g2 ∧ DISJOINT (iterations g1) (iterations g2) ⇒
+            merge_graph g1 g2 = merge_graph g2 g1``,
+  ho_match_mp_tac graph_ind >> simp[merge_graph_thm] >> rpt strip_tac >>
+  `add_postaction a g2 = a ⊕ g2` by metis_tac[add_postaction_EQ_add_action] >>
+  simp[merge_graph_addaction_ASSOC] >> metis_tac[]);
 
 val _ = export_theory();

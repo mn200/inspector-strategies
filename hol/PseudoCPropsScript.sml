@@ -157,11 +157,6 @@ val eval_terminates = store_thm(
     happens, the result has to be NONE.
    ---------------------------------------------------------------------- *)
 
-val gtouches_def = Define`
-  gtouches (g1:(α,β,γ)action_graph) (g2:(α,β,γ)action_graph) ⇔
-    ∃a1 a2. a1 ∈ g1 ∧ a2 ∈ g2 ∧ touches a1 a2
-`;
-
 open monadsyntax
 val _ = overload_on ("monad_bind", ``OPTION_BIND``)
 val _ = overload_on ("monad_unitbind", ``OPTION_IGNORE_BIND``)
