@@ -640,45 +640,45 @@ val graphOf_def = tDefine "graphOf" `
        graphOf i m0 (Seq (MAP (λv. ssubst vnm v body) dvs))
      od) ∧
 
-  (graphOf i m0 (Seq cmds) =
+  (graphOf i0 m0 (Seq cmds) =
      case cmds of
-       | [] => SOME (m0, emptyG)
+       | [] => SOME (i0, m0, emptyG)
        | c :: rest =>
          do
-           (m1, G1) <- graphOf i m0 c;
-           (m2, G2) <- graphOf (stackInc i) m1 (Seq rest);
-           SOME(m2,merge_graph G1 G2)
+           (i1, m1, G1) <- graphOf i0 m0 c;
+           (i2, m2, G2) <- graphOf i1 m1 (Seq rest);
+           SOME(i2,m2,merge_graph G1 G2)
          od) ∧
 
-  (graphOf i m0 (ParLoop vnm d body) =
+  (graphOf i0 m0 (ParLoop vnm d body) =
      do
        dvs <- dvalues m0 d;
-       graphOf i m0 (Par (MAP (λv. ssubst vnm v body) dvs))
+       graphOf i0 m0 (Par (MAP (λv. ssubst vnm v body) dvs))
      od) ∧
 
-  (graphOf i m0 (Par cmds) =
+  (graphOf i0 m0 (Par cmds) =
      do
        ps0 <-
          OPT_SEQUENCE
-           (MAP (λc. OPTION_MAP SND (graphOf i m0 c)) cmds);
+           (MAP (λc. OPTION_MAP (SND o SND) (graphOf i0 m0 c)) cmds);
        ps <- SOME (GENLIST (λn. pushG n (EL n ps0)) (LENGTH ps0));
        assert(∀i j. i < j ∧ j < LENGTH ps ⇒ ¬gtouches (EL i ps) (EL j ps));
        g <- SOME (FOLDR merge_graph emptyG ps);
        m <- pcg_eval g (SOME m0);
-       SOME(m, g)
+       SOME(stackInc i0, m, g)
      od) ∧
 
-  (graphOf iter m0 (Assign w ds opn) =
+  (graphOf i0 m0 (Assign w ds opn) =
      do (aname,i_e) <- SOME w;
         i <- (some i. evalexpr m0 i_e = Int i);
         rds <- getReads m0 ds;
         a <- SOME <| write := Array aname i;
                      reads := rds;
                      expr := mergeReads ds opn;
-                     iter := iter |> ;
+                     iter := i0 |> ;
         rvs <- OPT_SEQUENCE (MAP (evalDexpr m0) ds);
         m' <- upd_array m0 aname i (opn rvs);
-        SOME(m', a ⊕ emptyG)
+        SOME(stackInc i0, m', a ⊕ emptyG)
      od)
 
 ` (WF_REL_TAC
@@ -695,6 +695,28 @@ val eval_ind' =
                    |> Q.SPEC `\a1 a2. P (FST a1) (SND a1) (FST a2) (SND a2)`
                    |> SIMP_RULE (srw_ss()) []
 
+(*
+val graphOf_iterations_apart = store_thm(
+  "graphOf_iterations_apart",
+  ``∀i0 m0 c i m g. graphOf i0 m0 c = SOME(i,m,g) ⇒ i ∉ iterations g``,
+  ho_match_mp_tac (theorem "graphOf_ind") >> rpt conj_tac
+
+  >- ((* if *)
+      ONCE_REWRITE_TAC [graphOf_def] >>
+      map_every qx_gen_tac [`i0`, `m0`, `gd`, `ts`, `es`] >>
+      Cases_on `evalexpr m0 gd` >> simp[] >> rw[])
+  >- ((* forloop *)
+      map_every qx_gen_tac [`i0`, `m0`, `vnm`, `d`, `body`] >>
+      strip_tac >> simp[Once graphOf_def] >> metis_tac[])
+  >- ((* Seq *)
+      map_every qx_gen_tac [`i0`, `m0`, `cmds`] >> strip_tac >>
+      simp[Once graphOf_def] >> Cases_on `cmds` >> simp[] >>
+      dsimp[pairTheory.FORALL_PROD] >>
+      map_every qx_gen_tac [`i`, `m`, `i'`, `m'`, `g'`] >> rw[] >>
+      simp[] >>
+
+
+*)
 (*
 val graphOf_correct_lemma = store_thm(
   "graphOf_correct_lemma",
