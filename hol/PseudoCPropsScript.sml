@@ -77,12 +77,6 @@ val MAX_PLUS = store_thm(
   ``MAX x y + z = MAX (x + z) (y + z)``,
   rw[arithmeticTheory.MAX_DEF]);
 
-val transitive_LT = store_thm(
-  "transitive_LT[simp]",
-  ``transitive ((<) : num -> num -> bool)``,
-  simp[relationTheory.transitive_def]);
-
-
 val SUM_IMAGE_CONG = REWRITE_RULE [GSYM AND_IMP_INTRO] SUM_IMAGE_CONG
 val BAG_CARD_SUM_IMAGE = store_thm(
   "BAG_CARD_SUM_IMAGE",
@@ -250,14 +244,6 @@ val stackInc_def = Define`
   (stackInc (h::t) = h + 1n :: t)
 `;
 
-val selapf_def = Define`
-  selapf a lm =
-    if actRWName a.write ∈ FDOM lm then
-      (FST : memory # memory -> memory,
-       ap1 : (memory -> memory) -> memory # memory -> memory # memory)
-    else (SND, ap2)
-`;
-
 val updf_def = Define`
   updf w value m =
     case w of
@@ -271,14 +257,12 @@ val updf_def = Define`
 `;
 
 val apply_action_def = Define`
-  apply_action a lmm_opt =
+  apply_action a m_opt =
     do
-      (lm,m) <- lmm_opt;
-      vs <- SOME(MAP (lookupRW (lm ⊌ m)) a.reads);
-      (self,apf) <- SOME (selapf a lm);
+      m <- m_opt;
+      vs <- SOME(MAP (lookupRW m) a.reads);
       value <- SOME (a.expr vs);
-      m' <- updf a.write value (self (lm,m));
-      SOME(apf (K m') (lm,m))
+      updf a.write value m
     od
 `;
 
@@ -317,17 +301,8 @@ val updf_preserves_FDOMs = store_thm(
 
 val apply_action_preserves_FDOMs = store_thm(
   "apply_action_preserves_FDOMs",
-  ``apply_action a (SOME(lm,gm)) = SOME (lm',gm') ⇒
-    FDOM lm' = FDOM lm ∧ FDOM gm' = FDOM gm``,
-  simp[apply_action_def] >>
-  `selapf a lm = (FST,ap1) ∨ selapf a lm = (SND, ap2)`
-    by rw[selapf_def] >>
-  simp[] >> metis_tac[updf_preserves_FDOMs]);
-
-val selapf_cases = store_thm(
-  "selapf_cases",
-  ``∀a lm. selapf a lm = (FST, ap1) ∨ selapf a lm = (SND, ap2)``,
-  rw[selapf_def]);
+  ``apply_action a (SOME m) = SOME m' ⇒ FDOM m' = FDOM m``,
+  simp[apply_action_def] >> metis_tac[updf_preserves_FDOMs]);
 
 val updf_preserves_array_presence_length_back = store_thm(
   "updf_preserves_array_presence_length_back",
@@ -396,53 +371,13 @@ val nontouching_updfs_read_after_write = store_thm(
       Cases_on `v` >> fs[FLOOKUP_DEF] >> rw[FAPPLY_FUPDATE_THM] >>
       fs[] >> Cases_on `value` >> fs[]))
 
-val nontouching_updfs_varread_after_write = store_thm(
-  "nontouching_updfs_varread_after_write",
-  ``updf w value m = SOME m' ∧ actRWName w ≠ s ⇒ m' ' s = m ' s``,
-  `(∃a i. w = Array a i) ∨ ∃t. w = Variable t` by (Cases_on `w` >> simp[]) >>
-  simp[updf_def, lookupRW_def, lookup_array_def, upd_array_def, lookup_v_def] >>
-  strip_tac
-  >- (`FLOOKUP m a = NONE ∨ ∃v. FLOOKUP m a = SOME v`
-        by (Cases_on `FLOOKUP m a` >> simp[]) >> fs[] >>
-      Cases_on `v` >> fs[FLOOKUP_DEF] >> rw[FAPPLY_FUPDATE_THM])
-  >- (`FLOOKUP m t = NONE ∨ ∃v. FLOOKUP m t = SOME v`
-        by (Cases_on `FLOOKUP m t` >> simp[]) >> fs[] >>
-      Cases_on `v` >> fs[FLOOKUP_DEF] >> rw[FAPPLY_FUPDATE_THM]));
-
-val lookupRW_FUNION_L = store_thm(
-  "lookupRW_FUNION_L",
-  ``lookupRW m1 r = lookupRW m2 r ∧ FDOM m1 = FDOM m2 ⇒
-    lookupRW (m1 ⊌ m) r = lookupRW (m2 ⊌ m) r``,
-  Cases_on `r` >>
-  rw[lookupRW_def, lookup_array_def, lookup_v_def, FLOOKUP_DEF, FUNION_DEF] >>
-  fs[]);
-
-val lookupRW_FUNION_R = store_thm(
-  "lookupRW_FUNION_R",
-  ``lookupRW m1 r = lookupRW m2 r ∧ FDOM m1 = FDOM m2 ⇒
-    lookupRW (m ⊌ m1) r = lookupRW (m ⊌ m2) r``,
-  Cases_on `r` >>
-  rw[lookupRW_def, lookup_array_def, lookup_v_def, FLOOKUP_DEF, FUNION_DEF] >>
-  fs[]);
-
-
-val nontouching_updfs_expreval_L = store_thm(
-  "nontouching_updfs_expreval_L",
+val nontouching_updfs_expreval = store_thm(
+  "nontouching_updfs_expreval",
   ``¬(touches a1 a2) ∧ updf a2.write value m = SOME m' ⇒
-    MAP (lookupRW (m' ⊌ m0)) a1.reads = MAP (lookupRW (m ⊌ m0)) a1.reads``,
-  simp[listTheory.MAP_EQ_f] >> strip_tac >> qx_gen_tac `r` >>
-  strip_tac >> match_mp_tac lookupRW_FUNION_L >>
-  `r ≠ a2.write` by metis_tac[touches_def] >>
-  metis_tac[nontouching_updfs_read_after_write, updf_preserves_FDOMs]);
-
-val nontouching_updfs_expreval_R = store_thm(
-  "nontouching_updfs_expreval_R",
-  ``¬(touches a1 a2) ∧ updf a2.write value m = SOME m' ⇒
-    MAP (lookupRW (m0 ⊌ m')) a1.reads = MAP (lookupRW (m0 ⊌ m)) a1.reads``,
+    MAP (lookupRW m') a1.reads = MAP (lookupRW m) a1.reads``,
   simp[listTheory.MAP_EQ_f] >> strip_tac >> qx_gen_tac `r` >> strip_tac >>
-  match_mp_tac lookupRW_FUNION_R >>
   `r ≠ a2.write` by metis_tac[touches_def] >>
-  metis_tac[nontouching_updfs_read_after_write, updf_preserves_FDOMs]);
+  metis_tac[nontouching_updfs_read_after_write]);
 
 val FLOOKUP_memory_cases = prove(
   ``!x: value option.
@@ -471,35 +406,12 @@ val NEQ_SOME = prove(
   ``x = NONE ⇒ x ≠ SOME y``,
   simp[])
 
-val selapf_t = ``selapf a1 m``
-fun resolve_selapfs (g as (asl,w)) = let
-  val sel_t = find_term (can (match_term selapf_t)) w
-in
-  case List.find (fn t => aconv (rator (lhs t)) (rator sel_t)) asl of
-      NONE => NO_TAC
-    | SOME asm_t => SUBGOAL_THEN (mk_eq(sel_t, lhs asm_t)) ASSUME_TAC >| [
-                      REWRITE_TAC [selapf_def] >> AP_THM_TAC >> AP_THM_TAC >>
-                      AP_TERM_TAC >> AP_TERM_TAC >> RES_TAC,
-                      ALL_TAC
-                    ]
-end g
-
 val flookupmem_t = ``FLOOKUP (m:memory) s``
 val matches_flookupmem = can (match_term flookupmem_t)
 fun flookupmem_tac (g as (asl,w)) = let
   val t = find_term matches_flookupmem w
 in
   STRIP_ASSUME_TAC (SPEC t FLOOKUP_memory_cases) g
-end
-
-fun asmflookupmem_tac (g as (asl,w)) = let
-  fun flmem_subt t =
-      bvk_find_term (fn (bvs,t) => null bvs andalso matches_flookupmem t)
-                    (fn x => x) t
-in
-  case get_first flmem_subt asl of
-      NONE => NO_TAC g
-    | SOME t => STRIP_ASSUME_TAC (SPEC t FLOOKUP_memory_cases) g
 end
 
 fun eqNONE_tac (g as (asl,w)) = let
@@ -553,8 +465,6 @@ fun eqNONE_tac (g as (asl,w)) = let
       (fn th => EXISTS_TAC (rand (rhs (concl th))) THEN
                 REWRITE_TAC [SYM th]) >> AP_TERM_TAC >>
     simp[listTheory.MAP_EQ_f] >> rpt strip_tac >>
-    (match_mp_tac lookupRW_FUNION_L ORELSE
-     match_mp_tac lookupRW_FUNION_R) >> ASM_REWRITE_TAC [] >>
     qunabbrev_tac [QUOTE other_name] >> fs[] >>
     metis_tac[nontouching_updfs_read_after_write, touches_def]
   val vararray_case =
@@ -664,14 +574,12 @@ fun ae_equate_tac anm (g as (asl,w)) = let
 in
   SUBGOAL_THEN (mk_eq(t1,t2)) SUBST_ALL_TAC THENL [
     qunabbrev_tac `ae` >> fs[] >>
-    metis_tac[nontouching_updfs_expreval_R, touches_SYM,
-              nontouching_updfs_expreval_L],
+    metis_tac[nontouching_updfs_expreval, touches_SYM],
     ALL_TAC
   ]
 end g
 
 val success_case =
-  rpt (qpat_assum `selapf xx yy = zz` kall_tac) >>
   rpt (first_x_assum (kall_tac o assert (is_forall o concl))) >>
   map_every qunabbrev_tac [`A1U`, `A2U`] >> fs[] >>
   qabbrev_tac `
@@ -687,23 +595,19 @@ val apply_action_commutes = store_thm(
     (apply_action a2 (apply_action a1 m) =
      apply_action a1 (apply_action a2 m))``,
   strip_tac >>
-  `m = NONE ∨ ∃lm gm. m = SOME(lm,gm)`
+  `m = NONE ∨ ∃gm. m = SOME gm`
      by metis_tac[optionTheory.option_CASES, pairTheory.pair_CASES] >>
   simp[apply_action_def, lift_OPTION_BIND, combinTheory.o_ABS_R,
        pairTheory.o_UNCURRY_R, pairTheory.C_UNCURRY_L,
        combinTheory.C_ABS_L] >>
-  qabbrev_tac `A1U = λm. updf a1.write (a1.expr (MAP (lookupRW m) a1.reads))` >>
-  qabbrev_tac `A2U = λm. updf a2.write (a2.expr (MAP (lookupRW m) a2.reads))` >>
+  qabbrev_tac `A1U = λm. updf a1.write (a1.expr (MAP (lookupRW m) a1.reads)) m` >>
+  qabbrev_tac `A2U = λm. updf a2.write (a2.expr (MAP (lookupRW m) a2.reads)) m` >>
   simp[] >>
-  `(∀rm m m'. A1U rm m = SOME m' ⇒ FDOM m' = FDOM m) ∧
-   (∀rm m m'. A2U rm m = SOME m' ⇒ FDOM m' = FDOM m)`
+  `(∀m m'. A1U m = SOME m' ⇒ FDOM m' = FDOM m) ∧
+   (∀m m'. A2U m = SOME m' ⇒ FDOM m' = FDOM m)`
      by (simp[Abbr`A1U`, Abbr`A2U`] >> metis_tac[updf_preserves_FDOMs]) >>
-  Q.ISPECL_THEN [`a1`, `lm`] strip_assume_tac selapf_cases >>
-  Q.ISPECL_THEN [`a2`, `lm`] strip_assume_tac selapf_cases >>
-  fs[] >> rw[] >>
-  rpt (findOptionCases >> simp[]) >>
-  rpt (resolve_selapfs >> simp[]) >> TRY eqNONE_tac >>
-  rpt (findOptionCases >> simp[]) >> TRY eqNONE_tac >>
+  rpt (findOptionCases >> simp[]) >> fs[] >>
+  TRY (eqNONE_tac >> NO_TAC) >>
   success_case)
 
 val commutes_lemma = prove(
@@ -722,82 +626,94 @@ val pcg_eval_thm = save_thm(
   MATCH_MP gEVAL_thm commutes_lemma
            |> REWRITE_RULE [GSYM pcg_eval_def]);
 
-val pop_scope_def = Define`
-  pop_scope old nested new =
-    DRESTRICT new (COMPL (FDOM nested)) ⊌ old
-`;
-
 val graphOf_def = tDefine "graphOf" `
 
-  (graphOf i lm m (IfStmt g t e) =
-     case evalexpr (lm ⊌ m) g of
-       | Bool T => graphOf i lm m t
-       | Bool F => graphOf i lm m e
+  (graphOf i m (IfStmt g t e) =
+     case evalexpr m g of
+       | Bool T => graphOf i m t
+       | Bool F => graphOf i m e
        | _ => NONE) ∧
 
-  (graphOf i lm0 m0 (ForLoop vnm d body) =
+  (graphOf i m0 (ForLoop vnm d body) =
      do
-       dvs <- dvalues (lm0 ⊌ m0) d;
-       graphOf i lm0 m0 (Seq (MAP (λv. (FEMPTY |+ (vnm,v),body)) dvs))
+       dvs <- dvalues m0 d;
+       graphOf i m0 (Seq (MAP (λv. ssubst vnm v body) dvs))
      od) ∧
 
-  (graphOf i lm0 m0 (Seq cmds) =
+  (graphOf i m0 (Seq cmds) =
      case cmds of
-       | [] => SOME (lm0, m0, emptyG)
-       | (lm,c) :: rest =>
+       | [] => SOME (m0, emptyG)
+       | c :: rest =>
          do
-           (lm1, m1, G1) <- graphOf i (lm ⊌ lm0) m0 c;
-           lm1' <- SOME (pop_scope lm0 lm lm1);
-           (lm2, m2, G2) <- graphOf (stackInc i) lm1' m1 (Seq rest);
-           SOME(lm2,m2,merge_graph G1 G2)
+           (m1, G1) <- graphOf i m0 c;
+           (m2, G2) <- graphOf (stackInc i) m1 (Seq rest);
+           SOME(m2,merge_graph G1 G2)
          od) ∧
 
-  (graphOf i lm0 m0 (ParLoop vnm d body) =
+  (graphOf i m0 (ParLoop vnm d body) =
      do
-       dvs <- dvalues (lm0 ⊌ m0) d;
-       graphOf i lm0 m0 (Par (MAP (λv. (FEMPTY |+ (vnm,v), body)) dvs))
+       dvs <- dvalues m0 d;
+       graphOf i m0 (Par (MAP (λv. ssubst vnm v body) dvs))
      od) ∧
 
-  (graphOf i lm0 m0 (Par cmds) =
+  (graphOf i m0 (Par cmds) =
      do
        ps0 <-
          OPT_SEQUENCE
-           (MAP
-              (λ(lm,c). OPTION_MAP (SND o SND) (graphOf i (lm ⊌ lm0) m0 c))
-              cmds);
+           (MAP (λc. OPTION_MAP SND (graphOf i m0 c)) cmds);
        ps <- SOME (GENLIST (λn. pushG n (EL n ps0)) (LENGTH ps0));
        assert(∀i j. i < j ∧ j < LENGTH ps ⇒ ¬gtouches (EL i ps) (EL j ps));
        g <- SOME (FOLDR merge_graph emptyG ps);
-       (lm,m) <- pcg_eval g (SOME(lm0,m0));
-       SOME(lm, m, merge_graph (pushG (LENGTH ps0) G0) g)
+       m <- pcg_eval g (SOME m0);
+       SOME(m, g)
      od) ∧
 
-  (graphOf iter lm0 m0 (Assign w ds opn) =
+  (graphOf iter m0 (Assign w ds opn) =
      do (aname,i_e) <- SOME w;
-        i <- (some i. evalexpr (lm0 ⊌ m0) i_e = Int i);
-        rds <- getReads (lm0 ⊌ m0) ds;
+        i <- (some i. evalexpr m0 i_e = Int i);
+        rds <- getReads m0 ds;
         a <- SOME <| write := Array aname i;
                      reads := rds;
                      expr := mergeReads ds opn;
                      iter := iter |> ;
-        rvs <- OPT_SEQUENCE (MAP (evalDexpr (lm0 ⊌ m0)) ds);
+        rvs <- OPT_SEQUENCE (MAP (evalDexpr m0) ds);
         m' <- upd_array m0 aname i (opn rvs);
-        SOME(lm0, m', a ⊕ emptyG)
+        SOME(m', a ⊕ emptyG)
      od)
 
 ` (WF_REL_TAC
-     `inv_image (mlt (<) LEX (<)) (λ(i,lm,m,s). (loopbag s, stmt_weight s))` >>
+     `inv_image (mlt (<) LEX (<)) (λ(i,m,s). (loopbag s, stmt_weight s))` >>
    simp[WF_mlt1, rich_listTheory.FOLDR_MAP, mlt_loopbag_lemma] >>
    rpt strip_tac
-   >- (imp_res_tac MEM_FOLDR_mlt >> pop_assum (qspec_then `SND` mp_tac) >>
+   >- (imp_res_tac MEM_FOLDR_mlt >> pop_assum (qspec_then `I` mp_tac) >>
        rw[] >> simp[] >> pop_assum kall_tac >> pop_assum mp_tac >>
-       map_every qid_spec_tac [`lm`, `c`] >> Induct_on `cmds` >> dsimp[] >>
+       qid_spec_tac `c` >> Induct_on `cmds` >> dsimp[] >>
        rpt strip_tac >> res_tac >> decide_tac))
 
+val eval_ind' =
+    eval_strongind |> SIMP_RULE (srw_ss()) [pairTheory.FORALL_PROD]
+                   |> Q.SPEC `\a1 a2. P (FST a1) (SND a1) (FST a2) (SND a2)`
+                   |> SIMP_RULE (srw_ss()) []
 
-(*val graphOf_correct = store_thm(
-  "graphOf_correct",
-  ``...``
+(*
+val graphOf_correct_lemma = store_thm(
+  "graphOf_correct_lemma",
+  ``∀m0 c0 m c.
+      (m0,c0) ---> (m,c) ⇒
+      ∀iters m0' g0.
+        graphOf iters m0 c0 = SOME (m0', g0) ⇒
+        ∃g m'. graphOf iters m c = SOME(m', g) ∧
+               pcg_eval g (SOME m) = pcg_eval g0 (SOME m0)``,
+  ho_match_mp_tac eval_ind' >> rpt strip_tac
+  >- (dsimp[Once graphOf_def, pairTheory.EXISTS_PROD] >>
+      pop_assum mp_tac >>
+      dsimp[SimpL ``(==>)``, Once graphOf_def] >>
+      dsimp[pairTheory.EXISTS_PROD, pairTheory.FORALL_PROD] >>
+      map_every qx_gen_tac [`m00'`, `g0'`, `g0''`] >> rw[]
+
+simp[graphOf_def]
+
+``
 *)
 
 
