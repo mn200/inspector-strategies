@@ -858,13 +858,23 @@ val FRONT_TAKE = store_thm(
   Induct_on `l` >> simp[] >> Cases_on `l` >>
   fs[DECIDE ``SUC x ≤ 1 ⇔ x = 0``]);
 
-(*
+val TAKE_isPREFIX = store_thm(
+  "TAKE_isPREFIX",
+  ``!n l. n <= LENGTH l ==> TAKE n l <<= l``,
+  Induct_on `l` THEN SIMP_TAC (srw_ss()) [] THEN
+  MAP_EVERY Q.X_GEN_TAC [`h`, `n`] THEN STRIP_TAC THEN
+  `n < SUC (LENGTH l) \/ n = SUC (LENGTH l)` by DECIDE_TAC THENL [
+    FULL_SIMP_TAC (srw_ss()) [LT_SUC] THEN SRW_TAC[][] THEN
+    FULL_SIMP_TAC (srw_ss()) [],
+    FULL_SIMP_TAC (srw_ss()) []
+  ]);
+
 val stackInc_TAKE_lemma = prove(
-  ``∀l1 l2. l1 <<= l2 ∧ l1 ≠ [] ⇒ l2 < stackInc l1``,
-  Induct_on `l1` >> simp[] >> Cases_on `l2` >> simp[]
+  ``∀l1 l2. l1 ≼ l2 ∧ l1 ≠ [] ⇒ l2 < stackInc l1``,
+  simp[stackInc_def] >> Induct_on `l1` >> simp[] >> Cases_on `l2` >>
+  simp[] >> Cases_on `l1` >> simp[]);
 
-TAKE (LENGTH l2 - 1) l1 = TAKE (LENGTH l2 - 1) l2 ⇒ l1 < stackInc l2``,
-
+(*
 val graphOf_iterations_apart = store_thm(
   "graphOf_iterations_apart",
   ``∀i0 m0 c i m g.
@@ -919,6 +929,20 @@ val graphOf_iterations_apart = store_thm(
               (mp_tac o Q.AP_TERM `TAKE (LENGTH i0 - 1)`) >>
             simp[rich_listTheory.TAKE_TAKE, rich_listTheory.TAKE_APPEND1,
                  FRONT_TAKE]) >> simp[] >>
+      `j < stackInc i0`
+        by (match_mp_tac stackInc_TAKE_lemma >> simp[] >>
+            qpat_assum `TAKE xx j = i0 ++ [n]`
+              (mp_tac o Q.AP_TERM `TAKE (LENGTH i0)`) >>
+            simp[rich_listTheory.TAKE_APPEND1, rich_listTheory.TAKE_TAKE] >>
+            qabbrev_tac `N = LENGTH i0` >>
+            disch_then (SUBST1_TAC o SYM) >>
+            `N ≤ LENGTH j` by simp[] >>
+            simp[TAKE_isPREFIX]))
+  >- ((* Assign *)
+      simp[Once graphOf_def, pairTheory.FORALL_PROD] >>
+      dsimp[FRONT_TAKE])
+  >- ((* AssignVar *)
+      simp[Once graphOf_def]
 
 
 
