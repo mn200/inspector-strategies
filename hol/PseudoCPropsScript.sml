@@ -189,7 +189,7 @@ val MEM_FOLDR_mlt = store_thm(
       metis_tac[relationTheory.TC_RULES]) >>
   pop_assum SUBST_ALL_TAC >> simp[]);
 
-val pushG_def = Define`pushG v = imap (λi. v::i)`
+val pushG_def = Define`pushG v = imap (λi. i ++ [v])`
 
 val _ = Datatype`actionRW = Array aname int | Variable vname`
 
@@ -239,10 +239,14 @@ val evalDexpr_def = Define`
      od)
 `;
 
-val stackInc_def = Define`
-  (stackInc [] = []) ∧
-  (stackInc (h::t) = h + 1n :: t)
+val updLast_def = Define`
+  (updLast f [] = []) /\
+  (updLast f [h] = [f h]) /\
+  (updLast f (h::t) = h::updLast f t)
 `;
+val _ = export_rewrites ["updLast_def"]
+
+val stackInc_def = Define`stackInc = updLast SUC`
 
 val updf_def = Define`
   updf w value m =
@@ -626,6 +630,46 @@ val pcg_eval_thm = save_thm(
   MATCH_MP gEVAL_thm commutes_lemma
            |> REWRITE_RULE [GSYM pcg_eval_def]);
 
+val MAPi_def = Define`
+  (MAPi f [] = []) ∧
+  (MAPi f (h::t) = f 0 h :: MAPi (f o SUC) t)
+`;
+val _ = export_rewrites ["MAPi_def"]
+
+val LT_SUC = prove(
+  ``n < SUC m ⇔ n = 0 ∨ ∃n0. n = SUC n0 ∧ n0 < m``,
+  simp[EQ_IMP_THM] >> Cases_on `n` >> simp[]);
+
+val MEM_MAPi = store_thm(
+  "MEM_MAPi",
+  ``∀x f l. MEM x (MAPi f l) ⇔
+            ∃n. n < LENGTH l ∧ x = f n (EL n l)``,
+  Induct_on `l` >> simp[] >> pop_assum kall_tac >>
+  dsimp[EQ_IMP_THM, LT_SUC] >> metis_tac[]);
+
+val MAPi_CONG = store_thm(
+  "MAPi_CONG",
+  ``∀l1 l2 f1 f2.
+      l1 = l2 ∧ (∀x n. MEM x l2 ∧ n < LENGTH l2 ⇒ f1 n x = f2 n x) ⇒
+      MAPi f1 l1 = MAPi f2 l2``,
+  Induct_on `l1` >> dsimp[LT_SUC]);
+val _ = DefnBase.export_cong "MAPi_CONG"
+
+val LENGTH_MAPi = store_thm(
+  "LENGTH_MAPi[simp]",
+  ``∀f l. LENGTH (MAPi f l) = LENGTH l``,
+  Induct_on `l` >> simp[]);
+
+val MAP_MAPi = store_thm(
+  "MAP_MAPi[simp]",
+  ``∀f g l. MAP f (MAPi g l) = MAPi ((o) f o g) l``,
+  Induct_on `l` >> simp[]);
+
+val EL_MAPi = store_thm(
+  "EL_MAPi[simp]",
+  ``∀f n l. n < LENGTH l ⇒ EL n (MAPi f l) = f n (EL n l)``,
+  Induct_on `l` >> simp[] >> dsimp[LT_SUC]);
+
 val graphOf_def = tDefine "graphOf" `
 
   (graphOf i m (IfStmt g t e) =
@@ -658,10 +702,9 @@ val graphOf_def = tDefine "graphOf" `
 
   (graphOf i0 m0 (Par cmds) =
      do
-       ps0 <-
+       ps <-
          OPT_SEQUENCE
-           (MAP (λc. OPTION_MAP (SND o SND) (graphOf i0 m0 c)) cmds);
-       ps <- SOME (GENLIST (λn. pushG n (EL n ps0)) (LENGTH ps0));
+           (MAPi (λn c. OPTION_MAP (SND o SND) (graphOf (i0 ++ [n;0]) m0 c)) cmds);
        assert(∀i j. i < j ∧ j < LENGTH ps ⇒ ¬gtouches (EL i ps) (EL j ps));
        g <- SOME (FOLDR merge_graph emptyG ps);
        m <- pcg_eval g (SOME m0);
@@ -686,7 +729,8 @@ val graphOf_def = tDefine "graphOf" `
    simp[WF_mlt1, rich_listTheory.FOLDR_MAP, mlt_loopbag_lemma] >>
    rpt strip_tac
    >- (imp_res_tac MEM_FOLDR_mlt >> pop_assum (qspec_then `I` mp_tac) >>
-       rw[] >> simp[] >> pop_assum kall_tac >> pop_assum mp_tac >>
+       rw[] >> simp[] >> qpat_assum `MEM c cmds` mp_tac >>
+       rpt (pop_assum kall_tac) >>
        qid_spec_tac `c` >> Induct_on `cmds` >> dsimp[] >>
        rpt strip_tac >> res_tac >> decide_tac))
 
@@ -695,10 +739,140 @@ val eval_ind' =
                    |> Q.SPEC `\a1 a2. P (FST a1) (SND a1) (FST a2) (SND a2)`
                    |> SIMP_RULE (srw_ss()) []
 
+val _ = overload_on ("<", ``\il1:num list il2. LLEX $< il1 il2``)
+val _ = overload_on ("<=", ``\il1:num list il2. ¬LLEX $< il2 il1``)
+
+val ilist_trichotomy = store_thm(
+  "ilist_trichotomy",
+  ``∀x y:num list. x < y ∨ x = y ∨ y < x``,
+  metis_tac[listTheory.LLEX_total
+              |> GEN_ALL |> Q.ISPEC `$< : num -> num -> bool`
+              |> SIMP_RULE (srw_ss() ++ ARITH_ss)
+                   [relationTheory.total_def, relationTheory.RC_DEF]])
+
+val ilistLT_trans = save_thm(
+  "ilistLT_trans",
+  listTheory.LLEX_transitive
+    |> GEN_ALL |> Q.ISPEC `$< : num -> num -> bool`
+    |> SIMP_RULE (srw_ss() ++ ARITH_ss) [relationTheory.transitive_def]);
+
+val ilistLE_REFL = store_thm(
+  "ilistLE_REFL[simp]",
+  ``∀x:num list. x ≤ x``,
+  Induct >> simp[]);
+
+val ilistLE_LTEQ = store_thm(
+  "ilistLE_LTEQ",
+  ``(x:num list) ≤ y ⇔ x < y ∨ x = y``,
+  metis_tac[ilist_trichotomy, ilistLT_trans, ilistLE_REFL]);
+
+val ilistLE_trans = store_thm(
+  "ilistLE_trans",
+  ``(x:num list) ≤ y ∧ y ≤ z ⇒ x ≤ z``,
+  metis_tac[ilistLE_LTEQ, ilistLT_trans]);
+
+val ilistLET_trans = store_thm(
+  "ilistLET_trans",
+  ``(x:num list) ≤ y ∧ y < z ⇒ x < z``,
+  metis_tac[ilistLE_LTEQ, ilistLT_trans]);
+
+val ilistLTE_trans = store_thm(
+  "ilistLTE_trans",
+  ``(x:num list) < y ∧ y ≤ z ⇒ x < z``,
+  metis_tac[ilistLE_LTEQ, ilistLT_trans]);
+
+val OPTION_IGNORE_BIND_EQUALS_OPTION = store_thm(
+  "OPTION_IGNORE_BIND_EQUALS_OPTION[simp]",
+  ``((OPTION_IGNORE_BIND x y = NONE) <=> (x = NONE) \/ (y = NONE)) /\
+    ((OPTION_IGNORE_BIND x y = SOME z) <=>
+      (?x'. x = SOME x') /\ (y = SOME z))``,
+  Cases_on `x` THEN SIMP_TAC (srw_ss()) []);
+
+val iterations_FOLDR_merge_graph = store_thm(
+  "iterations_FOLDR_merge_graph",
+  ``i ∈ iterations (FOLDR merge_graph g0 glist) ⇔
+    i ∈ iterations g0 ∨ ∃g. MEM g glist ∧ i ∈ iterations g``,
+  Induct_on `glist` >> simp[] >> metis_tac[]);
+
+val SNOC_11 = prove(
+  ``INJ (λi. i ++ [x]) s UNIV``,
+  simp[INJ_THM]);
+
+val iterations_pushG = store_thm(
+  "iterations_pushG",
+  ``i ∈ iterations (pushG n g) ⇔
+    ∃i0. i0 ∈ iterations g ∧ i = i0 ++ [n]``,
+  simp[pushG_def, SNOC_11, iterations_imap] >> metis_tac[]);
+
+val ilistLE_NIL = store_thm(
+  "ilistLE_NIL[simp]",
+  ``(x:num list) ≤ [] ⇔ (x = [])``,
+  simp[ilistLE_LTEQ]);
+
+val ilistLT_stackInc = store_thm(
+  "ilistLT_stackInc[simp]",
+  ``i ≠ [] ⇒ i < stackInc i ∧ i ≤ stackInc i``,
+  csimp[ilistLE_LTEQ] >> simp[stackInc_def] >>
+  Induct_on `i` >> simp[] >>
+  Cases_on `i` >> simp[]);
+
+val LENGTH_updLast = store_thm(
+  "LENGTH_updLast[simp]",
+  ``LENGTH (updLast f l) = LENGTH l``,
+  Induct_on `l` >> simp[] >> Cases_on `l` >> simp[]);
+
+val LENGTH_stackInc = store_thm(
+  "LENGTH_stackInc[simp]",
+  ``LENGTH (stackInc l) = LENGTH l``,
+  simp[stackInc_def]);
+
+val FRONT_updLast = store_thm(
+  "FRONT_updLast[simp]",
+  ``l ≠ [] ⇒ FRONT (updLast f l) = FRONT l``,
+  Induct_on `l` >> simp[] >>
+  Cases_on `l` >> fs[] >>
+  Cases_on `updLast f (h::t)` >> simp[] >>
+  pop_assum (mp_tac o Q.AP_TERM `LENGTH`) >> simp[]);
+
+val FRONT_stackInc = store_thm(
+  "FRONT_stackInc[simp]",
+  ``l ≠ [] ⇒ FRONT (stackInc l) = FRONT l``,
+  simp[stackInc_def]);
+
+val OPT_SEQUENCE_EQ_SOME = store_thm(
+   "OPT_SEQUENCE_EQ_SOME",
+   ``∀l. OPT_SEQUENCE optlist = SOME l ⇔
+         (∀e. MEM e optlist ⇒ ∃v. e = SOME v) ∧
+         (l = MAP THE optlist)``,
+   Induct_on `optlist` >> dsimp[OPT_SEQUENCE_def] >>
+   csimp[] >> metis_tac []);
+
+val ilistLE_APPEND = store_thm(
+  "ilistLE_APPEND[simp]",
+  ``(x:num list) ≤ x ++ y``,
+  Induct_on `x` >> simp[]);
+
+val FRONT_TAKE = store_thm(
+  "FRONT_TAKE",
+  ``l ≠ [] ⇒ FRONT l = TAKE (LENGTH l - 1) l``,
+  Induct_on `l` >> simp[] >> Cases_on `l` >>
+  fs[DECIDE ``SUC x ≤ 1 ⇔ x = 0``]);
+
 (*
+val stackInc_TAKE_lemma = prove(
+  ``∀l1 l2. l1 <<= l2 ∧ l1 ≠ [] ⇒ l2 < stackInc l1``,
+  Induct_on `l1` >> simp[] >> Cases_on `l2` >> simp[]
+
+TAKE (LENGTH l2 - 1) l1 = TAKE (LENGTH l2 - 1) l2 ⇒ l1 < stackInc l2``,
+
 val graphOf_iterations_apart = store_thm(
   "graphOf_iterations_apart",
-  ``∀i0 m0 c i m g. graphOf i0 m0 c = SOME(i,m,g) ⇒ i ∉ iterations g``,
+  ``∀i0 m0 c i m g.
+       graphOf i0 m0 c = SOME(i,m,g) ∧ i0 ≠ [] ⇒
+       i0 ≤ i ∧ LENGTH i = LENGTH i0 ∧ FRONT i = FRONT i0 ∧
+       ∀j. j ∈ iterations g ⇒ i0 ≤ j ∧ j < i ∧
+           LENGTH i0 ≤ LENGTH j ∧
+           TAKE (LENGTH i0 - 1) j = FRONT i0``,
   ho_match_mp_tac (theorem "graphOf_ind") >> rpt conj_tac
 
   >- ((* if *)
@@ -711,9 +885,42 @@ val graphOf_iterations_apart = store_thm(
   >- ((* Seq *)
       map_every qx_gen_tac [`i0`, `m0`, `cmds`] >> strip_tac >>
       simp[Once graphOf_def] >> Cases_on `cmds` >> simp[] >>
-      dsimp[pairTheory.FORALL_PROD] >>
-      map_every qx_gen_tac [`i`, `m`, `i'`, `m'`, `g'`] >> rw[] >>
-      simp[] >>
+      map_every qx_gen_tac [`i`, `m`, `g`] >>
+      simp[PULL_EXISTS, pairTheory.FORALL_PROD] >>
+      map_every qx_gen_tac [`i'`, `m'`, `g'`, `g''`] >> strip_tac >>
+      `i0 ≤ i' ∧ i' ≤ i ∧ i' ≠ [] ∧ LENGTH i' = LENGTH i0 ∧
+       LENGTH i = LENGTH i0 ∧ FRONT i' = FRONT i0 ∧ FRONT i = FRONT i0`
+        by metis_tac[ilistLE_NIL] >>
+      `i0 ≤ i` by metis_tac[ilistLE_trans] >> simp[] >>
+      qx_gen_tac `j` >> rw[] >>
+      metis_tac[ilistLTE_trans, ilistLE_trans])
+  >- ((* ParLoop *)
+      rpt gen_tac >> strip_tac >> simp[Once graphOf_def, PULL_EXISTS])
+  >- ((* Par *)
+      map_every qx_gen_tac [`i0`, `m0`, `c`] >> strip_tac >>
+      simp[Once graphOf_def, PULL_EXISTS, iterations_FOLDR_merge_graph,
+           PULL_EXISTS, iterations_pushG, ilistLT_stackInc,
+           OPT_SEQUENCE_EQ_SOME, MEM_MAPi, listTheory.MEM_MAP,
+           pairTheory.EXISTS_PROD, combinTheory.o_ABS_R] >>
+      qabbrev_tac `GG = λn. graphOf (i0 ++ [n;0]) m0 (EL n c)` >> simp[] >>
+      qx_gen_tac `m` >> strip_tac >>
+      map_every qx_gen_tac [`j`, `n`] >> strip_tac >>
+      `∃i' m' g'. GG n = SOME(i',m',g')` by metis_tac[] >> fs[] >>
+      first_x_assum (qspecl_then [`EL n c`, `n`] mp_tac) >>
+      simp[rich_listTheory.EL_MEM] >> strip_tac >>
+      first_x_assum (qspec_then `j` mp_tac) >> simp[] >> strip_tac >>
+      `i0 ≤ i0 ++ [n; 0]` by simp[] >>
+      `i0 ≤ j` by metis_tac[ilistLE_trans] >>
+      fs[rich_listTheory.FRONT_APPEND] >>
+      `0 < LENGTH i0`
+        by (spose_not_then assume_tac >> fs[listTheory.LENGTH_NIL]) >>
+      `TAKE (LENGTH i0 - 1) j = FRONT i0`
+        by (qpat_assum `TAKE xx j = yy`
+              (mp_tac o Q.AP_TERM `TAKE (LENGTH i0 - 1)`) >>
+            simp[rich_listTheory.TAKE_TAKE, rich_listTheory.TAKE_APPEND1,
+                 FRONT_TAKE]) >> simp[] >>
+
+
 
 
 *)
