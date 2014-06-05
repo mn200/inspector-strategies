@@ -722,7 +722,23 @@ val graphOf_def = tDefine "graphOf" `
         rvs <- OPT_SEQUENCE (MAP (evalDexpr m0) ds);
         m' <- upd_array m0 aname i (opn rvs);
         SOME(stackInc i0, m', a ⊕ emptyG)
-     od)
+     od) ∧
+
+  (graphOf i0 m0 (AssignVar vnm e) =
+     do
+       m' <- updf (Variable vnm) (evalexpr m0 e) m0;
+       SOME(stackInc i0, m',
+            <| write := Variable vnm;
+               reads := [];  (* should examine e for reads *)
+               expr := K (evalexpr m0 e);
+               iter := i0 |> ⊕ emptyG)
+     od) ∧
+
+  (graphOf i0 m0 Abort = NONE) ∧
+
+  (graphOf i0 m0 Done = SOME(i0,m0,emptyG)) ∧
+
+  (graphOf i0 m0 (Malloc vnm sz value) = NONE)
 
 ` (WF_REL_TAC
      `inv_image (mlt (<) LEX (<)) (λ(i,m,s). (loopbag s, stmt_weight s))` >>
@@ -874,7 +890,6 @@ val stackInc_TAKE_lemma = prove(
   simp[stackInc_def] >> Induct_on `l1` >> simp[] >> Cases_on `l2` >>
   simp[] >> Cases_on `l1` >> simp[]);
 
-(*
 val graphOf_iterations_apart = store_thm(
   "graphOf_iterations_apart",
   ``∀i0 m0 c i m g.
@@ -942,12 +957,12 @@ val graphOf_iterations_apart = store_thm(
       simp[Once graphOf_def, pairTheory.FORALL_PROD] >>
       dsimp[FRONT_TAKE])
   >- ((* AssignVar *)
-      simp[Once graphOf_def]
+      simp[Once graphOf_def, FRONT_TAKE])
+  >- ((* Abort *) simp[Once graphOf_def])
+  >- ((* Done *) simp[Once graphOf_def])
+  >- ((* Malloc *) simp[graphOf_def, FRONT_TAKE])
+);
 
-
-
-
-*)
 (*
 val graphOf_correct_lemma = store_thm(
   "graphOf_correct_lemma",
