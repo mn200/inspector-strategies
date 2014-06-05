@@ -589,7 +589,7 @@ val _ = overload_on ("IN", ``\a g. a IN ag_nodes g``)
 val _ = overload_on ("NOTIN", ``\a g. ~(a IN ag_nodes g)``)
 
 val _ = export_rewrites ["edges_WF", "IN_add_action", "IN_add_postaction",
-                         "IN_imap", "emptyG_nodes",
+                         "IN_imap", "emptyG_nodes", "imap_emptyG",
                          "emptyG_edges", "nodes_gDELETE", "nodes_FINITE",
                          "gDELETE_edges", "edges_irrefl"]
 
@@ -872,7 +872,7 @@ val FOLDR_add_iterupd = store_thm(
   ``INJ g (iterations (FOLDR (add_action o f) emptyG l)) UNIV ⇒
     FOLDR (add_action o (λa. a with iter updated_by g) o f) emptyG l =
     imap g (FOLDR (add_action o f) emptyG l)``,
-  Induct_on `l` >> simp[imap_emptyG] >> rpt strip_tac >>
+  Induct_on `l` >> simp[] >> rpt strip_tac >>
   simp[imap_add_action] >>
   imp_res_tac (INJ_INSERT |> SPEC_ALL |> EQ_IMP_RULE |> #1
                           |> UNDISCH |> CONJUNCT1 |> DISCH_ALL
@@ -945,7 +945,7 @@ val genEvalG_imap_irrelevance = store_thm(
     ∀s0 G s.
       genEvalG ap s0 G s ⇒
       ∀f. INJ f (iterations G) UNIV ⇒ genEvalG ap s0 (imap f G) s``,
-  strip_tac >> Induct_on `genEvalG` >> rpt strip_tac >> simp[imap_emptyG] >>
+  strip_tac >> Induct_on `genEvalG` >> rpt strip_tac >> simp[] >>
   match_mp_tac (genEvalG_rules |> SPEC_ALL |> CONJUNCT2) >>
   dsimp[imap_edges] >>
   qexists_tac `a` >> simp[] >>

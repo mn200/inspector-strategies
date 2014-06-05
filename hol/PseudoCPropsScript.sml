@@ -138,9 +138,29 @@ val loopbag_ssubst = store_thm(
       Cong (SPEC_ALL
               (REWRITE_RULE [GSYM AND_IMP_INTRO] listTheory.FOLDR_CONG))]);
 
+val _ = overload_on (
+  "evalR",
+  ``inv_image (mlt (<) LEX (<)) (λ(m:memory,s). (loopbag s, stmt_weight s))``
+)
+
+val WF_evalR = store_thm(
+  "WF_evalR",
+  ``WF evalR``,
+  simp[pairTheory.WF_LEX, relationTheory.WF_TC_EQN,
+       relationTheory.WF_inv_image, bagTheory.WF_mlt1]);
+
+val WF_eval_induction =
+    relationTheory.WF_INDUCTION_THM
+      |> C MATCH_MP WF_evalR
+      |> SIMP_RULE (srw_ss()) [pairTheory.FORALL_PROD, pairTheory.LEX_DEF]
+      |> Q.SPEC `λms. Q (FST ms) (SND ms)`
+      |> SIMP_RULE (srw_ss()) []
+      |> Q.GEN `Q`
+
+
 val eval_terminates = store_thm(
   "eval_terminates",
-  ``∀a b. eval a b ⇒ inv_image (mlt (<) LEX (<)) (λ(m,s). (loopbag s, stmt_weight s)) b a``,
+  ``∀a b. eval a b ⇒ evalR b a``,
   Induct_on `eval a b` >> rpt strip_tac >>
   lfs[pairTheory.LEX_DEF, MAX_SET_THM, listTheory.SUM_APPEND]
   >- (Cases_on `b` >> simp[])
@@ -963,17 +983,223 @@ val graphOf_iterations_apart = store_thm(
   >- ((* Malloc *) simp[graphOf_def, FRONT_TAKE])
 );
 
+val pcg_eval_merge_graph = store_thm(
+  "pcg_eval_merge_graph",
+  ``(∀a. a ∈ g1 ⇒ a.iter ∉ iterations g2) ⇒
+    pcg_eval (merge_graph g1 g2) m_opt = pcg_eval g2 (pcg_eval g1 m_opt)``,
+  map_every qid_spec_tac [`m_opt`, `g2`, `g1`] >>
+  ho_match_mp_tac graph_ind >> simp[pcg_eval_thm] >>
+  map_every qx_gen_tac [`a`, `g1`] >> strip_tac >>
+  dsimp[merge_graph_addaction_ASSOC, pcg_eval_thm]);
+
+val some_EQ_SOME_E = save_thm(
+  "some_EQ_SOME_E",
+  optionTheory.some_elim
+    |> Q.INST [`Q` |-> `\y. y = SOME x`]
+    |> SIMP_RULE bool_ss [optionTheory.NOT_SOME_NONE,
+                          optionTheory.SOME_11]);
+
+val some_EQ_NONE = store_thm(
+  "some_EQ_NONE[simp]",
+  ``(some) P = NONE ⇔ ∀x. ¬P x``,
+  DEEP_INTRO_TAC optionTheory.some_intro THEN
+  SIMP_TAC bool_ss [optionTheory.NOT_SOME_NONE] THEN
+  METIS_TAC[]);
+
+val assign_lemma = prove(
+  ``OPT_SEQUENCE (MAP (evalDexpr m) ds) = SOME rvs ∧
+    getReads m ds = SOME rds ⇒
+    mergeReads0 ds acc opn (MAP (lookupRW m) rds) =
+    (opn:value list -> value) (REVERSE acc ++ rvs)``,
+  simp[OPT_SEQUENCE_EQ_SOME,
+       listTheory.MEM_MAP, listTheory.MAP_MAP_o,
+       PULL_EXISTS] >>
+  map_every qid_spec_tac [`acc`, `rvs`, `rds`, `ds`] >>
+  Induct >> simp[getReads_def, mergeReads0_def] >>
+  Cases >> dsimp[getReads_def, mergeReads0_def, evalDexpr_def,
+                 lookupRW_def] >>
+  simp_tac bool_ss [listTheory.APPEND,
+                    GSYM listTheory.APPEND_ASSOC] >>
+  rpt strip_tac >> imp_res_tac some_EQ_SOME_E >> fs[]);
+
+val graphOf_pcg_eval = store_thm(
+  "graphOf_pcg_eval",
+  ``∀i0 m0 c i m g.
+      graphOf i0 m0 c = SOME(i,m,g) ∧ i0 ≠ [] ⇒ pcg_eval g (SOME m0) = SOME m``,
+  ho_match_mp_tac (theorem "graphOf_ind") >> rpt conj_tac >>
+  map_every qx_gen_tac [`i0`, `m0`]
+  >- ((* if *)
+      map_every qx_gen_tac [`gd`, `t`, `e`] >> strip_tac >>
+      simp[graphOf_def] >> Cases_on `evalexpr m0 gd` >> simp[] >> fs[] >>
+      COND_CASES_TAC >> fs[])
+  >- ((* forloop *)
+      rpt gen_tac >> strip_tac >> simp[Once graphOf_def, PULL_EXISTS])
+  >- ((* seq *)
+      qx_gen_tac `cs` >> strip_tac >> simp[Once graphOf_def] >> Cases_on `cs` >>
+      simp[pcg_eval_thm, PULL_EXISTS, pairTheory.FORALL_PROD] >>
+      fs[] >> map_every qx_gen_tac [`i`, `m`, `i'`, `m'`, `g1`, `g2`] >>
+      strip_tac >>
+      `i0 ≤ i' ∧ (∀j. j ∈ iterations g1 ⇒ j < i') ∧ i' ≠ [] ∧
+       (∀j. j ∈ iterations g2 ⇒ i' ≤ j)`
+         by metis_tac[graphOf_iterations_apart, ilistLE_NIL] >>
+      `∀a. a ∈ g1 ⇒ a.iter ∉ iterations g2`
+        by (fs[iterations_thm, PULL_EXISTS] >>
+            metis_tac[ilistLTE_trans, ilistLE_REFL]) >>
+      simp[pcg_eval_merge_graph] >> fs[])
+  >- ((* parloop *)
+      map_every qx_gen_tac [`vnm`, `d`, `body`] >> strip_tac >>
+      simp[Once graphOf_def, PULL_EXISTS])
+  >- ((* par *)
+      qx_gen_tac `cs` >> simp[] >> strip_tac >>
+      simp[Once graphOf_def, PULL_EXISTS])
+  >- ((* assign *)
+      simp[graphOf_def, pairTheory.FORALL_PROD, PULL_EXISTS, pcg_eval_thm] >>
+      simp[apply_action_def, updf_def] >>
+      map_every qx_gen_tac [`vnm`, `i_e`, `ds`, `opn`, `m`, `i`, `rds`, `rvs`] >>
+      strip_tac >>
+      `mergeReads ds opn (MAP (lookupRW m0) rds) = opn rvs` suffices_by simp[] >>
+      imp_res_tac (GEN_ALL assign_lemma) >> simp[mergeReads_def])
+  >- ((* assignvar *)
+      simp[graphOf_def, pcg_eval_thm, updf_def, apply_action_def])
+  >- ((* Abort *) simp[graphOf_def])
+  >- ((* Done *) simp[graphOf_def, pcg_eval_thm])
+  >- ((* Malloc *) simp[graphOf_def]));
+
+val assert_EQ_SOME = store_thm(
+  "assert_EQ_SOME[simp]",
+  ``(assert b = SOME x) <=> b``,
+  Cases_on `b` THEN SIMP_TAC (srw_ss()) [oneTheory.one]);
+
+val INJ_UNION_DOMAIN = store_thm(
+  "INJ_UNION_DOMAIN",
+  ``INJ f (p ∪ q) r ⇔
+      INJ f p r ∧ INJ f q r ∧
+      DISJOINT (IMAGE f (p DIFF q)) (IMAGE f (q DIFF p))``,
+  dsimp[INJ_THM, EQ_IMP_THM] >> rw[]
+  >- (simp[DISJOINT_DEF, EXTENSION] >> metis_tac[])
+  >- (fs[DISJOINT_DEF, EXTENSION] >> metis_tac[])
+  >- (fs[DISJOINT_DEF, EXTENSION] >> metis_tac[]));
+
+val add_postactionID = store_thm(
+  "add_postactionID",
+  ``a.iter ∈ iterations g ⇒ add_postaction a g = g``,
+  simp[graph_equality, add_postaction_edges]);
+
+val imap_add_postaction = store_thm(
+  "imap_add_postaction",
+  ``INJ f (a.iter INSERT iterations g) UNIV ⇒
+    imap f (add_postaction a g) =
+        add_postaction (a with iter updated_by f) (imap f g)``,
+  map_every qid_spec_tac [`a`, `g`] >> ho_match_mp_tac graph_ind >>
+  simp[imap_add_action] >> map_every qx_gen_tac [`a`, `g`] >>
+  strip_tac >> qx_gen_tac `b` >> strip_tac >>
+  `INJ f (a.iter INSERT iterations g) UNIV` by fs[INJ_INSERT] >>
+  `INJ f (b.iter INSERT iterations g) UNIV` by fs[INJ_INSERT] >>
+  Cases_on `b.iter = a.iter`
+  >- simp[add_postactionID, iterations_imap] >>
+  `f a.iter ≠ f b.iter` by fs[INJ_THM] >>
+  fs[imap_add_action, add_action_add_postaction_ASSOC, INSERT_COMM]);
+
+val imap_merge_graph = store_thm(
+  "imap_merge_graph",
+  ``INJ f (iterations g1 ∪ iterations g2) UNIV ∧
+    DISJOINT (iterations g1) (iterations g2) ⇒
+    imap f (merge_graph g1 g2) = merge_graph (imap f g1) (imap f g2)``,
+  map_every qid_spec_tac [`g1`, `g2`] >> ho_match_mp_tac graph_ind >>
+  simp[merge_graph_thm] >> rpt strip_tac >>
+  fs[INSERT_UNION_EQ, ONCE_REWRITE_RULE [UNION_COMM] INSERT_UNION_EQ] >>
+  `INJ f (a.iter INSERT iterations g1) UNIV ∧
+   INJ f (a.iter INSERT iterations g2) UNIV ∧
+   INJ f (iterations g1) UNIV ∧ INJ f (iterations g2) UNIV`
+    by (fs[INJ_UNION_DOMAIN, INJ_INSERT] >> fs[INJ_THM] >>
+        metis_tac[]) >>
+  `∀j. j ∈ iterations g1 ∨ j ∈ iterations g2 ⇒ (f a.iter ≠ f j)`
+    by (rpt strip_tac >> fs[INJ_INSERT] >> metis_tac[]) >>
+  csimp[imap_add_action, merge_graph_thm, iterations_imap,
+        imap_add_postaction, INSERT_UNION_EQ,
+        ONCE_REWRITE_RULE [UNION_COMM] INSERT_UNION_EQ]);
+
 (*
+val graphOf_starting_id_irrelevant = store_thm(
+  "graphOf_starting_id_irrelevant",
+  ``∀i0 m0 c0 i m g.
+       graphOf i0 m0 c0 = SOME (i, m, g) ∧ i0 ≠ [] ⇒
+       ∀i0' s.
+        i0' ≠ [] ∧ i0' ∉ s ∧ FINITE s ⇒
+        ∃f.
+          graphOf i0' m0 c0 = SOME(f i, m, imap f g) ∧
+          i0' = f i0 ∧ DISJOINT s (IMAGE f (iterations g)) ∧
+          INJ f (iterations g) UNIV``,
+  ho_match_mp_tac (theorem "graphOf_ind") >> rpt conj_tac >>
+  map_every qx_gen_tac [`i0`, `m0`]
+  >- (qx_gen_tac `g` >> rpt gen_tac >> strip_tac >>
+      ONCE_REWRITE_TAC [graphOf_def] >>
+      Cases_on `evalexpr m0 g` >> simp[] >> fs[] >>
+      rw[])
+  >- (rpt gen_tac >> strip_tac >> ONCE_REWRITE_TAC [graphOf_def] >>
+      simp[] >> metis_tac[])
+  >- (qx_gen_tac `cs` >> Cases_on `cs` >> simp[]
+      >- (simp[graphOf_def] >> strip_tac >> qx_gen_tac `j` >> rpt strip_tac >>
+          qexists_tac `\x. if x = i0 then j else ARB` >>
+          simp[]) >>
+      strip_tac >> ONCE_REWRITE_TAC [graphOf_def] >>
+      simp[PULL_EXISTS, pairTheory.FORALL_PROD, pairTheory.EXISTS_PROD] >>
+      map_every qx_gen_tac [`i`, `m`, `i0'`, `m0'`, `g1`, `g2`] >>
+      strip_tac >> map_every qx_gen_tac [`j`, `s`] >> strip_tac >>
+      `∃f1. graphOf j m0 h = SOME(f1 i0',m0',imap f1 g1) ∧ j = f1 i0 ∧
+            DISJOINT s (IMAGE f1 (iterations g1)) ∧
+            INJ f1 (iterations g1) UNIV`
+        by metis_tac[] >> simp[] >>
+      Q.UNDISCH_THEN `graphOf i0 m0 h = SOME(i0',m0',g1)`
+        (fn th => first_x_assum
+                    (fn impth => mp_tac (MATCH_MP impth th) >>
+                                 assume_tac th)) >>
+      simp[] >>
+      first_x_assum (kall_tac o assert(is_forall o concl)) >>
+      `i0' ≠ [] ∧ (∀k. k ∈ iterations g1 ⇒ k < i0') ∧
+       ∀k. k ∈ iterations g2 ⇒ i0' ≤ k`
+        by metis_tac[graphOf_iterations_apart, ilistLE_NIL] >>
+      simp[] >>
+      `DISJOINT (iterations g1) (iterations g2)`
+        by (simp[DISJOINT_DEF, EXTENSION] >>
+            metis_tac[ilistLTE_trans, ilistLE_REFL]) >>
+      `FINITE (iterations g1)` by simp[iterations_thm] >>
+      `FINITE (IMAGE f1 (iterations g1))` by simp[] >>
+      disch_then (
+        qspecl_then [`f1 i0'`, `IMAGE f1 (iterations g1) ∪ s`]
+                    mp_tac) >> simp[]
+
+
+      metis_tac[])
+  >- (rpt gen_tac >> strip_tac >> ONCE_REWRITE_TAC[graphOf_def] >> simp[] >>
+      metis_tac[])
+  >- (qx_gen_tac `cs` >> strip_tac >> ONCE_REWRITE_TAC [graphOf_def] >>
+      simp[PULL_EXISTS, pairTheory.EXISTS_PROD, pairTheory.FORALL_PROD] >>
+      simp[OPT_SEQUENCE_EQ_SOME, combinTheory.o_ABS_R, MEM_MAPi,
+           PULL_EXISTS] >>
+      qabbrev_tac `TOS = λi m c. THE (OPTION_MAP (SND o SND) (graphOf i m c))`>>
+      simp[] >> qx_gen_tac `m` >> strip_tac >> qx_gen_tac `i0'` >>
+
+
+
 val graphOf_correct_lemma = store_thm(
   "graphOf_correct_lemma",
   ``∀m0 c0 m c.
       (m0,c0) ---> (m,c) ⇒
-      ∀iters m0' g0.
-        graphOf iters m0 c0 = SOME (m0', g0) ⇒
-        ∃g m'. graphOf iters m c = SOME(m', g) ∧
-               pcg_eval g (SOME m) = pcg_eval g0 (SOME m0)``,
-  ho_match_mp_tac eval_ind' >> rpt strip_tac
-  >- (dsimp[Once graphOf_def, pairTheory.EXISTS_PROD] >>
+      ∀i0 i0' m0' g0.
+        i0 ≠ [] ∧ graphOf i0 m0 c0 = SOME (i0', m0', g0) ⇒
+        ∃i' g.
+          graphOf i0 m c = SOME(i', m0', g)``,
+  ho_match_mp_tac eval_ind' >> rpt conj_tac
+  >- (ONCE_REWRITE_TAC [graphOf_def] >>
+      simp[PULL_EXISTS, pairTheory.FORALL_PROD, pairTheory.EXISTS_PROD] >>
+      rpt strip_tac
+
+  ho_match_mp_tac WF_eval_induction >> map_every qx_gen_tac [`m0`, `c0`] >>
+  strip_tac >> map_every qx_gen_tac [`m`, `c`] >>
+  simp[Once eval_cases] >> strip_tac
+  >- (simp[] >> ONCE_REWRITE_TAC [graphOf_def] >>
+      dsimp[pairTheory.EXISTS_PROD, pairTheory.FORALL_PROD] >>
       pop_assum mp_tac >>
       dsimp[SimpL ``(==>)``, Once graphOf_def] >>
       dsimp[pairTheory.EXISTS_PROD, pairTheory.FORALL_PROD] >>
