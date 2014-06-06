@@ -805,8 +805,9 @@ val imap_ID = store_thm(
 
 val imap_CONG = store_thm(
   "imap_CONG",
-  ``G = G' ⇒ (∀a. a ∈ iterations G' ⇒ f a = f' a) ⇒ imap f G = imap f' G``,
-  rpt strip_tac >> Cases_on `INJ f (iterations G) UNIV`
+  ``G = G' ⇒ (∀a. a ∈ iterations G' ⇒ f a = f' a) ⇒
+    imap f G = imap f' G'``,
+  rpt strip_tac >> rw[] >> Cases_on `INJ f (iterations G) UNIV`
   >- (`∀a. a ∈ G ⇒ a with iter updated_by f = a with iter updated_by f'`
         by (fds[iterations_thm] >> rpt strip_tac >>
             simp[action_component_equality]) >>
