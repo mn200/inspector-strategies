@@ -1128,6 +1128,11 @@ val imap_merge_graph = store_thm(
         imap_add_postaction, INSERT_UNION_EQ,
         ONCE_REWRITE_RULE [UNION_COMM] INSERT_UNION_EQ]);
 
+val INJ_CONG = store_thm(
+  "INJ_CONG",
+  ``(∀x. x ∈ s ⇒ f x = g x) ⇒ (INJ f s t ⇔ INJ g s t)``,
+  simp[INJ_THM]);
+
 (*
 val graphOf_starting_id_irrelevant = store_thm(
   "graphOf_starting_id_irrelevant",
@@ -1175,29 +1180,59 @@ val graphOf_starting_id_irrelevant = store_thm(
         by metis_tac[graphOf_iterations_apart, ilistLE_NIL] >>
       simp[] >> disch_then (qx_choose_then `f2` strip_assume_tac) >>
       simp[] >>
+      `∀k. k ∈ iterations (imap f2 g2) ⇒ f1 i0' ≤ k`
+        by metis_tac[graphOf_iterations_apart] >>
+      `INJ f1 (iterations g1) UNIV ∧ INJ f2 (iterations g2) UNIV`
+        by fs[INJ_INSERT] >>
       qabbrev_tac `
         ff = λk. if k ∈ iterations g2 ∨ k = i then f2 k else f1 k` >>
       qexists_tac `ff` >>
       `f2 i = ff i` by simp[Abbr`ff`] >> simp[] >>
       `f1 i0 = ff i0`
         by (rw[Abbr`ff`] >> metis_tac[ilistLE_antisym]) >> simp[] >>
+      `i ∉ iterations g1` by metis_tac[ilistLTE_trans, ilistLE_REFL] >>
+      `(∀k. k ∈ iterations g1 ⇒ ff k = f1 k) ∧
+       (∀k. k ∈ iterations g2 ⇒ ff k = f2 k)`
+        by (simp[Abbr`ff`] >> qx_gen_tac `k` >> strip_tac >>
+            `k ∉ iterations g2 ∧ k ≠ i`
+              by (fs[DISJOINT_DEF, EXTENSION] >> metis_tac[]) >>
+            simp[]) >>
       `INJ ff (iterations g1 ∪ iterations g2) UNIV`
-        by (simp[INJ_UNION_DOMAIN]
-
-
-
-
-
-      metis_tac[])
-  >- (rpt gen_tac >> strip_tac >> ONCE_REWRITE_TAC[graphOf_def] >> simp[] >>
-      metis_tac[])
-  >- (qx_gen_tac `cs` >> strip_tac >> ONCE_REWRITE_TAC [graphOf_def] >>
-      simp[PULL_EXISTS, pairTheory.EXISTS_PROD, pairTheory.FORALL_PROD] >>
+        by (simp[INJ_UNION_DOMAIN] >>
+            `INJ ff (iterations g1) UNIV ∧ INJ ff (iterations g2) UNIV`
+              by full_simp_tac (srw_ss() ++ boolSimps.ETA_ss)
+                   [Cong INJ_CONG] >>
+            `iterations g1 DIFF iterations g2 = iterations g1 ∧
+             iterations g2 DIFF iterations g1 = iterations g2`
+              by (fs[DISJOINT_DEF, EXTENSION] >> metis_tac[]) >>
+            simp[Cong (REWRITE_RULE [GSYM AND_IMP_INTRO] IMAGE_CONG)] >>
+            CONV_TAC (DEPTH_CONV ETA_CONV) >>
+            fs[iterations_imap, PULL_EXISTS] >>
+            simp[DISJOINT_DEF, EXTENSION] >>
+            metis_tac[ilistLTE_trans, ilistLE_REFL]) >>
+      simp[imap_merge_graph, Cong imap_CONG] >>
+      simp[INJ_INSERT] >> dsimp[] >> reverse conj_tac
+      >- (`∀k. k ∈ iterations (imap f2 g2) ⇒ k < ff i`
+            by metis_tac[graphOf_iterations_apart] >> pop_assum mp_tac >>
+          dsimp[iterations_imap] >> csimp[] >> metis_tac[ilistLE_REFL]) >>
+      csimp[] >>
+      `f2 i0' ≤ f2 i` by metis_tac[graphOf_iterations_apart] >>
+      fs[iterations_imap, PULL_EXISTS] >>
+      metis_tac[ilistLE_REFL, ilistLTE_trans])
+  >- ((* parloop *)
+      map_every qx_gen_tac [`vnm`, `d`, `body`] >>
+      strip_tac >> ONCE_REWRITE_TAC [graphOf_def] >> simp[] >> metis_tac[])
+  >- ((* Par *)
+      qx_gen_tac `cs` >> strip_tac >>
+      ONCE_REWRITE_TAC [graphOf_def] >> simp[] >>
       simp[OPT_SEQUENCE_EQ_SOME, combinTheory.o_ABS_R, MEM_MAPi,
            PULL_EXISTS] >>
-      qabbrev_tac `TOS = λi m c. THE (OPTION_MAP (SND o SND) (graphOf i m c))`>>
-      simp[] >> qx_gen_tac `m` >> strip_tac >> qx_gen_tac `i0'` >>
-
+      qabbrev_tac `GG = λi0 i. graphOf (i0 ++ [i; 0]) m0` >> simp[] >>
+      qabbrev_tac `
+         TOS = λt:(num list # memory #
+                   (value, actionRW, num list)action_graph) option.
+               THE (OPTION_MAP (SND o SND) t)` >> simp[] >>
+      qx_gen_tac `m` >> strip_tac >> qx_gen_tac `i0'` >> strip_tac >>
 
 
 val graphOf_correct_lemma = store_thm(
