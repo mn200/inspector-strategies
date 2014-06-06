@@ -817,6 +817,11 @@ val ilistLTE_trans = store_thm(
   ``(x:num list) < y ∧ y ≤ z ⇒ x < z``,
   metis_tac[ilistLE_LTEQ, ilistLT_trans]);
 
+val ilistLE_antisym = store_thm(
+  "ilistLE_antisym",
+  ``(x:num list) ≤ y ∧ y ≤ x ⇒ x = y``,
+  metis_tac[ilist_trichotomy]);
+
 val OPTION_IGNORE_BIND_EQUALS_OPTION = store_thm(
   "OPTION_IGNORE_BIND_EQUALS_OPTION[simp]",
   ``((OPTION_IGNORE_BIND x y = NONE) <=> (x = NONE) \/ (y = NONE)) /\
@@ -1128,12 +1133,11 @@ val graphOf_starting_id_irrelevant = store_thm(
   "graphOf_starting_id_irrelevant",
   ``∀i0 m0 c0 i m g.
        graphOf i0 m0 c0 = SOME (i, m, g) ∧ i0 ≠ [] ⇒
-       ∀i0' s.
-        i0' ≠ [] ∧ i0' ∉ s ∧ FINITE s ⇒
+       ∀i0'.
+        i0' ≠ [] ⇒
         ∃f.
           graphOf i0' m0 c0 = SOME(f i, m, imap f g) ∧
-          i0' = f i0 ∧ DISJOINT s (IMAGE f (iterations g)) ∧
-          INJ f (iterations g) UNIV``,
+          i0' = f i0 ∧ INJ f (i INSERT iterations g) UNIV``,
   ho_match_mp_tac (theorem "graphOf_ind") >> rpt conj_tac >>
   map_every qx_gen_tac [`i0`, `m0`]
   >- (qx_gen_tac `g` >> rpt gen_tac >> strip_tac >>
@@ -1145,14 +1149,13 @@ val graphOf_starting_id_irrelevant = store_thm(
   >- (qx_gen_tac `cs` >> Cases_on `cs` >> simp[]
       >- (simp[graphOf_def] >> strip_tac >> qx_gen_tac `j` >> rpt strip_tac >>
           qexists_tac `\x. if x = i0 then j else ARB` >>
-          simp[]) >>
+          simp[INJ_INSERT]) >>
       strip_tac >> ONCE_REWRITE_TAC [graphOf_def] >>
       simp[PULL_EXISTS, pairTheory.FORALL_PROD, pairTheory.EXISTS_PROD] >>
       map_every qx_gen_tac [`i`, `m`, `i0'`, `m0'`, `g1`, `g2`] >>
-      strip_tac >> map_every qx_gen_tac [`j`, `s`] >> strip_tac >>
+      strip_tac >> qx_gen_tac `j` >> strip_tac >>
       `∃f1. graphOf j m0 h = SOME(f1 i0',m0',imap f1 g1) ∧ j = f1 i0 ∧
-            DISJOINT s (IMAGE f1 (iterations g1)) ∧
-            INJ f1 (iterations g1) UNIV`
+            INJ f1 (i0' INSERT iterations g1) UNIV`
         by metis_tac[] >> simp[] >>
       Q.UNDISCH_THEN `graphOf i0 m0 h = SOME(i0',m0',g1)`
         (fn th => first_x_assum
@@ -1160,18 +1163,29 @@ val graphOf_starting_id_irrelevant = store_thm(
                                  assume_tac th)) >>
       simp[] >>
       first_x_assum (kall_tac o assert(is_forall o concl)) >>
-      `i0' ≠ [] ∧ (∀k. k ∈ iterations g1 ⇒ k < i0') ∧
+      `i0' ≠ [] ∧ i0 ≤ i0' ∧ i0' ≤ i ∧ (∀k. k ∈ iterations g1 ⇒ k < i0') ∧
        ∀k. k ∈ iterations g2 ⇒ i0' ≤ k`
         by metis_tac[graphOf_iterations_apart, ilistLE_NIL] >>
       simp[] >>
       `DISJOINT (iterations g1) (iterations g2)`
         by (simp[DISJOINT_DEF, EXTENSION] >>
             metis_tac[ilistLTE_trans, ilistLE_REFL]) >>
-      `FINITE (iterations g1)` by simp[iterations_thm] >>
-      `FINITE (IMAGE f1 (iterations g1))` by simp[] >>
-      disch_then (
-        qspecl_then [`f1 i0'`, `IMAGE f1 (iterations g1) ∪ s`]
-                    mp_tac) >> simp[]
+      disch_then (qspec_then `f1 i0'` mp_tac) >> simp[] >>
+      `f1 i0' ≠ [] ∧ (∀k. k ∈ iterations (imap f1 g1) ⇒ k < f1 i0')`
+        by metis_tac[graphOf_iterations_apart, ilistLE_NIL] >>
+      simp[] >> disch_then (qx_choose_then `f2` strip_assume_tac) >>
+      simp[] >>
+      qabbrev_tac `
+        ff = λk. if k ∈ iterations g2 ∨ k = i then f2 k else f1 k` >>
+      qexists_tac `ff` >>
+      `f2 i = ff i` by simp[Abbr`ff`] >> simp[] >>
+      `f1 i0 = ff i0`
+        by (rw[Abbr`ff`] >> metis_tac[ilistLE_antisym]) >> simp[] >>
+      `INJ ff (iterations g1 ∪ iterations g2) UNIV`
+        by (simp[INJ_UNION_DOMAIN]
+
+
+
 
 
       metis_tac[])
