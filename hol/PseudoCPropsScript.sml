@@ -1108,13 +1108,17 @@ val imap_merge_graph = store_thm(
   map_every qid_spec_tac [`g1`, `g2`] >> ho_match_mp_tac graph_ind >>
   simp[merge_graph_thm] >> rpt strip_tac >>
   fs[INSERT_UNION_EQ, ONCE_REWRITE_RULE [UNION_COMM] INSERT_UNION_EQ] >>
+  `DISJOINT (iterations g1) (iterations g2) ∧
+   DISJOINT (a.iter INSERT iterations g1) (iterations g2)`
+    by (fs[DISJOINT_DEF, EXTENSION] >> metis_tac[]) >>
   `INJ f (a.iter INSERT iterations g1) UNIV ∧
    INJ f (a.iter INSERT iterations g2) UNIV ∧
    INJ f (iterations g1) UNIV ∧ INJ f (iterations g2) UNIV`
     by (fs[INJ_UNION_DOMAIN, INJ_INSERT] >> fs[INJ_THM] >>
         metis_tac[]) >>
   `∀j. j ∈ iterations g1 ∨ j ∈ iterations g2 ⇒ (f a.iter ≠ f j)`
-    by (rpt strip_tac >> fs[INJ_INSERT] >> metis_tac[]) >>
+    by (rpt strip_tac >> fs[INJ_INSERT, DISJOINT_DEF, EXTENSION] >>
+        metis_tac[]) >>
   csimp[imap_add_action, merge_graph_thm, iterations_imap,
         imap_add_postaction, INSERT_UNION_EQ,
         ONCE_REWRITE_RULE [UNION_COMM] INSERT_UNION_EQ]);
