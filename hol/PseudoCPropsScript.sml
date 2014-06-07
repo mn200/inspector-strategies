@@ -675,6 +675,13 @@ val MAPi_CONG = store_thm(
   Induct_on `l1` >> dsimp[LT_SUC]);
 val _ = DefnBase.export_cong "MAPi_CONG"
 
+val MAPi_CONG' = store_thm(
+  "MAPi_CONG'",
+  ``l1 = l2 ⇒ (∀x n. (x = EL n l2) ⇒ n < LENGTH l2 ⇒ f1 n x = f2 n x) ⇒
+    MAPi f1 l1 = MAPi f2 l2``,
+  map_every qid_spec_tac [`f1`, `f2`, `l2`] >> Induct_on `l1` >>
+  dsimp[LT_SUC]);
+
 val LENGTH_MAPi = store_thm(
   "LENGTH_MAPi[simp]",
   ``∀f l. LENGTH (MAPi f l) = LENGTH l``,
@@ -689,6 +696,16 @@ val EL_MAPi = store_thm(
   "EL_MAPi[simp]",
   ``∀f n l. n < LENGTH l ⇒ EL n (MAPi f l) = f n (EL n l)``,
   Induct_on `l` >> simp[] >> dsimp[LT_SUC]);
+
+val FOLDRi_def = Define`
+  (FOLDRi f a [] = a) ∧
+  (FOLDRi f a (h::t) = f 0 h (FOLDRi (f o SUC) a t))`
+val _ = export_rewrites ["FOLDRi_def"]
+
+val FOLDR_MAPi = store_thm(
+  "FOLDR_MAPi",
+  ``∀f g a l. FOLDR f a (MAPi g l) = FOLDRi ($o f o g) a l``,
+  Induct_on `l` >> simp[MAPi_def]);
 
 val graphOf_def = tDefine "graphOf" `
 
@@ -1233,7 +1250,48 @@ val graphOf_starting_id_irrelevant = store_thm(
                    (value, actionRW, num list)action_graph) option.
                THE (OPTION_MAP (SND o SND) t)` >> simp[] >>
       qx_gen_tac `m` >> strip_tac >> qx_gen_tac `i0'` >> strip_tac >>
-
+      fs[] >>
+      `∃gfi gfm gfg.
+         ∀n. n < LENGTH cs ⇒
+             GG i0 n (EL n cs) = SOME (gfi n, gfm n, gfg n)`
+        by (fs[pairTheory.EXISTS_PROD] >> metis_tac[]) >>
+      first_x_assum (qspecl_then [`EL n cs`, `n`]
+                                 (mp_tac o Q.GEN `n` o
+                                  SIMP_RULE (srw_ss() ++ boolSimps.CONJ_ss)
+                                            [rich_listTheory.EL_MEM])) >>
+      simp[PULL_FORALL, SimpL ``(==>)``] >>
+      disch_then (qspecl_then [`n`, `i0' ++ [n; 0]`]
+                              (mp_tac o Q.GEN `n` o
+                               SIMP_RULE (srw_ss()) [])) >>
+      disch_then (mp_tac o
+                  SIMP_RULE (srw_ss())
+                            [GSYM RIGHT_EXISTS_IMP_THM,SKOLEM_THM]) >>
+      disch_then (qx_choose_then `ff` assume_tac) >>
+      qabbrev_tac `
+        fff = λi. if i = i0 then i0'
+                  else if i = stackInc i0 then stackInc i0'
+                  else ff (EL (LENGTH i0) i) i` >>
+      qexists_tac `fff` >>
+      `∀n. n < LENGTH cs ⇒ ∃z. GG i0' n (EL n cs) = SOME z`
+        by simp[Abbr`GG`] >> simp[] >>
+      simp[Abbr`GG`, Abbr`TOS`] >> lfs[] >>
+      `MAPi (λn c. THE (OPTION_MAP (SND o SND)
+                                   (graphOf (i0 ++ [n;0]) m0 c))) cs =
+       MAPi (λn c. gfg n) cs` by simp[listTheory.LIST_EQ_REWRITE] >>
+      simp[] >>
+      `MAPi (λn c. THE (OPTION_MAP (SND o SND)
+                                   (graphOf (i0' ++ [n;0]) m0 c))) cs =
+       MAPi (λn c. imap (ff n) (gfg n)) cs`
+        by simp[listTheory.LIST_EQ_REWRITE] >>
+      fs[] >> ntac 2 (pop_assum kall_tac) >>
+      fs[FOLDR_MAPi, combinTheory.o_ABS_R] >>
+      `∀n j. n < LENGTH cs ∧ j ∈ iterations (imap (ff n) (gfg n)) ⇒
+             i0' ++ [n;0] ≤ j ∧
+             TAKE (LENGTH (i0' ++ [n;0]) - 1) j = FRONT (i0' ++ [n;0])`
+        by (rpt gen_tac >> strip_tac >> res_tac >>
+            `i0' ++ [n;0] ≠ []` by simp[] >>
+            metis_tac[graphOf_iterations_apart]) >>
+      fs[rich_listTheory.FRONT_APPEND]
 
 val graphOf_correct_lemma = store_thm(
   "graphOf_correct_lemma",
