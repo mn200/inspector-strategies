@@ -1127,4 +1127,14 @@ val nontouching_merge_COMM = store_thm(
   `add_postaction a g2 = a ⊕ g2` by metis_tac[add_postaction_EQ_add_action] >>
   simp[merge_graph_addaction_ASSOC] >> metis_tac[]);
 
+val gtouches_imap = store_thm(
+  "gtouches_imap[simp]",
+  ``(gtouches (imap f g1) g2 ⇔ gtouches g1 g2) ∧
+    (gtouches g1 (imap f g2) ⇔ gtouches g1 g2)``,
+  simp[gtouches_def] >> conj_tac
+  >- (Cases_on `INJ f (iterations g1) UNIV` >>
+      simp[IN_imap, PULL_EXISTS, imap_id] >> metis_tac[])
+  >- (Cases_on `INJ f (iterations g2) UNIV` >>
+      simp[IN_imap, PULL_EXISTS, imap_id] >> metis_tac[]))
+
 val _ = export_theory();
