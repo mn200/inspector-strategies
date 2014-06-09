@@ -1159,13 +1159,20 @@ val iterations_FOLDRi_merge = store_thm(
   Induct_on `l` >> simp[combinTheory.o_ABS_L] >>
   dsimp[Once EXTENSION, LT_SUC] >> metis_tac[]);
 
-(*
+val match_imp = let
+  fun f th = SUBGOAL_THEN (lhand (concl th)) (mp_tac o MATCH_MP th)
+in
+  disch_then f
+end
+
 val imap_FOLDRi_merge = store_thm(
   "imap_FOLDRi_merge",
   ``∀f g.
       (∀i j. i < j ∧ j < LENGTH l ⇒
         DISJOINT (iterations (g i (EL i l)))
                  (iterations (g j (EL j l)))) ∧
+      (∀i. i < LENGTH l ⇒
+           DISJOINT (iterations (g i (EL i l))) (iterations G)) ∧
       INJ f (iterations G ∪
              iterations (FOLDRi (λn c. merge_graph (g n c)) G l))
             UNIV
@@ -1178,8 +1185,17 @@ val imap_FOLDRi_merge = store_thm(
   first_x_assum (qspecl_then [`f`, `λn c. g (SUC n) c`] mp_tac) >>
   simp[] >>
   imp_res_tac (REWRITE_RULE [GSYM AND_IMP_INTRO] INJ_SUBSET) >>
-  fs[]
+  fs[] >>
+  match_imp >- (first_assum match_mp_tac >> simp[SUBSET_DEF]) >>
+  qabbrev_tac `AG = FOLDRi (λn c. merge_graph (g (SUC n) c)) G l` >>
+  `imap f (merge_graph (g 0 h) AG) = merge_graph (imap f (g 0 h)) (imap f AG)`
+    by (match_mp_tac imap_merge_graph >> conj_tac
+        >- (first_x_assum match_mp_tac >> simp[SUBSET_DEF]) >>
+        dsimp[Abbr`AG`, iterations_FOLDRi_merge] >>
+        metis_tac[DISJOINT_SYM]) >>
+  simp[combinTheory.o_DEF]);
 
+(*
 val graphOf_starting_id_irrelevant = store_thm(
   "graphOf_starting_id_irrelevant",
   ``∀i0 m0 c0 i m g.
