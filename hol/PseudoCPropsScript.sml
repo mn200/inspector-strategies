@@ -1150,7 +1150,36 @@ val INJ_CONG = store_thm(
   ``(∀x. x ∈ s ⇒ f x = g x) ⇒ (INJ f s t ⇔ INJ g s t)``,
   simp[INJ_THM]);
 
+val iterations_FOLDRi_merge = store_thm(
+  "iterations_FOLDRi_merge",
+  ``∀g.
+      iterations (FOLDRi (λn c. merge_graph (g n c)) a l) =
+        BIGUNION (IMAGE (λi. iterations (g i (EL i l))) (count (LENGTH l))) ∪
+        iterations a``,
+  Induct_on `l` >> simp[combinTheory.o_ABS_L] >>
+  dsimp[Once EXTENSION, LT_SUC] >> metis_tac[]);
+
 (*
+val imap_FOLDRi_merge = store_thm(
+  "imap_FOLDRi_merge",
+  ``∀f g.
+      (∀i j. i < j ∧ j < LENGTH l ⇒
+        DISJOINT (iterations (g i (EL i l)))
+                 (iterations (g j (EL j l)))) ∧
+      INJ f (iterations G ∪
+             iterations (FOLDRi (λn c. merge_graph (g n c)) G l))
+            UNIV
+     ⇒
+      imap f (FOLDRi (λn c. merge_graph (g n c)) G l) =
+      FOLDRi ((o) (merge_graph o imap f) o g) (imap f G) l``,
+  Induct_on `l` >> simp[imap_merge_graph, combinTheory.o_ABS_L, LT_SUC] >>
+  dsimp[LT_SUC] >> map_every qx_gen_tac [`h`, `f`, `g`] >>
+  strip_tac >>
+  first_x_assum (qspecl_then [`f`, `λn c. g (SUC n) c`] mp_tac) >>
+  simp[] >>
+  imp_res_tac (REWRITE_RULE [GSYM AND_IMP_INTRO] INJ_SUBSET) >>
+  fs[]
+
 val graphOf_starting_id_irrelevant = store_thm(
   "graphOf_starting_id_irrelevant",
   ``∀i0 m0 c0 i m g.
@@ -1259,7 +1288,7 @@ val graphOf_starting_id_irrelevant = store_thm(
                                  (mp_tac o Q.GEN `n` o
                                   SIMP_RULE (srw_ss() ++ boolSimps.CONJ_ss)
                                             [rich_listTheory.EL_MEM])) >>
-      simp[PULL_FORALL, SimpL ``(==>)``] >>
+      simp[] >> simp[PULL_FORALL, SimpL ``(==>)``] >>
       disch_then (qspecl_then [`n`, `i0' ++ [n; 0]`]
                               (mp_tac o Q.GEN `n` o
                                SIMP_RULE (srw_ss()) [])) >>
