@@ -62,15 +62,18 @@ bool diff = true;
 // wave.fields:
 //      Inspector types and default inspector type.
 typedef enum {
-    naive_inspector,
+    byhandfast_inspector,
+    fast_inspector,
     Rauchwerger95_inspector,
     Zhuang09_inspector
 } inspector_type;
-inspector_type inspectorChoice = naive_inspector;
-#define num_IPairs 3
-static EnumStringPair IPairs[] = {{naive_inspector,"naive_inspector"},
-                        {Rauchwerger95_inspector,"Rauchwerger95_inspector"},
-                        {Zhuang09_inspector,"Zhuang09_inspector"}
+inspector_type inspectorChoice = byhandfast_inspector;
+#define num_IPairs 4
+static EnumStringPair IPairs[] = 
+                        {{byhandfast_inspector,"byhandfast_inspector"},
+                         {fast_inspector,"fast_inspector"},
+                         {Rauchwerger95_inspector,"Rauchwerger95_inspector"},
+                         {Zhuang09_inspector,"Zhuang09_inspector"}
                 };
 
 //*** function prototypes for command line parsing ***
@@ -84,83 +87,46 @@ void fullFilePath(char *returnStr,char * path,char * filename);
 void diff_results(int N, double *data_org, double *data);
 
 
-//============================================== Inspectors
-// Want to move each of these into separate file.
+//================================= Generated Inspectors and Executors
+//#include "PIESgen.c"
+void rauchwerger95(COO_mat *mat, int nnz, int * row, int *col,
+                          int *max_wave_ptr, int **wavestart_ptr, 
+                          int **wavefronts_ptr)
+{
+    int max_wave = 0;
+    int* wavestart=(int*)calloc((max_wave+2),sizeof(int));
+    int *wavefronts=(int*)malloc(sizeof(int)*nnz);
+    
+
+    // epilogue to capture outputs
+    (*max_wave_ptr) = max_wave;
+    (*wavestart_ptr) = wavestart;
+    (*wavefronts_ptr) = wavefronts;
+}
+
+void zhuang09(COO_mat *mat, int nnz, int * row, int *col,
+                          int *max_wave_ptr, int **wavestart_ptr, 
+                          int **wavefronts_ptr)
+{
+    int max_wave = 0;
+    int* wavestart=(int*)calloc((max_wave+2),sizeof(int));
+    int *wavefronts=(int*)malloc(sizeof(int)*nnz);
+    
+
+    // epilogue to capture outputs
+    (*max_wave_ptr) = max_wave;
+    (*wavestart_ptr) = wavestart;
+    (*wavefronts_ptr) = wavefronts;
+}
 
 
 /*--------------------------------------------------------------*//*!
-  Naive Inspector
+  byhandfast_inspector: Efficient, Handwritten Serial Inspector
 *//*--------------------------------------------------------------*/
-
-
-//============================================== Driver
-
-
-int main(int argc, char ** argv) {
-    TIMER original_timer;
-    TIMER inspector_timer;
-    TIMER executor_timer;
-
-    // Do command-line parsing.
-    CmdParams *cmdparams = CmdParams_ctor(1);
-    initParams(cmdparams);
-    CmdParams_parseParams(cmdparams,argc,argv);
-    getParamValues(cmdparams);
-
-    // Load the matrix from the specified file
-    COO_mat *mat;
-    char matrix_file_path[MAXLINESIZE] = "";
-    fullFilePath(matrix_file_path,datadir,matrixfilename);
-    printf("==== Loading MM sparse matrix %s ====\n",matrix_file_path);
-    mat=COO_mat_load_from_MM(matrix_file_path);
-
-    // initialize the data vectors
-    printf("==== Creating data_org and data vectors ====\n");
-    double* data_org=(double*)malloc(sizeof(double)*(mat->nrows));
-    double* data=(double*)malloc(sizeof(double)*(mat->nrows));
-    for(int i=0; i<mat->nrows; i++) {
-      // Need to start at 1.0 instead of 2.0.  
-      // See convergence argument in header, 1<=y and 1<=z.
-      data_org[i] = data[i] = 1.0;
-    }
-
-    // Query information about the sparse matrix.
-    double *val = mat->val; // nnz values in COO matrix representation
-    int *row    = mat->row; // nnz rows in COO matrix representation
-    int *col    = mat->col; // nnz rows in COO matrix representation
-    if (mat->nrows != mat->ncols) assert(0);// only dealing with square matrices
-    // wavebench.fields
-    // FIXME: check if getenv works.  If not then exist with an error indicating
-    // need to set OMP_NUM_THREADS.
-    numthreads  = atoi(getenv("OMP_NUM_THREADS"));
-    nnz         = mat->nnz; // number of nonzeros
-    N           = mat->nrows;
-
-    // Original Computation
-    printf("==== performing original computation ====\n");
-    timer_start(&original_timer);
-    // foreach non-zero A_{ij} in sparse matrix:
-    for (int p=0; p<nnz; p++) {
-        int i = row[p];
-        int j = col[p];
-        if (debug) {
-            printf("original: i=%d, j=%d\n", i, j);
-        }
-        // sum = Sum_{k=0}^{w-1} 1 / exp( k * data[i] * data[j] )
-        double sum = 0.0;
-        for (int k=0; k<workPerIter; k++) {
-            if (debug) { printf("\tsum = %lf\n", sum); }
-            sum += 1.0 / exp( (double)k * data_org[i] * data_org[j] );
-        }
-        data_org[ i ] += 1.0 + sum;
-        data_org[ j ] += 1.0 + sum; 
-    }
-    timer_end(&original_timer); 
-
-    // One of the wavefront inspectors
-    printf("==== performing wavefront inspector ====\n");
-    timer_start(&inspector_timer);
-    
+void find_waves_fast(COO_mat *mat, int nnz, int * row, int *col,
+                          int *max_wave_ptr, int **wavestart_ptr, 
+                          int **wavefronts_ptr)
+{
     //===== find_waves_fast variant, see 3/17/14 in SPFproofs-log.txt
     // see 5/14/14 for optimizations, combining mallocs hurt perf on Mac
     
@@ -219,16 +185,119 @@ int main(int argc, char ** argv) {
         wavestart[w] = wavestart[w-1] + wavestart[w];
     }
     // Place iterations into wavefront.
-    int* wavefronts=(int*)malloc(sizeof(int)*nnz);
+    int *wavefronts=(int*)malloc(sizeof(int)*nnz);
     for (int p=nnz-1; p>=0; p--) {
         int w = wave[p];
         
-        wavefronts[--wavestart[w]] = p;
+        wavefronts[--(wavefronts[w])] = p;
         
         if (debug) {
-            printf("w=%d, wavestart[w]=%d, p=%d\n", w, wavestart[w], p);
+            printf("w=%d, wavestart[w]=%d, p=%d\n", w, wavefronts[w], p);
         }
     }
+    
+    // epilogue to capture outputs
+    (*max_wave_ptr) = max_wave;
+    (*wavestart_ptr) = wavestart;
+    (*wavefronts_ptr) = wavefronts;
+    
+}
+
+//============================================== Driver
+
+
+int main(int argc, char ** argv) {
+    TIMER original_timer;
+    TIMER inspector_timer;
+    TIMER executor_timer;
+
+    // Do command-line parsing.
+    CmdParams *cmdparams = CmdParams_ctor(1);
+    initParams(cmdparams);
+    CmdParams_parseParams(cmdparams,argc,argv);
+    getParamValues(cmdparams);
+
+    // Load the matrix from the specified file
+    COO_mat *mat;
+    char matrix_file_path[MAXLINESIZE] = "";
+    fullFilePath(matrix_file_path,datadir,matrixfilename);
+    printf("==== Loading MM sparse matrix %s ====\n",matrix_file_path);
+    mat=COO_mat_load_from_MM(matrix_file_path);
+
+    // initialize the data vectors
+    printf("==== Creating data_org and data vectors ====\n");
+    double* data_org=(double*)malloc(sizeof(double)*(mat->nrows));
+    double* data=(double*)malloc(sizeof(double)*(mat->nrows));
+    for(int i=0; i<mat->nrows; i++) {
+      // Need to start at 1.0 instead of 2.0.  
+      // See convergence argument in header, 1<=y and 1<=z.
+      data_org[i] = data[i] = 1.0;
+    }
+
+    // Query information about the sparse matrix.
+    double *val = mat->val; // nnz values in COO matrix representation
+    int *row    = mat->row; // nnz rows in COO matrix representation
+    int *col    = mat->col; // nnz rows in COO matrix representation
+    if (mat->nrows != mat->ncols) assert(0);// only dealing with square matrices
+    // wavebench.fields
+    // FIXME: check if getenv works.  If not then exist with an error indicating
+    // need to set OMP_NUM_THREADS.
+    if (char* numthreads_str=getenv("OMP_NUM_THREADS")) {
+        numthreads  = atoi(numthreads_str);
+    } else {
+        numthreads = 1;
+    }
+    nnz         = mat->nnz; // number of nonzeros
+    N           = mat->nrows;
+
+    // Original Computation
+    printf("==== performing original computation ====\n");
+    timer_start(&original_timer);
+    // foreach non-zero A_{ij} in sparse matrix:
+    for (int p=0; p<nnz; p++) {
+        int i = row[p];
+        int j = col[p];
+        if (debug) {
+            printf("original: i=%d, j=%d\n", i, j);
+        }
+        // sum = Sum_{k=0}^{w-1} 1 / exp( k * data[i] * data[j] )
+        double sum = 0.0;
+        for (int k=0; k<workPerIter; k++) {
+            if (debug) { printf("\tsum = %lf\n", sum); }
+            sum += 1.0 / exp( (double)k * data_org[i] * data_org[j] );
+        }
+        data_org[ i ] += 1.0 + sum;
+        data_org[ j ] += 1.0 + sum; 
+    }
+    timer_end(&original_timer); 
+
+    // Select a wavefront inspectors
+    printf("==== performing wavefront inspector ====\n");
+    timer_start(&inspector_timer);
+
+    // Variables where outputs will be placed.
+    int max_wave;
+    int *wavestart;
+    int * wavefronts;
+    
+    switch (inspectorChoice) {
+
+        case (byhandfast_inspector):
+            find_waves_fast(mat, nnz, row, col,
+                            &max_wave, &wavestart, &wavefronts);
+            break;
+        case (Rauchwerger95_inspector):
+            rauchwerger95(mat, nnz, row, col,
+                            &max_wave, &wavestart, &wavefronts);
+            break;
+        case (Zhuang09_inspector):
+            zhuang09(mat, nnz, row, col,
+                            &max_wave, &wavestart, &wavefronts);
+            break;
+        default:
+            fprintf(stderr, "ERROR: unknown inspector\n");
+     }
+    
         
     timer_end(&inspector_timer);    
 
@@ -331,7 +400,7 @@ void initParams(CmdParams* cmdparams)
 
     CmdParams_describeEnumParam(cmdparams, (char*)"inspectorChoice", 'i', 1,
             "wavefront inspector",
-            IPairs, num_IPairs, naive_inspector);
+            IPairs, num_IPairs, byhandfast_inspector);
 
 }
 
