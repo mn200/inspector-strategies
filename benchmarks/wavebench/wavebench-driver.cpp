@@ -88,7 +88,24 @@ void diff_results(int N, double *data_org, double *data);
 
 
 //================================= Generated Inspectors and Executors
-//#include "PIESgen.c"
+#include "PIESgen.c"
+
+/*
+void find_waves_fast_gen(COO_mat *mat, int nnz, int * row, int *col,
+                          int *max_wave_ptr, int **wavestart_ptr, 
+                          int **wavefronts_ptr)
+{
+    int max_wave = 0;
+    int* wavestart=(int*)calloc((max_wave+2),sizeof(int));
+    int *wavefronts=(int*)malloc(sizeof(int)*nnz);
+    
+
+    // epilogue to capture outputs
+    (*max_wave_ptr) = max_wave;
+    (*wavestart_ptr) = wavestart;
+    (*wavefronts_ptr) = wavefronts;
+}
+
 void rauchwerger95(COO_mat *mat, int nnz, int * row, int *col,
                           int *max_wave_ptr, int **wavestart_ptr, 
                           int **wavefronts_ptr)
@@ -118,6 +135,7 @@ void zhuang09(COO_mat *mat, int nnz, int * row, int *col,
     (*wavestart_ptr) = wavestart;
     (*wavefronts_ptr) = wavefronts;
 }
+*/
 
 
 /*--------------------------------------------------------------*//*!
@@ -189,7 +207,7 @@ void find_waves_fast(COO_mat *mat, int nnz, int * row, int *col,
     for (int p=nnz-1; p>=0; p--) {
         int w = wave[p];
         
-        wavefronts[--(wavefronts[w])] = p;
+        wavefronts[--wavestart[w]] = p;
         
         if (debug) {
             printf("w=%d, wavestart[w]=%d, p=%d\n", w, wavefronts[w], p);
@@ -284,6 +302,10 @@ int main(int argc, char ** argv) {
 
         case (byhandfast_inspector):
             find_waves_fast(mat, nnz, row, col,
+                            &max_wave, &wavestart, &wavefronts);
+            break;
+        case (fast_inspector):
+            find_waves_fast_gen(mat, nnz, row, col,
                             &max_wave, &wavestart, &wavefronts);
             break;
         case (Rauchwerger95_inspector):
