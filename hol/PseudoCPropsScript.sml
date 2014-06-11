@@ -7,6 +7,8 @@ open PseudoCTheory
 open actionGraphTheory
 open pred_setTheory finite_mapTheory
 open intLib
+open listTheory rich_listTheory
+open boolSimps
 
 val _ = new_theory "PseudoCProps";
 
@@ -132,11 +134,11 @@ val loopbag_ssubst = store_thm(
   "loopbag_ssubst[simp]",
   ``loopbag (ssubst vnm value s) = loopbag s``,
   qid_spec_tac `s` >> ho_match_mp_tac stmt_induction >>
-  asm_simp_tac (srw_ss() ++ boolSimps.COND_elim_ss)
+  asm_simp_tac (srw_ss() ++ COND_elim_ss)
     [ssubst_def, FORALL_domain] >>
-  simp[rich_listTheory.FOLDR_MAP,
+  simp[FOLDR_MAP,
       Cong (SPEC_ALL
-              (REWRITE_RULE [GSYM AND_IMP_INTRO] listTheory.FOLDR_CONG))]);
+              (REWRITE_RULE [GSYM AND_IMP_INTRO] FOLDR_CONG))]);
 
 val _ = overload_on (
   "evalR",
@@ -162,18 +164,18 @@ val eval_terminates = store_thm(
   "eval_terminates",
   ``∀a b. eval a b ⇒ evalR b a``,
   Induct_on `eval a b` >> rpt strip_tac >>
-  lfs[pairTheory.LEX_DEF, MAX_SET_THM, listTheory.SUM_APPEND]
+  lfs[pairTheory.LEX_DEF, MAX_SET_THM, SUM_APPEND]
   >- (Cases_on `b` >> simp[])
   >- (simp[mltLT_SING0] >> metis_tac[])
   >- (Cases_on `expr` >> fs[isValue_def])
   >- (Cases_on `expr` >> fs[isValue_def])
-  >- simp[rich_listTheory.FOLDR_MAP, mlt_loopbag_lemma]
+  >- simp[FOLDR_MAP, mlt_loopbag_lemma]
   >- (simp[mltLT_SING0] >> metis_tac[])
-  >- simp[rich_listTheory.FOLDR_MAP, mlt_loopbag_lemma]
+  >- simp[FOLDR_MAP, mlt_loopbag_lemma]
   >- (simp[mltLT_SING0] >> metis_tac[])
   >- (disj1_tac >> rw[] >> Induct_on `pfx` >> simp[] >>
       Induct_on `sfx` >> simp[])
-  >- (disj2_tac >> simp[listTheory.SUM_APPEND] >> rw[] >>
+  >- (disj2_tac >> simp[SUM_APPEND] >> rw[] >>
       Induct_on `pfx` >> simp[]) >>
   disj1_tac >> rw[] >> Induct_on `pfx` >> simp[]);
 
@@ -378,7 +380,7 @@ val nontouching_updfs_read_after_write = store_thm(
           `Num j < LENGTH l`
               by (fs[integerTheory.INT_NOT_LE] >>
                   metis_tac[integerTheory.INT_LT]) >>
-          simp[listTheory.LUPDATE_SEM] >>
+          simp[LUPDATE_SEM] >>
           metis_tac[integerTheory.INT_INJ])
       >- fs[]
       >- fs[])
@@ -399,7 +401,7 @@ val nontouching_updfs_expreval = store_thm(
   "nontouching_updfs_expreval",
   ``¬(touches a1 a2) ∧ updf a2.write value m = SOME m' ⇒
     MAP (lookupRW m') a1.reads = MAP (lookupRW m) a1.reads``,
-  simp[listTheory.MAP_EQ_f] >> strip_tac >> qx_gen_tac `r` >> strip_tac >>
+  simp[MAP_EQ_f] >> strip_tac >> qx_gen_tac `r` >> strip_tac >>
   `r ≠ a2.write` by metis_tac[touches_def] >>
   metis_tac[nontouching_updfs_read_after_write]);
 
@@ -488,7 +490,7 @@ fun eqNONE_tac (g as (asl,w)) = let
     qpat_assum `XX = Array ZZ:value`
       (fn th => EXISTS_TAC (rand (rhs (concl th))) THEN
                 REWRITE_TAC [SYM th]) >> AP_TERM_TAC >>
-    simp[listTheory.MAP_EQ_f] >> rpt strip_tac >>
+    simp[MAP_EQ_f] >> rpt strip_tac >>
     qunabbrev_tac [QUOTE other_name] >> fs[] >>
     metis_tac[nontouching_updfs_read_after_write, touches_def]
   val vararray_case =
@@ -505,7 +507,7 @@ fun eqNONE_tac (g as (asl,w)) = let
     flookupmem_tac >> simp[] >> rw[] >>
     rw[FAPPLY_FUPDATE_THM] >>
     fs[touches_def, FAPPLY_FUPDATE_THM, FLOOKUP_DEF] >>
-    full_simp_tac (srw_ss() ++ boolSimps.COND_elim_ss) [] >> fs[]
+    full_simp_tac (srw_ss() ++ COND_elim_ss) [] >> fs[]
   val None_subtac = flookup_case ORELSE expr_case ORELSE vararray_case
 in
   rearrange_tac >>
@@ -543,7 +545,7 @@ val updf_writes_commute = store_thm(
         LUPDATE v2 (Num j) (LUPDATE v1 (Num i) a1) =
         LUPDATE v1 (Num i) (LUPDATE v2 (Num j) a2)` [] >>
       `a1 = a2` by fs[] >> rw[] >>
-      simp[listTheory.LIST_EQ_REWRITE, listTheory.LUPDATE_SEM] >>
+      simp[LIST_EQ_REWRITE, LUPDATE_SEM] >>
       `Num i ≠ Num j`
         by metis_tac[integerTheory.INT_INJ, integerTheory.INT_OF_NUM] >>
       rw[] >> fs[],
@@ -556,7 +558,7 @@ val updf_writes_commute = store_thm(
       fs[] >> rw[] >> dsimp[fmap_EXT, FAPPLY_FUPDATE_THM] >> csimp[] >>
       `Num i ≠ Num j`
         by metis_tac[integerTheory.INT_INJ, integerTheory.INT_OF_NUM] >>
-      simp[listTheory.LIST_EQ_REWRITE, listTheory.LUPDATE_SEM] >>
+      simp[LIST_EQ_REWRITE, LUPDATE_SEM] >>
       rw[] >> fs[]
     ],
 
@@ -649,6 +651,12 @@ val pcg_eval_thm = save_thm(
   "pcg_eval_thm",
   MATCH_MP gEVAL_thm commutes_lemma
            |> REWRITE_RULE [GSYM pcg_eval_def]);
+
+val pcg_eval_imap_irrelevance = store_thm(
+  "pcg_eval_imap_irrelevance[simp]",
+  ``pcg_eval (imap f g) m = pcg_eval g m``,
+  simp[pcg_eval_def] >> match_mp_tac gEVAL_imap_irrelevance >>
+  simp[commutes_lemma] >> simp[apply_action_def]);
 
 val MAPi_def = Define`
   (MAPi f [] = []) ∧
@@ -779,7 +787,7 @@ val graphOf_def = tDefine "graphOf" `
 
 ` (WF_REL_TAC
      `inv_image (mlt (<) LEX (<)) (λ(i,m,s). (loopbag s, stmt_weight s))` >>
-   simp[WF_mlt1, rich_listTheory.FOLDR_MAP, mlt_loopbag_lemma] >>
+   simp[WF_mlt1, FOLDR_MAP, mlt_loopbag_lemma] >>
    rpt strip_tac
    >- (imp_res_tac MEM_FOLDR_mlt >> pop_assum (qspec_then `I` mp_tac) >>
        rw[] >> simp[] >> qpat_assum `MEM c cmds` mp_tac >>
@@ -798,14 +806,14 @@ val _ = overload_on ("<=", ``\il1:num list il2. ¬LLEX $< il2 il1``)
 val ilist_trichotomy = store_thm(
   "ilist_trichotomy",
   ``∀x y:num list. x < y ∨ x = y ∨ y < x``,
-  metis_tac[listTheory.LLEX_total
+  metis_tac[LLEX_total
               |> GEN_ALL |> Q.ISPEC `$< : num -> num -> bool`
               |> SIMP_RULE (srw_ss() ++ ARITH_ss)
                    [relationTheory.total_def, relationTheory.RC_DEF]])
 
 val ilistLT_trans = save_thm(
   "ilistLT_trans",
-  listTheory.LLEX_transitive
+  LLEX_transitive
     |> GEN_ALL |> Q.ISPEC `$< : num -> num -> bool`
     |> SIMP_RULE (srw_ss() ++ ARITH_ss) [relationTheory.transitive_def]);
 
@@ -883,6 +891,12 @@ val LENGTH_stackInc = store_thm(
   "LENGTH_stackInc[simp]",
   ``LENGTH (stackInc l) = LENGTH l``,
   simp[stackInc_def]);
+
+val stackInc_id = store_thm(
+  "stackInc_id[simp]",
+  ``(stackInc it = it ⇔ it = []) ∧ (it = stackInc it ⇔ it = [])``,
+  Cases_on `it` >> simp[stackInc_def] >> Induct_on `t` >> simp[] >>
+  Cases_on `t` >> lfs[]);
 
 val FRONT_updLast = store_thm(
   "FRONT_updLast[simp]",
@@ -967,30 +981,30 @@ val graphOf_iterations_apart = store_thm(
       map_every qx_gen_tac [`i0`, `m0`, `c`] >> strip_tac >>
       simp[Once graphOf_def, PULL_EXISTS, iterations_FOLDR_merge_graph,
            PULL_EXISTS, iterations_pushG, ilistLT_stackInc,
-           OPT_SEQUENCE_EQ_SOME, MEM_MAPi, listTheory.MEM_MAP,
+           OPT_SEQUENCE_EQ_SOME, MEM_MAPi, MEM_MAP,
            pairTheory.EXISTS_PROD, combinTheory.o_ABS_R] >>
       qabbrev_tac `GG = λn. graphOf (i0 ++ [n;0]) m0 (EL n c)` >> simp[] >>
       qx_gen_tac `m` >> strip_tac >>
       map_every qx_gen_tac [`j`, `n`] >> strip_tac >>
       `∃i' m' g'. GG n = SOME(i',m',g')` by metis_tac[] >> fs[] >>
       first_x_assum (qspecl_then [`EL n c`, `n`] mp_tac) >>
-      simp[rich_listTheory.EL_MEM] >> strip_tac >>
+      simp[EL_MEM] >> strip_tac >>
       first_x_assum (qspec_then `j` mp_tac) >> simp[] >> strip_tac >>
       `i0 ≤ i0 ++ [n; 0]` by simp[] >>
       `i0 ≤ j` by metis_tac[ilistLE_trans] >>
-      fs[rich_listTheory.FRONT_APPEND] >>
+      fs[FRONT_APPEND] >>
       `0 < LENGTH i0`
-        by (spose_not_then assume_tac >> fs[listTheory.LENGTH_NIL]) >>
+        by (spose_not_then assume_tac >> fs[LENGTH_NIL]) >>
       `TAKE (LENGTH i0 - 1) j = FRONT i0`
         by (qpat_assum `TAKE xx j = yy`
               (mp_tac o Q.AP_TERM `TAKE (LENGTH i0 - 1)`) >>
-            simp[rich_listTheory.TAKE_TAKE, rich_listTheory.TAKE_APPEND1,
+            simp[TAKE_TAKE, TAKE_APPEND1,
                  FRONT_TAKE]) >> simp[] >>
       `j < stackInc i0`
         by (match_mp_tac stackInc_TAKE_lemma >> simp[] >>
             qpat_assum `TAKE xx j = i0 ++ [n]`
               (mp_tac o Q.AP_TERM `TAKE (LENGTH i0)`) >>
-            simp[rich_listTheory.TAKE_APPEND1, rich_listTheory.TAKE_TAKE] >>
+            simp[TAKE_APPEND1, TAKE_TAKE] >>
             qabbrev_tac `N = LENGTH i0` >>
             disch_then (SUBST1_TAC o SYM) >>
             `N ≤ LENGTH j` by simp[] >>
@@ -1034,14 +1048,14 @@ val assign_lemma = prove(
     mergeReads0 ds acc opn (MAP (lookupRW m) rds) =
     (opn:value list -> value) (REVERSE acc ++ rvs)``,
   simp[OPT_SEQUENCE_EQ_SOME,
-       listTheory.MEM_MAP, listTheory.MAP_MAP_o,
+       MEM_MAP, MAP_MAP_o,
        PULL_EXISTS] >>
   map_every qid_spec_tac [`acc`, `rvs`, `rds`, `ds`] >>
   Induct >> simp[getReads_def, mergeReads0_def] >>
   Cases >> dsimp[getReads_def, mergeReads0_def, evalDexpr_def,
                  lookupRW_def] >>
-  simp_tac bool_ss [listTheory.APPEND,
-                    GSYM listTheory.APPEND_ASSOC] >>
+  simp_tac bool_ss [APPEND,
+                    GSYM APPEND_ASSOC] >>
   rpt strip_tac >> imp_res_tac some_EQ_SOME_E >> fs[]);
 
 val graphOf_pcg_eval = store_thm(
@@ -1178,7 +1192,7 @@ val imap_FOLDRi_merge = store_thm(
             UNIV
      ⇒
       imap f (FOLDRi (λn c. merge_graph (g n c)) G l) =
-      FOLDRi ((o) (merge_graph o imap f) o g) (imap f G) l``,
+      FOLDRi (λn c. merge_graph (imap f (g n c))) (imap f G) l``,
   Induct_on `l` >> simp[imap_merge_graph, combinTheory.o_ABS_L, LT_SUC] >>
   dsimp[LT_SUC] >> map_every qx_gen_tac [`h`, `f`, `g`] >>
   strip_tac >>
@@ -1194,6 +1208,18 @@ val imap_FOLDRi_merge = store_thm(
         dsimp[Abbr`AG`, iterations_FOLDRi_merge] >>
         metis_tac[DISJOINT_SYM]) >>
   simp[combinTheory.o_DEF]);
+
+val FOLDRi_CONG = store_thm(
+  "FOLDRi_CONG",
+  ``l1 = l2 ⇒
+    (∀n e a. n < LENGTH l2 ⇒ MEM e l2 ⇒ f1 n e a = f2 n e a) ⇒
+    a1 = a2 ⇒
+    FOLDRi f1 a1 l1 = FOLDRi f2 a2 l2``,
+  disch_then SUBST_ALL_TAC >> strip_tac >> disch_then SUBST_ALL_TAC >>
+  pop_assum mp_tac >>
+  map_every qid_spec_tac [`f1`, `f2`] >>
+  Induct_on `l2` >> simp[] >> dsimp[LT_SUC] >> rpt strip_tac >>
+  AP_TERM_TAC >> first_x_assum match_mp_tac >> simp[]);
 
 (*
 val graphOf_starting_id_irrelevant = store_thm(
@@ -1262,7 +1288,7 @@ val graphOf_starting_id_irrelevant = store_thm(
       `INJ ff (iterations g1 ∪ iterations g2) UNIV`
         by (simp[INJ_UNION_DOMAIN] >>
             `INJ ff (iterations g1) UNIV ∧ INJ ff (iterations g2) UNIV`
-              by full_simp_tac (srw_ss() ++ boolSimps.ETA_ss)
+              by full_simp_tac (srw_ss() ++ ETA_ss)
                    [Cong INJ_CONG] >>
             `iterations g1 DIFF iterations g2 = iterations g1 ∧
              iterations g2 DIFF iterations g1 = iterations g2`
@@ -1302,8 +1328,8 @@ val graphOf_starting_id_irrelevant = store_thm(
         by (fs[pairTheory.EXISTS_PROD] >> metis_tac[]) >>
       first_x_assum (qspecl_then [`EL n cs`, `n`]
                                  (mp_tac o Q.GEN `n` o
-                                  SIMP_RULE (srw_ss() ++ boolSimps.CONJ_ss)
-                                            [rich_listTheory.EL_MEM])) >>
+                                  SIMP_RULE (srw_ss() ++ CONJ_ss)
+                                            [EL_MEM])) >>
       simp[] >> simp[PULL_FORALL, SimpL ``(==>)``] >>
       disch_then (qspecl_then [`n`, `i0' ++ [n; 0]`]
                               (mp_tac o Q.GEN `n` o
@@ -1322,12 +1348,12 @@ val graphOf_starting_id_irrelevant = store_thm(
       simp[Abbr`GG`, Abbr`TOS`] >> lfs[] >>
       `MAPi (λn c. THE (OPTION_MAP (SND o SND)
                                    (graphOf (i0 ++ [n;0]) m0 c))) cs =
-       MAPi (λn c. gfg n) cs` by simp[listTheory.LIST_EQ_REWRITE] >>
+       MAPi (λn c. gfg n) cs` by simp[LIST_EQ_REWRITE] >>
       simp[] >>
       `MAPi (λn c. THE (OPTION_MAP (SND o SND)
                                    (graphOf (i0' ++ [n;0]) m0 c))) cs =
        MAPi (λn c. imap (ff n) (gfg n)) cs`
-        by simp[listTheory.LIST_EQ_REWRITE] >>
+        by simp[LIST_EQ_REWRITE] >>
       fs[] >> ntac 2 (pop_assum kall_tac) >>
       fs[FOLDR_MAPi, combinTheory.o_ABS_R] >>
       `∀n j. n < LENGTH cs ∧ j ∈ iterations (imap (ff n) (gfg n)) ⇒
@@ -1336,7 +1362,110 @@ val graphOf_starting_id_irrelevant = store_thm(
         by (rpt gen_tac >> strip_tac >> res_tac >>
             `i0' ++ [n;0] ≠ []` by simp[] >>
             metis_tac[graphOf_iterations_apart]) >>
-      fs[rich_listTheory.FRONT_APPEND]
+      fs[FRONT_APPEND] >>
+      `imap fff (FOLDRi (λn c. merge_graph (gfg n)) emptyG cs) =
+       FOLDRi (λn c. merge_graph (imap fff (gfg n))) (imap fff emptyG) cs`
+        by (ho_match_mp_tac imap_FOLDRi_merge >> simp[] >>
+            `∀n. i0 ++ [n;0] ≠ []` by simp[] >>
+            `∀n. FRONT (i0 ++ [n; 0]) = i0 ++ [n]`
+              by simp[FRONT_APPEND] >>
+            conj_tac
+            >- (simp[DISJOINT_DEF, EXTENSION] >>
+                map_every qx_gen_tac [`i`, `j`] >> strip_tac >>
+                qx_gen_tac `it` >> Cases_on `it ∈ iterations (gfg i)` >>
+                simp[] >>
+                `i < LENGTH cs` by decide_tac >> strip_tac >>
+                `TAKE (LENGTH (i0 ++ [i;0]) - 1) it = i0 ++ [i] ∧
+                 TAKE (LENGTH (i0 ++ [j;0]) - 1) it = i0 ++ [j]`
+                  by metis_tac[graphOf_iterations_apart] >>
+                fs[]) >>
+            dsimp[iterations_FOLDRi_merge, INJ_THM] >>
+            map_every qx_gen_tac [`it1`, `it2`, `i`, `j`] >> strip_tac >>
+            `TAKE (LENGTH (i0 ++ [i;0]) - 1) it1 = i0 ++ [i] ∧
+             TAKE (LENGTH (i0 ++ [j;0]) - 1) it2 = i0 ++ [j] ∧
+             LENGTH (i0 ++ [i;0]) ≤ LENGTH it1 ∧
+             LENGTH (i0 ++ [j;0]) ≤ LENGTH it2`
+                by metis_tac[graphOf_iterations_apart] >>
+            lfs[] >>
+            `EL (LENGTH i0) it1 = EL (LENGTH i0) (i0 ++ [i]) ∧
+             EL (LENGTH i0) it2 = EL (LENGTH i0) (i0 ++ [j])`
+              by metis_tac[EL_TAKE,
+                           DECIDE ``x < x + 1n``,
+                           DECIDE ``x + 2n ≤ y ⇒ x + 1 ≤ y``] >>
+            fs[EL_APPEND2] >>
+            simp[Abbr`fff`] >>
+            `it1 ≠ i0 ∧ it2 ≠ i0 ∧ it1 ≠ stackInc i0 ∧ it2 ≠ stackInc i0`
+              by (rpt strip_tac >> lfs[]) >> simp[] >>
+            reverse (Cases_on `i = j`)
+            >- (`it1 ≠ it2` by (strip_tac >> fs[]) >> simp[] >>
+                `INJ (ff i) (iterations (gfg i)) UNIV ∧
+                 INJ (ff j) (iterations (gfg j)) UNIV`
+                  by metis_tac[INJ_INSERT] >>
+                `ff i it1 ∈ iterations (imap (ff i) (gfg i)) ∧
+                 ff j it2 ∈ iterations (imap (ff j) (gfg j))`
+                  by simp[iterations_imap] >>
+                `∀i. i < LENGTH cs ⇒ ff i (i0 ++ [i; 0]) ≠ []`
+                  by metis_tac[APPEND_eq_NIL, NOT_CONS_NIL] >>
+                `TAKE (LENGTH (i0' ++ [i;0]) - 1) (ff i it1) =
+                 FRONT (i0' ++ [i;0]) ∧
+                 TAKE (LENGTH (i0' ++ [j;0]) - 1) (ff j it2) =
+                 FRONT (i0' ++ [j;0])`
+                  by metis_tac[graphOf_iterations_apart] >>
+                fs[FRONT_APPEND] >>
+                strip_tac >> fs[]) >>
+            pop_assum SUBST_ALL_TAC >>
+            `INJ (ff j) (iterations (gfg j)) UNIV` by metis_tac[INJ_INSERT] >>
+            pop_assum mp_tac >> simp[INJ_THM]) >>
+        `∀i. i < LENGTH cs ⇒ imap fff (gfg i) = imap (ff i) (gfg i)`
+          by (pop_assum kall_tac >> simp[Abbr`fff`] >> qx_gen_tac `i` >>
+              strip_tac >>
+              match_mp_tac (REWRITE_RULE [AND_IMP_INTRO] imap_CONG) >>
+              simp[] >> qx_gen_tac `it` >> strip_tac >>
+              `LENGTH (i0 ++ [i;0]) ≤ LENGTH it ∧
+               TAKE (LENGTH (i0 ++ [i;0]) - 1) it = FRONT (i0 ++ [i;0])`
+                by metis_tac[graphOf_iterations_apart, APPEND_eq_NIL,
+                             NOT_CONS_NIL] >>
+              `it ≠ i0 ∧ it ≠ stackInc i0` by (rpt strip_tac >> lfs[]) >>
+              simp[] >> lfs[FRONT_APPEND] >>
+              `EL (LENGTH i0) it = EL (LENGTH i0) (TAKE (LENGTH i0 + 1) it)`
+                by simp[EL_TAKE] >>
+              simp[EL_APPEND2]) >>
+        fs[Cong FOLDRi_CONG] >> rpt conj_tac
+        >- ((* eval result *) first_assum (SUBST1_TAC o SYM) >> simp[])
+        >- simp[Abbr`fff`]
+        >- simp[Abbr`fff`]
+        >- ((* injectivity of fff *)
+            asm_simp_tac (srw_ss() ++ ETA_ss ++ DNF_ss) [
+              INJ_DEF, iterations_FOLDRi_merge] >>
+            qmatch_abbrev_tac `PP ∧ QQ ∧ RR` >>
+            `PP ⇔ QQ` by metis_tac[] >>
+            pop_assum SUBST1_TAC >> csimp[] >>
+            map_every qunabbrev_tac [`QQ`, `PP`, `RR`] >>
+            `∀i n. i ∈ iterations (gfg n) ∧ n < LENGTH cs ⇒
+                   LENGTH (i0 ++ [n;0]) ≤ LENGTH i ∧
+                   TAKE (LENGTH (i0 ++ [n;0]) - 1) i = FRONT (i0 ++ [n;0])`
+              by metis_tac[APPEND_eq_NIL, NOT_CONS_NIL,
+                           graphOf_iterations_apart] >>
+            `∀i n. i ∈ iterations (gfg n) ∧ n < LENGTH cs ⇒
+                   EL (LENGTH i0) i = n`
+              by (rpt strip_tac >> lfs[FRONT_APPEND] >> res_tac >>
+                  `EL (LENGTH i0) i =
+                   EL (LENGTH i0) (TAKE (LENGTH i0 + 1) i)`
+                    by simp[EL_TAKE] >> simp[EL_APPEND2]) >>
+            conj_tac
+            >- (rpt gen_tac >>
+                disch_then (fn th =>
+                  rpt (first_x_assum (strip_assume_tac o C MATCH_MP th)) >>
+                  strip_assume_tac th) >>
+                simp[Abbr`fff`] >> lfs[FRONT_APPEND] >>
+                `x ≠ i0 ∧ x ≠ stackInc i0` by (rpt strip_tac >> lfs[]) >>
+                simp[]
+
+
+
+
+
+
 
 val graphOf_correct_lemma = store_thm(
   "graphOf_correct_lemma",
