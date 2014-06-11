@@ -943,10 +943,13 @@ val genEvalG_det = store_thm(
 val genEvalG_imap_irrelevance = store_thm(
   "genEvalG_imap_irrelevance",
   ``(∀a f s. ap (a with iter updated_by f) s = ap a s) ⇒
-    ∀s0 G s.
-      genEvalG ap s0 G s ⇒
-      ∀f. INJ f (iterations G) UNIV ⇒ genEvalG ap s0 (imap f G) s``,
-  strip_tac >> Induct_on `genEvalG` >> rpt strip_tac >> simp[] >>
+    ∀s0 G s. genEvalG ap s0 G s ⇒ genEvalG ap s0 (imap f G) s``,
+  strip_tac >> map_every qx_gen_tac [`s0`, `G`, `s`] >>
+  reverse (Cases_on `INJ f (iterations G) UNIV`)
+  >- simp[imap_id] >>
+  pop_assum (fn inj => disch_then (fn g => mp_tac inj >> mp_tac g)) >>
+  map_every qid_spec_tac [`s`, `G`, `s0`] >>
+  Induct_on `genEvalG` >> rpt strip_tac >> simp[] >>
   match_mp_tac (genEvalG_rules |> SPEC_ALL |> CONJUNCT2) >>
   dsimp[imap_edges] >>
   qexists_tac `a` >> simp[] >>
@@ -997,6 +1000,19 @@ val gEVAL_thm = store_thm(
   `genEvalG ap s0 (a ⊕ g) (gEVAL ap (ap a s0) g)`
     by metis_tac[genEvalG_rules] >>
   metis_tac[genEvalG_det, gEVAL_def]);
+
+val gEVAL_imap_irrelevance = store_thm(
+  "gEVAL_imap_irrelevance",
+  ``(∀a f s. ap (a with iter updated_by f) s = ap a s) ∧
+    (∀a1 a2 s. ¬(a1 ∼ₜ a2) ∧ a1.iter ≠ a2.iter ⇒
+               ap a2 (ap a1 s) = ap a1 (ap a2 s)) ⇒
+    ∀s0 f G. gEVAL ap s0 (imap f G) = gEVAL ap s0 G``,
+  rpt strip_tac >>
+  `genEvalG ap s0 G (gEVAL ap s0 G)` by metis_tac[gEVAL_def] >>
+  `genEvalG ap s0 (imap f G) (gEVAL ap s0 G)`
+    by metis_tac[genEvalG_imap_irrelevance] >>
+  `genEvalG ap s0 (imap f G) (gEVAL ap s0 (imap f G))`
+    by metis_tac [gEVAL_def] >> metis_tac[genEvalG_det]);
 
 val graph_ind = store_thm(
   "graph_ind",
