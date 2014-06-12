@@ -67,7 +67,11 @@ genCexpr :: Expr -> String
 genCexpr (Value (IntVal n)) = show n
 genCexpr (Value (BoolVal b)) = show b
 genCexpr (VarExpr var) = var
+genCexpr (ARead var idx) = var++"["++(genCexpr idx)++"]"
+genCexpr (Max e1 e2) = "MAX("++(genCexpr e1)++", "++(genCexpr e2)++")"
 genCexpr (Plus e1 e2) = "("++(genCexpr e1)++" + "++(genCexpr e2)++")"
+genCexpr (Minus e1 e2) = "("++(genCexpr e1)++" - "++(genCexpr e2)++")"
+genCexpr (CmpGTE e1 e2) = "("++(genCexpr e1)++")>=("++(genCexpr e2)++")"
 
 -- Given a PseudoC AST, a list of scalar vars that have already
 -- declared in the generated C code, and the current tab level
@@ -83,6 +87,12 @@ genCstmt s lvl =
         (AssignVar var rhs) -> (indent lvl) ++ "int " ++ var
                                ++ " = " ++ (genCexpr rhs) ++ ";\n"
                                  
+        (IfStmt e thenbody elsebody) -> (indent lvl)++"if ("
+            ++(genCexpr e)++") {\n"
+            ++(genCstmt thenbody (lvl+1))
+            ++(genCstmt elsebody (lvl+1))
+            ++(indent lvl)++"}\n"
+
         -- Generate malloc call and initialization loop.
         (Malloc var sz (IntVal(n))) -> (indent lvl)++"int* "++var
             ++" = (int*)malloc(sizeof(int)*"++(genCexpr sz)++");\n"
@@ -100,49 +110,3 @@ genCstmt s lvl =
         (SeqStmt ([]))-> ""
         (SeqStmt (x:xs)) -> (genCstmt x lvl)++(genCstmt (SeqStmt xs) lvl)
 
-
-{-|
-(* lvl specifies the current tab level, should usually start at 0 *)
-fun genCstmt ast lvl =
-    (* 4 spaces of indentation per level *)
-    let fun indent lvl = if lvl>0 then "    "^(indent (lvl-1)) else ""
-    in
-        case ast of
-            Assign(id,idx,rhs) =>
-            (indent lvl) ^ id^"["^(genCexpr idx)^"] = "^(genCexpr rhs)^";\n"
-
-          | AssignVar(var,rhs) =>
-            (indent lvl) ^ var^" = "^(genCexpr rhs)^";\n"
-
-          | IfStmt(e,thenbody,elsebody) =>
-            (indent lvl) ^"if ("^(genCexpr e)^") {\n"
-            ^(genCstmt thenbody (lvl+1))
-            ^(genCstmt elsebody (lvl+1))
-            ^(indent lvl)^"}\n"
-
-          (* FIXME: output init code *)                               
-          | Malloc(id,sz,Int(n)) =>
-            (indent lvl) ^ id^" = (int*)malloc(sizeof(int)*"
-            ^(genCexpr sz)
-            ^");\n"
-
-          | ForLoop(iter,D1D(lb,ub),body) =>
-            (indent lvl) ^"for (int "^iter^"=("^(genCexpr lb)^"); "
-            ^iter^"<("^(genCexpr ub)^"); "^iter^"++) {\n"
-            ^(genCstmt body (lvl+1))
-            ^(indent lvl) ^"}\n"
-
-          | ParForLoop(iter,D1D(lb,ub),body) =>
-            (indent lvl) ^"#pragma omp parallel for\n"
-            ^(indent lvl) ^"for (int "^iter^"=("^(genCexpr lb)^"); "
-            ^iter^"<("^(genCexpr ub)^"); "^iter^"++) {\n"
-            ^(genCstmt body (lvl+1))
-            ^(indent lvl) ^"}\n"
-
-         | SeqStmt(s::slist) =>
-           (genCstmt s lvl)^(genCstmt (SeqStmt(slist)) lvl)
-
-         | SeqStmt([]) => "" 
-
-    end
--}
