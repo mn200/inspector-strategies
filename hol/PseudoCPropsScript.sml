@@ -284,12 +284,15 @@ val updf_def = Define`
 
 val apply_action_def = Define`
   apply_action a m_opt =
-    do
-      m <- m_opt;
-      vs <- SOME(MAP (lookupRW m) a.reads);
-      value <- SOME (a.expr vs);
-      updf a.write value m
-    od
+    case a.write of
+        NONE => m_opt
+      | SOME w =>
+        do
+          m <- m_opt;
+          vs <- SOME(MAP (lookupRW m) a.reads);
+          value <- SOME (a.expr vs);
+          updf w value m
+        od
 `;
 
 val lift_OPTION_BIND = store_thm(
@@ -328,7 +331,8 @@ val updf_preserves_FDOMs = store_thm(
 val apply_action_preserves_FDOMs = store_thm(
   "apply_action_preserves_FDOMs",
   ``apply_action a (SOME m) = SOME m' ⇒ FDOM m' = FDOM m``,
-  simp[apply_action_def] >> metis_tac[updf_preserves_FDOMs]);
+  simp[apply_action_def] >> Cases_on `a.write` >> simp[] >>
+  metis_tac[updf_preserves_FDOMs]);
 
 val updf_preserves_array_presence_length_back = store_thm(
   "updf_preserves_array_presence_length_back",
@@ -395,14 +399,14 @@ val nontouching_updfs_read_after_write = store_thm(
   >- (`FLOOKUP m s = NONE ∨ ∃v. FLOOKUP m s = SOME v`
         by (Cases_on `FLOOKUP m s` >> simp[]) >> fs[] >>
       Cases_on `v` >> fs[FLOOKUP_DEF] >> rw[FAPPLY_FUPDATE_THM] >>
-      fs[] >> Cases_on `value` >> fs[]))
+      fs[] >> Cases_on `value` >> fs[]));
 
 val nontouching_updfs_expreval = store_thm(
   "nontouching_updfs_expreval",
-  ``¬(touches a1 a2) ∧ updf a2.write value m = SOME m' ⇒
+  ``¬(touches a1 a2) ∧ a2.write = SOME w ∧ updf w value m = SOME m' ⇒
     MAP (lookupRW m') a1.reads = MAP (lookupRW m) a1.reads``,
   simp[MAP_EQ_f] >> strip_tac >> qx_gen_tac `r` >> strip_tac >>
-  `r ≠ a2.write` by metis_tac[touches_def] >>
+  `r ≠ w` by metis_tac[touches_def] >>
   metis_tac[nontouching_updfs_read_after_write]);
 
 val FLOOKUP_memory_cases = prove(
@@ -501,8 +505,8 @@ fun eqNONE_tac (g as (asl,w)) = let
        in
          assume_tac th >>
          qpat_assum `updf ww vv ^m_t = SOME mm'`
-           (fn th => Cases_on `^(hd (#2 (strip_comb (lhs (concl th)))))` >>
-                     mp_tac th)
+           (fn th => mp_tac th >>
+                     Cases_on `^(hd (#2 (strip_comb (lhs (concl th)))))`)
        end) >> simp[updf_def, upd_array_def] >>
     flookupmem_tac >> simp[] >> rw[] >>
     rw[FAPPLY_FUPDATE_THM] >>
@@ -626,8 +630,15 @@ val apply_action_commutes = store_thm(
   simp[apply_action_def, lift_OPTION_BIND, combinTheory.o_ABS_R,
        pairTheory.o_UNCURRY_R, pairTheory.C_UNCURRY_L,
        combinTheory.C_ABS_L] >>
-  qabbrev_tac `A1U = λm. updf a1.write (a1.expr (MAP (lookupRW m) a1.reads)) m` >>
-  qabbrev_tac `A2U = λm. updf a2.write (a2.expr (MAP (lookupRW m) a2.reads)) m` >>
+  `a1.write = NONE ∨ ∃w1. a1.write = SOME w1`
+    by (Cases_on `a1.write` >> simp[]) >>
+  `a2.write = NONE ∨ ∃w2. a2.write = SOME w2`
+    by (Cases_on `a2.write` >> simp[]) >>
+  simp[] >>
+  qabbrev_tac `
+    A1U = λm. updf w1 (a1.expr (MAP (lookupRW m) a1.reads)) m` >>
+  qabbrev_tac `
+    A2U = λm. updf w2 (a2.expr (MAP (lookupRW m) a2.reads)) m` >>
   simp[] >>
   `(∀m m'. A1U m = SOME m' ⇒ FDOM m' = FDOM m) ∧
    (∀m m'. A2U m = SOME m' ⇒ FDOM m' = FDOM m)`
@@ -715,18 +726,64 @@ val FOLDR_MAPi = store_thm(
   ``∀f g a l. FOLDR f a (MAPi g l) = FOLDRi ($o f o g) a l``,
   Induct_on `l` >> simp[MAPi_def]);
 
+val expr_reads_def = tDefine "expr_reads" `
+  (expr_reads m (VarExp vnm) = [Variable vnm]) ∧
+  (expr_reads m (ISub a i_e) =
+     (case evalexpr m i_e of
+          Int i => CONS (Array a i)
+       | _ => I)
+     (expr_reads m i_e)) ∧
+  (expr_reads m (Opn f elist) = FLAT (MAP (expr_reads m) elist)) ∧
+  (expr_reads m (Value v) = [])
+` (WF_REL_TAC `measure (λ(m,e). expr_size e)` >> simp[] >>
+   Induct >> simp[expr_size_def] >> rpt strip_tac >> simp[] >>
+   res_tac >> simp[])
+
+val readAction_def = Define`
+  readAction i m e = <| reads := expr_reads m e;
+                      write := NONE;
+                      expr := ARB;
+                      iter := i |>
+`;
+
+val readAction_iter = store_thm(
+  "readAction_iter[simp]",
+  ``(readAction i m e).iter = i``,
+  simp[readAction_def]);
+
+val dreadAction_def = Define`
+  dreadAction i m (D lo hi) =
+    <| reads := expr_reads m lo ++ expr_reads m hi;
+       write := NONE;
+       expr := ARB;
+       iter := i |>
+`;
+
+val dreadAction_iter = store_thm(
+  "dreadAction_iter[simp]",
+  ``(dreadAction i m d).iter = i``,
+  Cases_on `d` >> simp[dreadAction_def]);
+
 val graphOf_def = tDefine "graphOf" `
 
-  (graphOf i m (IfStmt g t e) =
-     case evalexpr m g of
-       | Bool T => graphOf i m t
-       | Bool F => graphOf i m e
+  (graphOf i0 m0 (IfStmt gd t e) =
+     case evalexpr m0 gd of
+       | Bool T => do
+                     (i,m,g) <- graphOf (stackInc i0) m0 t;
+                     SOME(i,m,readAction i0 m0 gd ⊕ g)
+                   od
+       | Bool F => do
+                     (i,m,g) <- graphOf (stackInc i0) m0 e;
+                     SOME(i,m,readAction i0 m0 gd ⊕ g)
+                   od
        | _ => NONE) ∧
 
-  (graphOf i m0 (ForLoop vnm d body) =
+  (graphOf i0 m0 (ForLoop vnm d body) =
      do
        dvs <- dvalues m0 d;
-       graphOf i m0 (Seq (MAP (λv. ssubst vnm v body) dvs))
+       (i,m,g) <- graphOf (stackInc i0) m0
+                          (Seq (MAP (λv. ssubst vnm v body) dvs));
+       SOME(i,m,dreadAction i0 m0 d ⊕ g)
      od) ∧
 
   (graphOf i0 m0 (Seq cmds) =
@@ -742,7 +799,9 @@ val graphOf_def = tDefine "graphOf" `
   (graphOf i0 m0 (ParLoop vnm d body) =
      do
        dvs <- dvalues m0 d;
-       graphOf i0 m0 (Par (MAP (λv. ssubst vnm v body) dvs))
+       (i,m,g) <- graphOf (stackInc i0) m0
+                          (Par (MAP (λv. ssubst vnm v body) dvs));
+       SOME(i,m,dreadAction i0 m0 d ⊕ g)
      od) ∧
 
   (graphOf i0 m0 (Par cmds) =
@@ -760,8 +819,8 @@ val graphOf_def = tDefine "graphOf" `
      do (aname,i_e) <- SOME w;
         i <- (some i. evalexpr m0 i_e = Int i);
         rds <- getReads m0 ds;
-        a <- SOME <| write := Array aname i;
-                     reads := rds;
+        a <- SOME <| write := SOME(Array aname i);
+                     reads := rds ++ expr_reads m0 i_e;
                      expr := mergeReads ds opn;
                      iter := i0 |> ;
         rvs <- OPT_SEQUENCE (MAP (evalDexpr m0) ds);
@@ -773,8 +832,8 @@ val graphOf_def = tDefine "graphOf" `
      do
        m' <- updf (Variable vnm) (evalexpr m0 e) m0;
        SOME(stackInc i0, m',
-            <| write := Variable vnm;
-               reads := [];  (* should examine e for reads *)
+            <| write := SOME (Variable vnm);
+               reads := expr_reads m0 e;
                expr := K (evalexpr m0 e);
                iter := i0 |> ⊕ emptyG)
      od) ∧
@@ -898,6 +957,16 @@ val stackInc_id = store_thm(
   Cases_on `it` >> simp[stackInc_def] >> Induct_on `t` >> simp[] >>
   Cases_on `t` >> lfs[]);
 
+val updLast_EQ_NIL = store_thm(
+  "updLast_EQ_NIL[simp]",
+  ``updLast f l = [] ⇔ l = []``,
+  Induct_on `l` >> simp[] >> Cases_on `l` >> simp[]);
+
+val stackInc_EQ_NIL = store_thm(
+  "stackInc_EQ_NIL[simp]",
+  ``stackInc l = [] ⇔ l = []``,
+  simp[stackInc_def]);
+
 val FRONT_updLast = store_thm(
   "FRONT_updLast[simp]",
   ``l ≠ [] ⇒ FRONT (updLast f l) = FRONT l``,
@@ -959,10 +1028,24 @@ val graphOf_iterations_apart = store_thm(
   >- ((* if *)
       ONCE_REWRITE_TAC [graphOf_def] >>
       map_every qx_gen_tac [`i0`, `m0`, `gd`, `ts`, `es`] >>
-      Cases_on `evalexpr m0 gd` >> simp[] >> rw[])
+      Cases_on `evalexpr m0 gd` >> simp[] >>
+      qmatch_assum_rename_tac `evalexpr m0 gd = Bool b` [] >>
+      Cases_on `b` >>
+      simp[pairTheory.EXISTS_PROD, PULL_EXISTS] >>
+      strip_tac >> rpt gen_tac >> strip_tac >> fs[] >>
+      `i0 < stackInc i0` by metis_tac[ilistLT_stackInc] >>
+      `i0 < i` by metis_tac[ilistLTE_trans] >>
+      `i0 ≤ i` by simp[ilistLE_LTEQ] >>
+      dsimp[] >>
+      metis_tac[FRONT_TAKE, ilistLTE_trans, ilistLE_LTEQ])
   >- ((* forloop *)
       map_every qx_gen_tac [`i0`, `m0`, `vnm`, `d`, `body`] >>
-      strip_tac >> simp[Once graphOf_def] >> metis_tac[])
+      strip_tac >> simp[Once graphOf_def] >>
+      simp[pairTheory.EXISTS_PROD, PULL_EXISTS] >>
+      map_every qx_gen_tac [`i`, `m`, `dvs`, `g`] >> strip_tac >>
+      fs[] >> dsimp[FRONT_TAKE] >>
+      `i0 < stackInc i0` by metis_tac[ilistLT_stackInc] >>
+      metis_tac[ilistLTE_trans, ilistLE_LTEQ])
   >- ((* Seq *)
       map_every qx_gen_tac [`i0`, `m0`, `cmds`] >> strip_tac >>
       simp[Once graphOf_def] >> Cases_on `cmds` >> simp[] >>
@@ -976,7 +1059,12 @@ val graphOf_iterations_apart = store_thm(
       qx_gen_tac `j` >> rw[] >>
       metis_tac[ilistLTE_trans, ilistLE_trans])
   >- ((* ParLoop *)
-      rpt gen_tac >> strip_tac >> simp[Once graphOf_def, PULL_EXISTS])
+      rpt gen_tac >> strip_tac >>
+      simp[Once graphOf_def, PULL_EXISTS, pairTheory.EXISTS_PROD] >>
+      map_every qx_gen_tac [`i`, `m`, `dvs`, `g`] >> strip_tac >> fs[] >>
+      dsimp[FRONT_TAKE] >>
+      `i0 < stackInc i0` by metis_tac[ilistLT_stackInc] >>
+      metis_tac[ilistLTE_trans, ilistLE_LTEQ])
   >- ((* Par *)
       map_every qx_gen_tac [`i0`, `m0`, `c`] >> strip_tac >>
       simp[Once graphOf_def, PULL_EXISTS, iterations_FOLDR_merge_graph,
@@ -1016,7 +1104,7 @@ val graphOf_iterations_apart = store_thm(
       simp[Once graphOf_def, FRONT_TAKE])
   >- ((* Abort *) simp[Once graphOf_def])
   >- ((* Done *) simp[Once graphOf_def])
-  >- ((* Malloc *) simp[graphOf_def, FRONT_TAKE])
+  >- ((* Malloc *) simp[graphOf_def])
 );
 
 val pcg_eval_merge_graph = store_thm(
@@ -1058,6 +1146,20 @@ val assign_lemma = prove(
                     GSYM APPEND_ASSOC] >>
   rpt strip_tac >> imp_res_tac some_EQ_SOME_E >> fs[]);
 
+val add_action_id' = add_action_id |> EQ_IMP_RULE |> #2
+
+val pcg_eval_readAction = store_thm(
+  "pcg_eval_readAction[simp]",
+  ``pcg_eval (readAction i m e ⊕ g) mo = pcg_eval g mo``,
+  Cases_on `i ∈ iterations g` >> simp[pcg_eval_thm, add_action_id'] >>
+  simp[readAction_def, apply_action_def]);
+
+val pcg_eval_dreadAction = store_thm(
+  "pcg_eval_dreadAction[simp]",
+  ``pcg_eval (dreadAction i m d ⊕ g) mo = pcg_eval g mo``,
+  Cases_on `i ∈ iterations g` >> simp[pcg_eval_thm, add_action_id'] >>
+  Cases_on `d` >> simp[dreadAction_def, apply_action_def]);
+
 val graphOf_pcg_eval = store_thm(
   "graphOf_pcg_eval",
   ``∀i0 m0 c i m g.
@@ -1066,10 +1168,12 @@ val graphOf_pcg_eval = store_thm(
   map_every qx_gen_tac [`i0`, `m0`]
   >- ((* if *)
       map_every qx_gen_tac [`gd`, `t`, `e`] >> strip_tac >>
-      simp[graphOf_def] >> Cases_on `evalexpr m0 gd` >> simp[] >> fs[] >>
-      COND_CASES_TAC >> fs[])
+      simp[graphOf_def] >>
+      Cases_on `evalexpr m0 gd` >> simp[] >>
+      fs[] >> COND_CASES_TAC >> fs[pairTheory.EXISTS_PROD, PULL_EXISTS])
   >- ((* forloop *)
-      rpt gen_tac >> strip_tac >> simp[Once graphOf_def, PULL_EXISTS])
+      rpt gen_tac >> strip_tac >>
+      simp[Once graphOf_def, PULL_EXISTS, pairTheory.FORALL_PROD])
   >- ((* seq *)
       qx_gen_tac `cs` >> strip_tac >> simp[Once graphOf_def] >> Cases_on `cs` >>
       simp[pcg_eval_thm, PULL_EXISTS, pairTheory.FORALL_PROD] >>
@@ -1084,7 +1188,7 @@ val graphOf_pcg_eval = store_thm(
       simp[pcg_eval_merge_graph] >> fs[])
   >- ((* parloop *)
       map_every qx_gen_tac [`vnm`, `d`, `body`] >> strip_tac >>
-      simp[Once graphOf_def, PULL_EXISTS])
+      simp[Once graphOf_def, PULL_EXISTS, pairTheory.FORALL_PROD])
   >- ((* par *)
       qx_gen_tac `cs` >> simp[] >> strip_tac >>
       simp[Once graphOf_def, PULL_EXISTS])
