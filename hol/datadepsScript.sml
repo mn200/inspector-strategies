@@ -17,16 +17,25 @@ val eval_def = Define`
 
 val apply_action_def = Define`
   apply_action a (A:'a mvector) =
-    update A a.write (a.expr (MAP (vsub A) a.reads))
+    case a.write of
+        NONE => A
+      | SOME w => update A w (a.expr (MAP (vsub A) a.reads))
 `;
+
+val MAP_vsub = store_thm(
+  "MAP_vsub",
+  ``¬MEM w reads ⇒ MAP ($' (update A w e)) reads = MAP ($' A) reads``,
+  Induct_on `reads` >> simp[update_sub]);
 
 val nontouching_actions_commute = store_thm(
   "nontouching_actions_commute",
   ``¬touches a1 a2 ⇒
     apply_action a1 (apply_action a2 A) = apply_action a2 (apply_action a1 A)``,
   simp[touches_def, apply_action_def, vector_EQ] >> rpt strip_tac >>
-  map_every qabbrev_tac [`w1 = a1.write`, `w2 = a2.write`] >>
+  map_every Cases_on [`a1.write`, `a2.write`] >> fs[] >>
   ONCE_REWRITE_TAC [update_sub] >> simp[] >>
+  qpat_assum `aa.write = SOME xx` mp_tac >>
+  qmatch_assum_rename_tac `a1.write = SOME w1` [] >>
   Cases_on `i = w1` >> simp[]
   >- (simp[SimpRHS, update_sub] >>
       reverse (Cases_on `w1 < vsz A`) >>
@@ -43,7 +52,7 @@ val graphs_evaluate_deterministically = store_thm(
 
 val mkEAction_def = Define`
   mkEAction wf rfs body i =
-    <| write := wf i; reads := rfs <*> [i];
+    <| write := SOME (wf i); reads := rfs <*> [i];
        expr := body i; iter := i |>
 `;
 
@@ -289,8 +298,8 @@ val same_graphs = store_thm(
     `¬P`
       by (qpat_assum `touches XX YY` mp_tac >>
           simp[touches_def, Abbr`mk'`, mkEAction_def, Abbr`P`, SINGL_APPLY_MAP,
-               SINGL_APPLY_PERMUTE, MAP_MAP_o, combinTheory.o_ABS_R] >>
-          strip_tac >> simp[]) >> simp[] >>
+               SINGL_APPLY_PERMUTE, MAP_MAP_o, combinTheory.o_ABS_R, MEM_MAP] >>
+          strip_tac >> simp[] >> metis_tac[]) >> simp[] >>
     `i < N` by decide_tac >>
     `γ i ≠ γ j` by simp[] >> decide_tac,
 
@@ -299,7 +308,8 @@ val same_graphs = store_thm(
     first_x_assum match_mp_tac >> simp[ddepR_def] >>
     pop_assum mp_tac >>
     simp[touches_def, Abbr`mk'`, mkEAction_def, SINGL_APPLY_MAP,
-         SINGL_APPLY_PERMUTE, MAP_MAP_o, combinTheory.o_ABS_R]
+         SINGL_APPLY_PERMUTE, MAP_MAP_o, combinTheory.o_ABS_R,
+         MEM_MAP] >> metis_tac[]
   ]);
 
 val correctness = store_thm(

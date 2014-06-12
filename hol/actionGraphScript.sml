@@ -8,7 +8,7 @@ val _ = new_theory "actionGraph";
 
 val _ = Hol_datatype`
   action = <|
-    write : 'access ;
+    write : 'access option;
     reads : 'access list ;
     expr : 'a list -> 'a;
     iter : 'iter
@@ -19,11 +19,16 @@ val action_component_equality = theorem "action_component_equality"
 
 val touches_def = Define`
   touches a1 a2 ⇔
-     a1.write = a2.write ∨ MEM a1.write a2.reads ∨ MEM a2.write a1.reads
+     (∃w. a1.write = SOME w ∧ (a2.write = SOME w ∨ MEM w a2.reads)) ∨
+     (∃w. a2.write = SOME w ∧ MEM w a1.reads)
 `;
 
 val _ = set_mapped_fixity {term_name = "touches", fixity = Infix(NONASSOC, 450),
                            tok = "∼ₜ"}
+val _ = set_mapped_fixity {term_name = "not_touches",
+                           fixity = Infix(NONASSOC, 450),
+                           tok = "≁ₜ"}
+val _ = overload_on("not_touches", ``λa1 a2. ¬(touches a1 a2)``)
 
 val touches_ignores_iter = store_thm(
   "touches_ignores_iter",
@@ -32,22 +37,10 @@ val touches_ignores_iter = store_thm(
   simp[touches_def]);
 val _ = export_rewrites ["touches_ignores_iter"]
 
-
-val MAP_vsub = store_thm(
-  "MAP_vsub",
-  ``¬MEM w reads ⇒ MAP ($' (update A w e)) reads = MAP ($' A) reads``,
-  Induct_on `reads` >> simp[update_sub]);
-
-val touches_REFL = store_thm(
-  "touches_REFL",
-  ``touches a a``,
-  simp[touches_def]);
-val _ = export_rewrites ["touches_REFL"]
-
 val touches_SYM = store_thm(
   "touches_SYM",
   ``touches a1 a2 ⇒ touches a2 a1``,
-  simp[touches_def] >> rpt strip_tac >> simp[]);
+  simp[touches_def] >> rpt strip_tac >> simp[] >> metis_tac[]);
 
 val _ = Hol_datatype`
   action_graph0 = <|
