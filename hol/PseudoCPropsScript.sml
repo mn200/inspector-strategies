@@ -1508,6 +1508,53 @@ val graphOf_starting_id_irrelevant = store_thm(
       qx_gen_tac `j0` >> strip_tac >> qexists_tac `K j0` >> simp[])
   >- ((* Malloc *) simp[graphOf_def]))
 
+val graphOf_simps = save_thm(
+  "graphOf_simps[simp]",
+  LIST_CONJ
+    [ONCE_REWRITE_CONV [graphOf_def] ``graphOf i0 m0 Done``,
+     ONCE_REWRITE_CONV [graphOf_def] ``graphOf i0 m0 Abort``,
+     ONCE_REWRITE_CONV [graphOf_def] ``graphOf i0 m0 (Malloc vn n v)``
+    ]);
+
+val isDValue_getReads = prove(
+  ``EVERY isDValue rdes ⇒ ∃rds. getReads m0 rdes = SOME rds``,
+  Induct_on `rdes` >> simp[getReads_def] >> Cases_on `h` >>
+  simp[isDValue_def, getReads_def]);
+
+val isDValue_destDValue = prove(
+  ``EVERY isDValue rdes ⇒
+    MAP THE (MAP (evalDexpr m0) rdes) = MAP destDValue rdes``,
+  Induct_on `rdes` >> simp[] >> Cases_on `h` >>
+  simp[isDValue_def, evalDexpr_def, destDValue_def]);
+
+val _ = temp_overload_on ("lift2", ``OPTION_MAP2``)
+val _ = temp_overload_on ("lift3", ``λf x y z. SOME f <*> x <*> y <*> z``)
+
+val lift2_lift2_1 = prove(
+  ``lift2 f x (lift2 g y z) = lift3 (λx y z. f x (g y z)) x y z``,
+  map_every Cases_on [`x`, `y`, `z`] >> simp[]);
+
+val lift2_lift2_2 = prove(
+  ``lift2 f (lift2 g x y) z = lift3 (λx y z. f (g x y) z) x y z``,
+  map_every Cases_on [`x`, `y`, `z`] >> simp[]);
+
+val getReads_APPEND = store_thm(
+  "getReads_APPEND",
+  ``getReads m (l1 ++ l2) = OPTION_MAP2 (++) (getReads m l1) (getReads m l2)``,
+  Induct_on `l1` >> simp[getReads_def]
+  >- (Cases_on `getReads m l2` >> simp[]) >>
+  Cases_on `h` >> simp[getReads_def, lift2_lift2_1, lift2_lift2_2] >>
+  map_every Cases_on [`getReads m l1`, `getReads m l2`] >> simp[]);
+
+val FOLDRi_APPEND = store_thm(
+  "FOLDRi_APPEND",
+  ``∀f. FOLDRi f a (l1 ++ l2) = FOLDRi f (FOLDRi (f o $+ (LENGTH l1)) a l2) l1``,
+  Induct_on `l1` >> simp[]
+  >- (gen_tac >> `f o $+ 0 = f` suffices_by simp[] >> simp[FUN_EQ_THM]) >>
+  rpt gen_tac >>
+  `f o SUC o $+ (LENGTH l1) = f o $+ (SUC (LENGTH l1))` suffices_by simp[] >>
+  simp[FUN_EQ_THM, arithmeticTheory.ADD_CLAUSES]);
+
 (*
 val graphOf_correct_lemma = store_thm(
   "graphOf_correct_lemma",
@@ -1516,23 +1563,100 @@ val graphOf_correct_lemma = store_thm(
       ∀i0 i0' m0' g0.
         i0 ≠ [] ∧ graphOf i0 m0 c0 = SOME (i0', m0', g0) ⇒
         ∃i' g.
-          graphOf i0 m c = SOME(i', m0', g)``,
+          graphOf i0 m c = SOME(i', m0', g) ∧
+          ∀g'. gtouches g g' ⇒ gtouches g0 g'``,
   ho_match_mp_tac eval_ind' >> rpt conj_tac
-  >- (ONCE_REWRITE_TAC [graphOf_def] >>
+  >- ((* seq head takes one step *)
+      ONCE_REWRITE_TAC [graphOf_def] >>
       simp[PULL_EXISTS, pairTheory.FORALL_PROD, pairTheory.EXISTS_PROD] >>
-      rpt strip_tac
+      rpt strip_tac >>
+      qmatch_assum_rename_tac `graphOf i0 m0 c0 = SOME(i00,m00,g00)` [] >>
+      `∃i' g'. graphOf i0 m c = SOME(i',m00,g') ∧
+               ∀g''. gtouches g' g'' ⇒ gtouches g00 g''`
+         by metis_tac[] >> simp[] >>
+      qmatch_assum_rename_tac `
+        graphOf i00 m00 (Seq rest) = SOME(i0',m0',rg)` []>>
+      `i00 ≠ [] ∧ i' ≠ []` by metis_tac[graphOf_iterations_apart, LENGTH_NIL] >>
+      `∃f. graphOf i' m00 (Seq rest) = SOME(f i0',m0',imap f rg) ∧
+           i' = f i00 ∧ INJ f (i0' INSERT iterations rg) UNIV`
+        by metis_tac[graphOf_starting_id_irrelevant] >>
+      simp[] >> fs[INJ_INSERT, IN_imap] >> dsimp[] >>
+      dsimp[gtouches_def] >> rpt strip_tac
+      >- (fs[gtouches_def] >> metis_tac[]) >>
+      disj2_tac >>
+      `(∀j. j ∈ iterations rg ⇒ i00 ≤ j) ∧ ∀j. j ∈ iterations g00 ⇒ j < i00`
+        by metis_tac[graphOf_iterations_apart] >>
+      `∀a. a ∈ rg ⇒ a.iter ∉ iterations g00` suffices_by metis_tac[] >>
+      qx_gen_tac `a` >> strip_tac >>
+      `a.iter ∈ iterations rg` by simp[iterations_thm] >>
+      metis_tac[ilistLTE_trans, ilistLE_REFL])
+  >- ((* seq head is Done *)
+      simp[Once graphOf_def, SimpL ``$==>``] >>
+      simp[pairTheory.EXISTS_PROD])
+  >- ((* seq of empty list moves to Done *)
+      simp[graphOf_def])
+  >- ((* guard of if evaluates to boolean and next statement selected *)
+      rpt gen_tac >> strip_tac >> simp[Once graphOf_def, SimpL ``$==>``] >> rw[])
+  >- ((* guard of if evaluates to non-boolean (type error) *)
+      rpt gen_tac >> strip_tac >> simp[graphOf_def] >>
+      Cases_on `evalexpr m0 g` >> simp[] >> fs[])
+  >- ((* assignment to array completes *)
+      simp[graphOf_def, PULL_EXISTS, evalexpr_def, OPT_SEQUENCE_EQ_SOME,
+           MEM_MAP, isDValue_destDValue])
+  >- ((* assignment to array fails at upd_array stage *)
+      simp[graphOf_def, PULL_EXISTS, evalexpr_def, OPT_SEQUENCE_EQ_SOME,
+           isDValue_destDValue])
+  >- ((* index of array assignment is evaluated *)
+      simp[graphOf_def, PULL_EXISTS, evalexpr_def] >> metis_tac[])
+  >- ((* array-read inside array assignment has index evaluated *)
+      dsimp[graphOf_def, PULL_EXISTS, evalDexpr_def, evalexpr_def,
+            OPT_SEQUENCE_EQ_SOME, MEM_MAP, getReads_APPEND,
+            getReads_def] >> rpt strip_tac >>
+      imp_res_tac some_EQ_SOME_E >> fs[touches_def] >> metis_tac[])
+  >- ((* array-read inside array assignment actually reads memory *)
+      dsimp[graphOf_def, OPT_SEQUENCE_EQ_SOME, MEM_MAP, evalDexpr_def,
+            evalexpr_def] >>
+      dsimp[getReads_APPEND, getReads_def] >>
+      simp[touches_def] >> metis_tac[])
+  >- ((* var-read inside array assignment reads memory *)
+      dsimp[graphOf_def, OPT_SEQUENCE_EQ_SOME, evalDexpr_def, MEM_MAP] >>
+      dsimp[getReads_def, getReads_APPEND] >>
+      simp[touches_def] >> metis_tac[])
+  >- ((* forloop turns into seq *)
+      rpt gen_tac >> strip_tac >> simp[Once graphOf_def, SimpL ``$==>``] >>
+      simp[])
+  >- ((* forloop aborts because domain evaluates badly *)
+      ONCE_REWRITE_TAC [graphOf_def] >> simp[])
+  >- ((* parloop turns into par *)
+      rpt gen_tac >> strip_tac >> simp[Once graphOf_def, SimpL ``$==>``] >>
+      simp[])
+  >- ((* parloop aborts because domain evaluates badly *)
+      ONCE_REWRITE_TAC [graphOf_def] >> simp[])
+  >- ((* one component of a par takes a step *)
+      map_every qx_gen_tac [`m0`, `m`, `pfx`, `c0`, `c`, `sfx`] >>
+      strip_tac >> ONCE_REWRITE_TAC [graphOf_def] >>
+      simp[PULL_EXISTS, OPT_SEQUENCE_EQ_SOME, MEM_MAP, MEM_MAPi,
+           combinTheory.o_ABS_R] >>
+      qabbrev_tac `
+        TOS = λt:(num list # memory #
+                  (value, actionRW, num list)action_graph) option.
+               THE (OPTION_MAP (SND o SND) t)` >> simp[] >>
+      map_every qx_gen_tac [`i0`, `m00`] >>
+      qabbrev_tac `GG = λn. graphOf (i0 ++ [n;0])` >> simp[] >>
+      strip_tac >>
+      `∀n. n < LENGTH pfx + (LENGTH sfx + 1) ⇒
+           ∃z. GG n m (EL n (pfx ++ [c] ++ sfx)) = SOME z`
+        by (gen_tac >> strip_tac >>
+            Cases_on `n < LENGTH pfx`
+            >- (simp[EL_APPEND1] >>
+                first_x_assum
+                  (fn th => qspec_then `n` mp_tac th >>
+                            simp[EL_APPEND1] >> NO_TAC)
 
-  ho_match_mp_tac WF_eval_induction >> map_every qx_gen_tac [`m0`, `c0`] >>
-  strip_tac >> map_every qx_gen_tac [`m`, `c`] >>
-  simp[Once eval_cases] >> strip_tac
-  >- (simp[] >> ONCE_REWRITE_TAC [graphOf_def] >>
-      dsimp[pairTheory.EXISTS_PROD, pairTheory.FORALL_PROD] >>
-      pop_assum mp_tac >>
-      dsimp[SimpL ``(==>)``, Once graphOf_def] >>
-      dsimp[pairTheory.EXISTS_PROD, pairTheory.FORALL_PROD] >>
-      map_every qx_gen_tac [`m00'`, `g0'`, `g0''`] >> rw[]
 
-simp[graphOf_def]
+      simp[FOLDR_MAPi, combinTheory.o_ABS_R, FOLDRi_APPEND,
+           combinTheory.o_ABS_L]
+
 
 ``
 *)
