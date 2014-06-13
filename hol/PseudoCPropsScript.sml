@@ -742,7 +742,7 @@ val expr_reads_def = tDefine "expr_reads" `
 val readAction_def = Define`
   readAction i m e = <| reads := expr_reads m e;
                       write := NONE;
-                      expr := ARB;
+                      expr := ARB : value list -> value;
                       iter := i |>
 `;
 
@@ -755,7 +755,7 @@ val dreadAction_def = Define`
   dreadAction i m (D lo hi) =
     <| reads := expr_reads m lo ++ expr_reads m hi;
        write := NONE;
-       expr := ARB;
+       expr := ARB : value list -> value;
        iter := i |>
 `;
 
@@ -1765,7 +1765,120 @@ val FOLDRi_APPEND = store_thm(
   `f o SUC o $+ (LENGTH l1) = f o $+ (SUC (LENGTH l1))` suffices_by simp[] >>
   simp[FUN_EQ_THM, arithmeticTheory.ADD_CLAUSES]);
 
+val pcg_eval_NONE = store_thm(
+  "pcg_eval_NONE[simp]",
+  ``∀g. pcg_eval g NONE = NONE``,
+  ho_match_mp_tac graph_ind >> simp[pcg_eval_thm, apply_action_def] >>
+  rpt gen_tac >> Cases_on `a.write` >> simp[]);
+
+val expr_ind' = store_thm(
+  "expr_ind'",
+  ``∀P. (∀v. P (Value v)) ∧
+        (∀f l. (∀e. MEM e l ⇒ P e) ⇒ P (Opn f l)) ∧
+        (∀anm e. P e ⇒ P (ISub anm e)) ∧
+        (∀s. P (VarExp s)) ⇒
+        ∀e. P e``,
+  gen_tac >> strip_tac >>
+  `(!e. P e) ∧ (∀l e. MEM e l ⇒ P e)` suffices_by simp[] >>
+  ho_match_mp_tac (TypeBase.induction_of ``:expr``) >> simp[] >>
+  metis_tac[]);
+
+val apply_action_expr_eval_commutes = store_thm(
+  "apply_action_expr_eval_commutes",
+  ``∀a e j m0 m.
+       readAction j m0 e ≁ₜ a ∧ apply_action a (SOME m0) = SOME m ⇒
+       evalexpr m e = evalexpr m0 e ∧ readAction j m e = readAction j m0 e``,
+  simp[readAction_def, touches_def, apply_action_def] >> gen_tac >>
+  `a.write = NONE ∨ ∃w. a.write = SOME w` by (Cases_on `a.write` >> simp[]) >>
+  simp[] >> pop_assum kall_tac >> gen_tac >>
+  map_every qspec_tac [(`a.expr`, `expr`), (`a.reads`, `rds`), (`w`, `w`)] >>
+  qid_spec_tac `e` >> ho_match_mp_tac expr_ind' >>
+  simp[evalexpr_def, expr_reads_def] >> rpt conj_tac
+  >- (simp[MEM_FLAT, MEM_MAP] >> rpt strip_tac >>
+      AP_TERM_TAC >> simp[MAP_EQ_f] >> metis_tac[])
+  >- (map_every qx_gen_tac [`anm`, `e`] >> strip_tac >>
+      map_every qx_gen_tac [`w`, `rds`, `expr`, `m0`, `m`] >>
+      strip_tac >>
+      `¬MEM w (expr_reads m0 e)` by (Cases_on `evalexpr m0 e` >> fs[]) >>
+      `evalexpr m e = evalexpr m0 e ∧ expr_reads m e = expr_reads m0 e`
+        by metis_tac[] >>
+      simp[] >> Cases_on `evalexpr m0 e` >> simp[] >> fs[] >>
+      qpat_assum `updf xx yy zz = SOME mm` mp_tac >>
+      simp[updf_def] >> Cases_on `w` >> simp[]
+      >- (simp[upd_array_def] >> flookupmem_tac >> simp[] >>
+          rw[lookup_array_def] >> rw[FLOOKUP_UPDATE] >> simp[] >>
+          rw[] >> simp[EL_LUPDATE] >> fs[] >>
+          qmatch_assum_rename_tac `¬MEM (Array anm j) (expr_reads m0 e)` [] >>
+          `0 ≤ i ∧ 0 ≤ j` by ARITH_TAC >>
+          `i = &(Num i) ∧ j = &(Num j)`
+            by metis_tac[integerTheory.INT_OF_NUM] >>
+          qmatch_assum_rename_tac `¬(&LENGTH vl ≤ i)` [] >>
+          `Num j < LENGTH vl`
+              by (fs[integerTheory.INT_NOT_LE] >>
+                  metis_tac[integerTheory.INT_LT]) >>
+          metis_tac[]) >>
+      flookupmem_tac >> simp[] >> fs[FLOOKUP_DEF] >> rw[] >>
+      simp[lookup_array_def] >> Cases_on `anm = s` >>
+      TRY (simp[FLOOKUP_UPDATE] >> NO_TAC) >>
+      simp[FLOOKUP_UPDATE] >> simp[FLOOKUP_DEF] >>
+      Cases_on `expr (MAP (lookupRW m0) rds)` >> simp[] >> fs[])
+  >- (rpt gen_tac >> simp[updf_def] >> Cases_on `w` >> simp[upd_array_def]
+      >- (flookupmem_tac >> simp[] >> rw[lookup_v_def] >> Cases_on `s = s'` >>
+          simp[FLOOKUP_UPDATE]) >>
+      flookupmem_tac >> simp[] >> rw[lookup_v_def] >> simp[FLOOKUP_UPDATE]))
+
+val pcg_eval_expreval_preserves = store_thm(
+  "pcg_eval_expreval_preserves",
+  ``∀g m0 m.
+       pcg_eval g (SOME m0) = SOME m ∧
+       (∀a. a ∈ g ⇒ readAction j m0 e ≁ₜ a) ⇒
+       evalexpr m e = evalexpr m0 e``,
+  ho_match_mp_tac graph_ind >> simp[pcg_eval_thm] >> rpt strip_tac >>
+  fs[DISJ_IMP_THM, FORALL_AND_THM] >>
+  Cases_on `apply_action a (SOME m0)` >> fs[] >>
+  imp_res_tac apply_action_expr_eval_commutes >> metis_tac[]);
+
 (*
+val graphOf_apply_action_commutes = store_thm(
+  "graphOf_apply_action_commutes",
+  ``∀i0 m0 c i m1 m2 a g.
+      graphOf i0 m0 c = SOME(i,m1,g) ∧ i0 ≠ [] ∧
+      apply_action a (SOME m0) = SOME m2 ∧
+      (∀b. b ∈ g ⇒ a ≁ₜ b) ⇒
+      ∃m1'. graphOf i0 m2 c = SOME(i,m1',g)``,
+  ho_match_mp_tac (theorem "graphOf_ind") >> rpt conj_tac >>
+  map_every qx_gen_tac [`i0`, `m0`]
+  >- ((* if *)
+      qx_gen_tac `gd` >> rpt gen_tac >> strip_tac >> simp[graphOf_def] >>
+      rpt gen_tac >>
+      Cases_on `evalexpr m0 gd` >> simp[] >>
+      qmatch_assum_rename_tac `evalexpr m0 gd = Bool b` [] >>
+      Cases_on `b` >> fs[] >> simp[PULL_EXISTS, EXISTS_PROD] >>
+      qx_gen_tac `g'` >> rw[] >>
+      `i0 ∉ iterations g'`
+        by metis_tac[ilistLT_stackInc, ilistLTE_trans,
+                     stackInc_EQ_NIL, ilistLE_REFL, graphOf_iterations_apart] >>
+      fs[DISJ_IMP_THM, FORALL_AND_THM] >>
+      `evalexpr m2 gd = evalexpr m0 gd ∧
+       readAction i0 m2 gd = readAction i0 m0 gd`
+        by metis_tac[apply_action_expr_eval_commutes, touches_SYM] >>
+      simp[EXISTS_PROD] >> metis_tac[])
+  >- (map_every qx_gen_tac [`vnm`, `d`, `body`] >> strip_tac >>
+      ONCE_REWRITE_TAC [graphOf_def] >> simp[PULL_EXISTS, EXISTS_PROD] >>
+      map_every qx_gen_tac [`i`, `m1`, `m2`, `a`, `dvs`, `g`] >> strip_tac >>
+      fs[DISJ_IMP_THM, FORALL_AND_THM]
+
+val graphOf_preserved = store_thm(
+  "graphOf_preserved",
+  ``∀g1 m0 m1 i c i' m2 g2.
+      pcg_eval g1 (SOME m0) = SOME m1 ∧
+      graphOf i m0 c = SOME(i',m2,g2) ∧
+      ¬gtouches g1 g2 ⇒
+      ∃m2'. graphOf i m1 c = SOME(i',m2',g2)``,
+  ho_match_mp_tac graph_ind >> simp[pcg_eval_thm] >> rpt strip_tac >>
+  `∀b. b ∈ g2 ⇒ a ≁ₜ b` by metis_tac[] >>
+  Cases_on `apply_action a (SOME m0)` >- fs[]
+
 val graphOf_correct_lemma = store_thm(
   "graphOf_correct_lemma",
   ``∀m0 c0 m c.
