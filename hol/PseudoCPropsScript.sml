@@ -1838,6 +1838,108 @@ val pcg_eval_expreval_preserves = store_thm(
   Cases_on `apply_action a (SOME m0)` >> fs[] >>
   imp_res_tac apply_action_expr_eval_commutes >> metis_tac[]);
 
+val apply_action_dvalues_commutes = store_thm(
+  "apply_action_dvalues_commutes",
+  ``apply_action a (SOME m0) = SOME m ∧ a ≁ₜ dreadAction i m0 d ⇒
+    dvalues m d = dvalues m0 d ∧ dreadAction i m d = dreadAction i m0 d``,
+  `∃e1 e2. d = D e1 e2` by (Cases_on `d` >> simp[]) >>
+  simp[dreadAction_def, touches_def] >> strip_tac >>
+  `a ≁ₜ readAction i m0 e1 ∧ a ≁ₜ readAction i m0 e2`
+    by (simp[touches_def, readAction_def] >> metis_tac[]) >>
+  `evalexpr m e1 = evalexpr m0 e1 ∧ readAction i m e1 = readAction i m0 e1 ∧
+   evalexpr m e2 = evalexpr m0 e2 ∧ readAction i m e2 = readAction i m0 e2`
+    by metis_tac[apply_action_expr_eval_commutes, touches_SYM] >>
+  simp[dvalues_def] >> fs[readAction_def, action_component_equality]);
+
+fun disjneq_search (g as (asl,w)) = let
+  val ds = strip_disj w
+  fun is_neq t = is_eq (dest_neg t) handle HOL_ERR _ => false
+in
+  case List.find is_neq ds of
+      NONE => NO_TAC
+    | SOME d => ASM_CASES_TAC (dest_neg d) THEN ASM_REWRITE_TAC[]
+end g
+
+fun has_cond t = can (find_term (same_const ``COND``)) t
+
+val successful_upd_array_diamond = store_thm(
+  "successful_upd_array_diamond",
+  ``(a1 ≠ a2 ∨ i1 ≠ i2) ∧ upd_array (m0:memory) a1 i1 v1 = SOME m1 ∧
+    upd_array m0 a2 i2 v2 = SOME m2 ⇒
+    ∃m. upd_array m2 a1 i1 v1 = SOME m ∧
+        upd_array m1 a2 i2 v2 = SOME m``,
+  Cases_on `a1 = a2` >| [Cases_on `i1 = i2`, ALL_TAC] >> simp[] >>
+  simp[upd_array_def] >> rpt (flookupmem_tac >> simp[]) >>
+  map_every (fn q => Cases_on q >> simp[]) [`i1 < 0`, `i2 < 0`] >>
+  rpt disjneq_search >> rw[] >> fs[FLOOKUP_UPDATE] >> rw[] >>
+  rpt (first_x_assum (mp_tac o assert (has_cond o concl)) >> simp[]) >>
+  rw[] >> rw[] >| [
+    `0 ≤ i1 ∧ 0 ≤ i2` by ARITH_TAC >>
+    `i1 = &(Num i1) ∧ i2 = &(Num i2)` by metis_tac[integerTheory.INT_OF_NUM] >>
+    rpt AP_TERM_TAC >>
+    qmatch_assum_rename_tac `¬(&LENGTH vl ≤ i1)` [] >>
+    `Num i1 < LENGTH vl ∧ Num i2 < LENGTH vl`
+              by (fs[integerTheory.INT_NOT_LE] >>
+                  metis_tac[integerTheory.INT_LT]) >>
+    simp[LIST_EQ_REWRITE, LUPDATE_SEM] >> rw[] >>
+    `Num i1 ≠ Num i2`
+      by metis_tac[integerTheory.INT_INJ, integerTheory.INT_OF_NUM],
+    simp[FUPDATE_COMMUTES]
+  ])
+
+val successful_updf_diamond = store_thm(
+  "successful_updf_diamond",
+  ``w1 ≠ w2 ∧ updf w1 v1 m0 = SOME m1 ∧ updf w2 v2 m0 = SOME m2 ⇒
+    ∃m. updf w1 v1 m2 = SOME m ∧ updf w2 v2 m1 = SOME m``,
+  simp[updf_def] >> Cases_on `w1` >> Cases_on `w2` >> simp[]
+  >- metis_tac[successful_upd_array_diamond] >>
+  simp[upd_array_def] >>
+  rpt (flookupmem_tac >> simp[]) >> rw[] >>
+  rpt disjneq_search >> rw[] >> fs[FLOOKUP_UPDATE] >>
+  rpt (first_x_assum (mp_tac o assert (has_cond o concl)) >> simp[]) >>
+  rw[] >> fs[FUPDATE_COMMUTES]);
+
+val successful_action_diamond = store_thm(
+  "successful_action_diamond",
+  ``a1 ≁ₜ a2 ∧ apply_action a1 (SOME m0) = SOME m1 ∧
+    apply_action a2 (SOME m0) = SOME m2 ⇒
+    ∃m. apply_action a1 (SOME m2) = SOME m ∧
+        apply_action a2 (SOME m1) = SOME m``,
+  simp[apply_action_def, SimpL ``$==>``] >>
+  `a1.write = NONE ∨ ∃w1. a1.write = SOME w1`
+    by (Cases_on `a1.write` >> simp[]) >>
+  `a2.write = NONE ∨ ∃w2. a2.write = SOME w2`
+    by (Cases_on `a2.write` >> simp[]) >> simp[apply_action_def]
+  >- (rw[] >> simp[]) >> strip_tac >> simp[] >> rw[] >>
+  `MAP (lookupRW m2) a1.reads = MAP (lookupRW m0) a1.reads ∧
+   MAP (lookupRW m1) a2.reads = MAP (lookupRW m0) a2.reads`
+    by metis_tac[nontouching_updfs_expreval, touches_SYM] >>
+  simp[] >>
+  qmatch_rename_tac
+    `∃m. updf w1 v1 m2 = SOME m ∧ updf w2 v2 m1 = SOME m` [] >>
+  fs[touches_def] >>
+  map_every (fn q => Q.UNDISCH_THEN q assume_tac)
+    [`a1.write = SOME w1`, `a2.write = SOME w2`] >> fs[] >>
+  metis_tac[successful_updf_diamond]);
+
+val pcg_eval_apply_action_diamond = store_thm(
+  "pcg_eval_apply_action_diamond",
+  ``∀g m0 m1 a m2.
+      pcg_eval g (SOME m0) = SOME m1 ∧
+      apply_action a (SOME m0) = SOME m2 ∧
+      (∀b. b ∈ g ⇒ a ≁ₜ b) ⇒
+      ∃m. pcg_eval g (SOME m2) = SOME m ∧
+          apply_action a (SOME m1) = SOME m``,
+  ho_match_mp_tac graph_ind >>
+  simp[pcg_eval_thm, DISJ_IMP_THM, FORALL_AND_THM] >>
+  map_every qx_gen_tac [`b`, `g`] >> strip_tac >>
+  map_every qx_gen_tac [`m0`, `m1`, `a`, `m2`] >> strip_tac >>
+  `∃m0'. apply_action b (SOME m0) = SOME m0'`
+    by (Cases_on `apply_action b (SOME m0)` >> fs[]) >>
+  `∃mm. apply_action a (SOME m0') = SOME mm ∧
+        apply_action b (SOME m2) = SOME mm`
+    by metis_tac [successful_action_diamond] >> metis_tac[]);
+
 (*
 val graphOf_apply_action_commutes = store_thm(
   "graphOf_apply_action_commutes",
@@ -1845,7 +1947,9 @@ val graphOf_apply_action_commutes = store_thm(
       graphOf i0 m0 c = SOME(i,m1,g) ∧ i0 ≠ [] ∧
       apply_action a (SOME m0) = SOME m2 ∧
       (∀b. b ∈ g ⇒ a ≁ₜ b) ⇒
-      ∃m1'. graphOf i0 m2 c = SOME(i,m1',g)``,
+      ∃m.
+        graphOf i0 m2 c = SOME(i,m,g) ∧
+        apply_action a (SOME m1) = SOME m``,
   ho_match_mp_tac (theorem "graphOf_ind") >> rpt conj_tac >>
   map_every qx_gen_tac [`i0`, `m0`]
   >- ((* if *)
@@ -1866,7 +1970,42 @@ val graphOf_apply_action_commutes = store_thm(
   >- (map_every qx_gen_tac [`vnm`, `d`, `body`] >> strip_tac >>
       ONCE_REWRITE_TAC [graphOf_def] >> simp[PULL_EXISTS, EXISTS_PROD] >>
       map_every qx_gen_tac [`i`, `m1`, `m2`, `a`, `dvs`, `g`] >> strip_tac >>
-      fs[DISJ_IMP_THM, FORALL_AND_THM]
+      fs[DISJ_IMP_THM, FORALL_AND_THM] >>
+      `i0 ∉ iterations g`
+        by metis_tac[ilistLT_stackInc, ilistLTE_trans,
+                     stackInc_EQ_NIL, ilistLE_REFL, graphOf_iterations_apart] >>
+      `dvalues m2 d = dvalues m0 d ∧ dreadAction i0 m2 d = dreadAction i0 m0 d`
+        by metis_tac[apply_action_dvalues_commutes] >>
+      simp[] >> metis_tac[])
+  >- ((* seq *) qx_gen_tac `cmds` >> Cases_on `cmds` >> simp[]
+      >- simp[graphOf_def] >> strip_tac >> ONCE_REWRITE_TAC [graphOf_def] >>
+      simp[PULL_EXISTS, EXISTS_PROD, DISJ_IMP_THM, FORALL_AND_THM] >>
+      map_every qx_gen_tac [`i`, `m1`, `m2`, `a`, `i1`, `m0'`, `g1`, `g2`] >>
+      strip_tac >> fs[] >>
+      qmatch_assum_rename_tac `graphOf i0 m0 c1 = SOME(i1,m0',g1)` [] >>
+      `∃m1'. graphOf i0 m2 c1 = SOME(i1,m1',g1) ∧
+             apply_action a (SOME m0') = SOME m1'` by metis_tac[] >>
+      simp[] >>
+      `i1 ≠ []` by metis_tac[graphOf_iterations_apart, LENGTH_NIL] >>
+      `∀b. b ∈ g2 ⇒ b.iter ∉ iterations g1`
+        by (gen_tac >> strip_tac >>
+            `b.iter ∈ iterations g2` by simp[iterations_thm] >>
+            metis_tac[graphOf_iterations_apart, ilistLTE_trans, ilistLE_REFL])>>
+      full_simp_tac (srw_ss() ++ CONJ_ss) [] >>
+      metis_tac[])
+  >- ((* parloop *)
+      map_every qx_gen_tac [`vnm`, `d`, `body`] >> strip_tac >>
+      ONCE_REWRITE_TAC [graphOf_def] >> simp[PULL_EXISTS, EXISTS_PROD] >>
+      map_every qx_gen_tac [`i`, `m1`, `m2`, `a`, `dvs`, `g`] >> strip_tac >>
+      fs[DISJ_IMP_THM, FORALL_AND_THM] >>
+      `i0 ∉ iterations g`
+        by metis_tac[ilistLT_stackInc, ilistLTE_trans,
+                     stackInc_EQ_NIL, ilistLE_REFL, graphOf_iterations_apart] >>
+      `dvalues m2 d = dvalues m0 d ∧ dreadAction i0 m2 d = dreadAction i0 m0 d`
+        by metis_tac[apply_action_dvalues_commutes] >>
+      simp[] >> metis_tac[])
+  >- ((* par *)
+      qx_gen_tac `cmds` >>
 
 val graphOf_preserved = store_thm(
   "graphOf_preserved",
