@@ -2023,25 +2023,46 @@ val IN_FOLDRi_merge_graph = store_thm(
 
 val apply_action_dvreadAction_commutes = store_thm(
   "apply_action_dvreadAction_commutes",
-  ``a ≁ₜ dvreadAction i m0 ds ∧ apply_action a (SOME m0) = SOME m ⇒
+  ``a ≁ₜ dvreadAction i m0 ds ∧ apply_action a (SOME m0) = SOME m ∧
+    getReads m0 ds = SOME rds ∧
+    (IS_SOME a.write ⇒ ¬MEM (THE a.write) rds)
+   ⇒
     dvreadAction i m ds = dvreadAction i m0 ds ∧
-    getReads m ds = getReads m0 ds``,
+    getReads m ds = getReads m0 ds ∧
+    MAP (evalDexpr m) ds = MAP (evalDexpr m0) ds``,
   simp[dvreadAction_def, touches_def, MEM_FLAT, MEM_MAP, PULL_FORALL,
        GSYM IMP_DISJ_THM] >>
   `a.write = NONE ∨ ∃w. a.write = SOME w` by (Cases_on `a.write` >> simp[]) >>
   simp[FORALL_AND_THM, GSYM LEFT_FORALL_OR_THM, PULL_EXISTS,
-       GSYM RIGHT_FORALL_OR_THM] >- simp[apply_action_def] >>
-  Cases_on `apply_action a (SOME m0) = SOME m` >> simp[] >> Induct_on `ds` >>
+       GSYM RIGHT_FORALL_OR_THM] >- csimp[apply_action_def] >>
+  Cases_on `apply_action a (SOME m0) = SOME m` >> simp[] >>
+  qid_spec_tac `rds` >> Induct_on `ds` >>
   simp[getReads_def] >> Cases >> simp[getReads_def, dvread_def, evalDexpr_def]
-  >- (simp[dvread_def, DISJ_IMP_THM, FORALL_AND_THM] >> strip_tac >>
+  >- (simp[dvread_def, DISJ_IMP_THM, FORALL_AND_THM] >> ntac 2 strip_tac >>
       `readAction i m0 e ≁ₜ a` by simp[readAction_def, touches_def] >>
       `readAction i m e = readAction i m0 e ∧ evalexpr m e = evalexpr m0 e`
         by metis_tac[apply_action_expr_eval_commutes] >>
-      fs[readAction_def]))
+      fs[readAction_def] >> BasicProvers.VAR_EQ_TAC >> fs[] >>
+      qmatch_assum_rename_tac `w ≠ Array anm i : actionRW` [] >>
+      imp_res_tac some_EQ_SOME_E >> fs[] >>
+      `evalexpr m0 (ISub anm e) = lookup_array m0 anm i ∧
+       evalexpr m (ISub anm e) = lookup_array m anm i`
+        by simp[evalexpr_def] >>
+      `a ≁ₜ readAction jj m0 (ISub anm e)`
+        by simp[readAction_def, touches_def, expr_reads_def] >>
+      metis_tac[apply_action_expr_eval_commutes, touches_SYM]) >>
+  simp[dvread_def, DISJ_IMP_THM, FORALL_AND_THM, PULL_EXISTS] >>
+  qx_gen_tac `z` >> strip_tac >>
+  qmatch_assum_rename_tac `w ≠ Variable v` [] >>
+  `evalexpr m0 (VarExp v) = lookup_v m0 v ∧
+   evalexpr m (VarExp v) = lookup_v m v`
+    by simp[evalexpr_def] >>
+  `a ≁ₜ readAction jj m0 (VarExp v)`
+    by simp[touches_def, readAction_def, expr_reads_def] >>
+  metis_tac[apply_action_expr_eval_commutes, touches_SYM])
 
-(*
-val graphOf_apply_action_commutes = store_thm(
-  "graphOf_apply_action_commutes",
+val graphOf_apply_action_diamond = store_thm(
+  "graphOf_apply_action_diamond",
   ``∀i0 m0 c i m1 m2 a g.
       graphOf i0 m0 c = SOME(i,m1,g) ∧ i0 ≠ [] ∧
       apply_action a (SOME m0) = SOME m2 ∧
@@ -2175,21 +2196,59 @@ val graphOf_apply_action_commutes = store_thm(
       `readAction i0 m2 i_e = readAction i0 m0 i_e ∧
        evalexpr m2 i_e = evalexpr m0 i_e`
         by metis_tac[apply_action_expr_eval_commutes, touches_SYM] >>
-      simp[]
+      simp[] >>
+      `IS_SOME a.write ⇒ ¬MEM (THE a.write) rds`
+        by (Cases_on `a.write` >> fs[touches_def]) >>
+      `getReads m2 ds = getReads m0 ds ∧
+       dvreadAction (isuc i0) m2 ds = dvreadAction (isuc i0) m0 ds ∧
+       MAP (evalDexpr m2) ds = MAP (evalDexpr m0) ds`
+        by metis_tac[apply_action_dvreadAction_commutes] >> simp[] >>
+      qabbrev_tac `b = <| reads := []; write := SOME(Array anm iv);
+                          expr := K (opn rvs); iter := xx|>` >>
+      `∀m. upd_array m anm iv (opn rvs) = apply_action b (SOME m)`
+        by simp[apply_action_def, Abbr`b`, updf_def] >> fs[] >>
+      `a ≁ₜ b` by (simp[touches_def, Abbr`b`] >> fs[touches_def] >>
+                  Cases_on `a.write` >> fs[]) >>
+      metis_tac[successful_action_diamond])
+  >- ((* assignvar *)
+      simp[graphOf_def] >>
+      map_every qx_gen_tac [`vnm`, `e`, `m1`, `m2`, `a`] >>
+      strip_tac >>
+      `readAction jj m0 e ≁ₜ a`
+        by (fs[readAction_def, touches_def] >> metis_tac[]) >>
+      `evalexpr m2 e = evalexpr m0 e ∧
+       readAction jj m2 e = readAction jj m0 e`
+        by metis_tac[apply_action_expr_eval_commutes] >>
+      fs[readAction_def] >>
+      qabbrev_tac `b = <| reads := []; write := SOME (Variable vnm);
+                          expr := K (evalexpr m0 e); iter := jj |>` >>
+      `∀m. updf (Variable vnm) (evalexpr m0 e) m = apply_action b (SOME m)`
+        by simp[apply_action_def, Abbr`b`] >> fs[] >>
+      `a ≁ₜ b` by (fs[Abbr`b`, touches_def] >> metis_tac[]) >>
+      metis_tac[successful_action_diamond])
+  >- ((* abort *) simp[graphOf_def])
+  >- ((* Done *) simp[graphOf_def])
+  >- ((* malloc *) simp[graphOf_def]))
 
 
-
-val graphOf_preserved = store_thm(
-  "graphOf_preserved",
+val graphOf_pcg_eval_diamond = store_thm(
+  "graphOf_pcg_eval_diamond",
   ``∀g1 m0 m1 i c i' m2 g2.
-      pcg_eval g1 (SOME m0) = SOME m1 ∧
+      pcg_eval g1 (SOME m0) = SOME m1 ∧ i ≠ [] ∧
       graphOf i m0 c = SOME(i',m2,g2) ∧
       ¬gtouches g1 g2 ⇒
-      ∃m2'. graphOf i m1 c = SOME(i',m2',g2)``,
+      ∃m2'. graphOf i m1 c = SOME(i',m2',g2) ∧
+            pcg_eval g1 (SOME m2) = SOME m2'``,
   ho_match_mp_tac graph_ind >> simp[pcg_eval_thm] >> rpt strip_tac >>
   `∀b. b ∈ g2 ⇒ a ≁ₜ b` by metis_tac[] >>
-  Cases_on `apply_action a (SOME m0)` >- fs[]
+  `∃m0'. apply_action a (SOME m0) = SOME m0'`
+    by (Cases_on `apply_action a (SOME m0)` >> fs[]) >>
+  `∃mm. apply_action a (SOME m2) = SOME mm ∧
+        graphOf i m0' c = SOME(i',mm,g2)`
+    by metis_tac[graphOf_apply_action_diamond, touches_SYM] >>
+  metis_tac[]);
 
+(*
 val graphOf_correct_lemma = store_thm(
   "graphOf_correct_lemma",
   ``∀m0 c0 m c.
