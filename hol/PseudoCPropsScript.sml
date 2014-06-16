@@ -268,7 +268,27 @@ val updLast_def = Define`
 `;
 val _ = export_rewrites ["updLast_def"]
 
+val updLast_EQ_NIL = store_thm(
+  "updLast_EQ_NIL[simp]",
+  ``(updLast f x = [] ⇔ x = []) ∧
+    ([] = updLast f x ⇔ x = [])``,
+  Cases_on `x` >> simp[] >> Cases_on `t` >> simp[]);
+
+val updLast_FRONT_LAST = store_thm(
+  "updLast_FRONT_LAST",
+  ``updLast f l = if l = [] then []
+                  else FRONT l ++ [f (LAST l)]``,
+  Induct_on `l` >> simp[] >> Cases_on `l` >> simp[]);
+
 val stackInc_def = Define`stackInc = updLast SUC`
+val _ = temp_overload_on ("isuc", ``stackInc``)
+
+val stackInc_11 = store_thm(
+  "stackInc_11[simp]",
+  ``isuc x = isuc y ⇔ x = y``,
+  simp[stackInc_def] >>
+  rw[updLast_FRONT_LAST] >>
+  metis_tac[APPEND_FRONT_LAST]);
 
 val updf_def = Define`
   updf w value m =
@@ -751,18 +771,41 @@ val readAction_iter = store_thm(
   ``(readAction i m e).iter = i``,
   simp[readAction_def]);
 
-val dreadAction_def = Define`
-  dreadAction i m (D lo hi) =
+val domreadAction_def = Define`
+  domreadAction i m (D lo hi) =
     <| reads := expr_reads m lo ++ expr_reads m hi;
        write := NONE;
        expr := ARB : value list -> value;
        iter := i |>
 `;
 
-val dreadAction_iter = store_thm(
-  "dreadAction_iter[simp]",
-  ``(dreadAction i m d).iter = i``,
-  Cases_on `d` >> simp[dreadAction_def]);
+val domreadAction_iter = store_thm(
+  "domreadAction_iter[simp]",
+  ``(domreadAction i m d).iter = i``,
+  Cases_on `d` >> simp[domreadAction_def]);
+
+val dvread_def = Define`
+  dvread m (DValue _) = [] ∧
+  dvread m (ARead _ e) = expr_reads m e ∧
+  dvread m (VRead _) = []
+`;
+
+val dvreadAction_def = Define`
+  dvreadAction i m ds = <| reads := FLAT (MAP (dvread m) ds);
+                           write := NONE;
+                           expr := ARB : value list -> value;
+                           iter := i |>
+`
+
+val dvreadAction_iter = store_thm(
+  "dvreadAction_iter[simp]",
+  ``(dvreadAction i m ds).iter = i``,
+  simp[dvreadAction_def]);
+
+val apply_dvreadAction = store_thm(
+  "apply_dvreadAction[simp]",
+  ``apply_action (dvreadAction i m1 ds) m2 = m2``,
+  simp[apply_action_def, dvreadAction_def]);
 
 val graphOf_def = tDefine "graphOf" `
 
@@ -783,7 +826,7 @@ val graphOf_def = tDefine "graphOf" `
        dvs <- dvalues m0 d;
        (i,m,g) <- graphOf (stackInc i0) m0
                           (Seq (MAP (λv. ssubst vnm v body) dvs));
-       SOME(i,m,dreadAction i0 m0 d ⊕ g)
+       SOME(i,m,domreadAction i0 m0 d ⊕ g)
      od) ∧
 
   (graphOf i0 m0 (Seq cmds) =
@@ -801,7 +844,7 @@ val graphOf_def = tDefine "graphOf" `
        dvs <- dvalues m0 d;
        (i,m,g) <- graphOf (stackInc i0) m0
                           (Par (MAP (λv. ssubst vnm v body) dvs));
-       SOME(i,m,dreadAction i0 m0 d ⊕ g)
+       SOME(i,m,domreadAction i0 m0 d ⊕ g)
      od) ∧
 
   (graphOf i0 m0 (Par cmds) =
@@ -820,13 +863,14 @@ val graphOf_def = tDefine "graphOf" `
         i <- (some i. evalexpr m0 i_e = Int i);
         rds <- getReads m0 ds;
         a0 <- SOME (readAction i0 m0 i_e);
+        a1 <- SOME (dvreadAction (stackInc i0) m0 ds);
         a <- SOME <| write := SOME(Array aname i);
                      reads := rds;
                      expr := mergeReads ds opn;
-                     iter := stackInc i0 |> ;
+                     iter := stackInc (stackInc i0) |> ;
         rvs <- OPT_SEQUENCE (MAP (evalDexpr m0) ds);
         m' <- upd_array m0 aname i (opn rvs);
-        SOME(stackInc (stackInc i0), m', a0 ⊕ (a ⊕ emptyG))
+        SOME(stackInc (stackInc (stackInc i0)), m', a0 ⊕ (a1 ⊕ (a ⊕ emptyG)))
      od) ∧
 
   (graphOf i0 m0 (AssignVar vnm e) =
@@ -954,9 +998,12 @@ val LENGTH_stackInc = store_thm(
 
 val stackInc_id = store_thm(
   "stackInc_id[simp]",
-  ``(stackInc it = it ⇔ it = []) ∧ (it = stackInc it ⇔ it = [])``,
-  Cases_on `it` >> simp[stackInc_def] >> Induct_on `t` >> simp[] >>
-  Cases_on `t` >> lfs[]);
+  ``(stackInc it = it ⇔ it = []) ∧ (it = stackInc it ⇔ it = []) ∧
+    (isuc (isuc it) = it ⇔ it = []) ∧ (it = isuc (isuc it) ⇔ it = [])``,
+  simp[stackInc_def, updLast_FRONT_LAST] >> Cases_on `it = []` >>
+  simp[FRONT_APPEND] >>
+  imp_res_tac APPEND_FRONT_LAST >>
+  metis_tac[APPEND_11, CONS_11, DECIDE ``SUC x ≠ x ∧ SUC (SUC x) ≠ x``]);
 
 val updLast_EQ_NIL = store_thm(
   "updLast_EQ_NIL[simp]",
@@ -1096,18 +1143,16 @@ val graphOf_iterations_apart = store_thm(
             simp[TAKE_APPEND1, TAKE_TAKE] >>
             qabbrev_tac `N = LENGTH i0` >>
             disch_then (SUBST1_TAC o SYM) >>
-            `N ≤ LENGTH j` by simp[] >>
-            simp[TAKE_isPREFIX]))
+            `N ≤ LENGTH j` by simp[] >> simp[TAKE_isPREFIX]))
   >- ((* Assign *)
       simp[Once graphOf_def, FORALL_PROD, PULL_EXISTS] >>
       map_every qx_gen_tac [`i0`, `m0`, `w`, `i_e`, `ds`, `opn`, `m`] >>
       rpt gen_tac >> strip_tac >> dsimp[] >>
-      `i0 < stackInc i0 ∧ stackInc i0 < stackInc (stackInc i0)`
+      `i0 < stackInc i0 ∧ stackInc i0 < stackInc (stackInc i0) ∧
+       stackInc (stackInc i0) < stackInc (stackInc (stackInc i0))`
         by metis_tac[ilistLT_stackInc, stackInc_EQ_NIL] >>
-      `i0 ≤ stackInc (stackInc i0) ∧ i0 < stackInc (stackInc i0)`
-        by metis_tac[ilistLT_trans, ilistLE_LTEQ] >> simp[FRONT_TAKE] >>
       metis_tac[FRONT_TAKE, LENGTH_stackInc, FRONT_stackInc,
-                stackInc_EQ_NIL])
+                stackInc_EQ_NIL, ilistLT_trans, ilistLE_LTEQ])
   >- ((* AssignVar *)
       simp[Once graphOf_def, FRONT_TAKE])
   >- ((* Abort *) simp[Once graphOf_def])
@@ -1162,11 +1207,11 @@ val pcg_eval_readAction = store_thm(
   Cases_on `i ∈ iterations g` >> simp[pcg_eval_thm, add_action_id'] >>
   simp[readAction_def, apply_action_def]);
 
-val pcg_eval_dreadAction = store_thm(
-  "pcg_eval_dreadAction[simp]",
-  ``pcg_eval (dreadAction i m d ⊕ g) mo = pcg_eval g mo``,
+val pcg_eval_domreadAction = store_thm(
+  "pcg_eval_domreadAction[simp]",
+  ``pcg_eval (domreadAction i m d ⊕ g) mo = pcg_eval g mo``,
   Cases_on `i ∈ iterations g` >> simp[pcg_eval_thm, add_action_id'] >>
-  Cases_on `d` >> simp[dreadAction_def, apply_action_def]);
+  Cases_on `d` >> simp[domreadAction_def, apply_action_def]);
 
 val graphOf_pcg_eval = store_thm(
   "graphOf_pcg_eval",
@@ -1333,6 +1378,16 @@ val FOLDRi_CONG = store_thm(
   Induct_on `l2` >> simp[] >> dsimp[LT_SUC] >> rpt strip_tac >>
   AP_TERM_TAC >> first_x_assum match_mp_tac >> simp[]);
 
+val FOLDRi_CONG' = store_thm(
+  "FOLDRi_CONG'",
+  ``l1 = l2 ∧ (∀n a. n < LENGTH l2 ⇒ f1 n (EL n l2) a = f2 n (EL n l2) a) ∧
+    a1 = a2 ⇒
+    FOLDRi f1 a1 l1 = FOLDRi f2 a2 l2``,
+  strip_tac >> rw[] >> pop_assum mp_tac >>
+  map_every qid_spec_tac [`f1`, `f2`] >> Induct_on `l1` >>
+  dsimp[LT_SUC] >> rpt strip_tac >> AP_TERM_TAC >>
+  first_x_assum match_mp_tac >> simp[]);
+
 val graphOf_starting_id_irrelevant = store_thm(
   "graphOf_starting_id_irrelevant",
   ``∀i0 m0 c0 i m g.
@@ -1404,7 +1459,7 @@ val graphOf_starting_id_irrelevant = store_thm(
             metis_tac[ilistLT_stackInc, stackInc_EQ_NIL,
                       ilistLTE_trans, ilistLE_REFL]) >>
       simp[imap_add_action] >> simp[Cong imap_CONG] >>
-      Cases_on `d` >> simp[dreadAction_def] >> simp[Once INJ_INSERT] >>
+      Cases_on `d` >> simp[domreadAction_def] >> simp[Once INJ_INSERT] >>
       dsimp[] >> csimp[] >> fs[INJ_INSERT] >>
       `stackInc j ≤ f i`
         by metis_tac[graphOf_iterations_apart, stackInc_EQ_NIL] >>
@@ -1505,7 +1560,7 @@ val graphOf_starting_id_irrelevant = store_thm(
             metis_tac[ilistLT_stackInc, stackInc_EQ_NIL,
                       ilistLTE_trans, ilistLE_REFL]) >>
       simp[imap_add_action] >> simp[Cong imap_CONG] >>
-      Cases_on `d` >> simp[dreadAction_def] >> simp[Once INJ_INSERT] >>
+      Cases_on `d` >> simp[domreadAction_def] >> simp[Once INJ_INSERT] >>
       dsimp[] >> csimp[] >> fs[INJ_INSERT] >>
       `stackInc j ≤ f i`
         by metis_tac[graphOf_iterations_apart, stackInc_EQ_NIL] >>
@@ -1694,18 +1749,25 @@ val graphOf_starting_id_irrelevant = store_thm(
             imap_add_action] >>
       rpt gen_tac >> strip_tac >> qx_gen_tac `j0` >>
       strip_tac >>
-      qexists_tac `
-        λi. if i = i0 then j0 else if i = stackInc i0 then stackInc j0
-            else stackInc (stackInc j0)` >>
-      simp[readAction_def] >>
-      `i0 < stackInc i0 ∧ stackInc i0 < stackInc (stackInc i0)`
+      qabbrev_tac `f =
+        λi. if i = i0 then j0 else if i = isuc i0 then isuc j0
+            else if i = isuc (isuc i0) then isuc (isuc j0)
+            else isuc (isuc (isuc j0))` >>
+      qexists_tac `f` >>
+      `i0 < isuc i0 ∧ isuc i0 < isuc (isuc i0) ∧
+       isuc (isuc i0) < isuc (isuc (isuc i0)) ∧
+       j0 < isuc j0 ∧ isuc j0 < isuc (isuc j0) ∧
+       isuc (isuc j0) < isuc (isuc (isuc j0))`
         by simp[ilistLT_stackInc] >>
-      `i0 ≠ stackInc i0 ∧ i0 ≠ stackInc (stackInc i0)`
+      `i0 ≠ isuc i0 ∧ i0 ≠ isuc (isuc i0) ∧ i0 ≠ isuc (isuc (isuc i0)) ∧
+       isuc j0 ≠ j0 ∧ j0 ≠ isuc (isuc j0) ∧ j0 ≠ isuc (isuc (isuc j0))`
         by metis_tac[ilistLT_trans, ilistLE_REFL] >> simp[] >>
-      qx_gen_tac `y` >> Cases_on `y = i0` >> simp[]
-      >- (`j0 < stackInc j0 ∧ stackInc j0 < stackInc (stackInc j0)` by simp[]>>
-          metis_tac[ilistLT_trans, ilistLE_REFL]) >>
-      Cases_on `y = stackInc i0` >> simp[])
+      `f i0 = j0 ∧ f (isuc i0) = isuc j0 ∧
+       f (isuc (isuc i0)) = isuc (isuc j0) ∧
+       f (isuc (isuc (isuc i0))) = isuc (isuc (isuc j0))`
+        by (simp[Abbr`f`]) >>
+      simp[readAction_def] >>
+      csimp[RIGHT_AND_OVER_OR, imap_add_action, INJ_INSERT, dvreadAction_def])
   >- ((* assign var *)
       csimp[graphOf_def, FORALL_PROD, PULL_EXISTS, INJ_INSERT,
             imap_add_action] >> rpt gen_tac >> strip_tac >> qx_gen_tac `j0` >>
@@ -1840,10 +1902,10 @@ val pcg_eval_expreval_preserves = store_thm(
 
 val apply_action_dvalues_commutes = store_thm(
   "apply_action_dvalues_commutes",
-  ``apply_action a (SOME m0) = SOME m ∧ a ≁ₜ dreadAction i m0 d ⇒
-    dvalues m d = dvalues m0 d ∧ dreadAction i m d = dreadAction i m0 d``,
+  ``apply_action a (SOME m0) = SOME m ∧ a ≁ₜ domreadAction i m0 d ⇒
+    dvalues m d = dvalues m0 d ∧ domreadAction i m d = domreadAction i m0 d``,
   `∃e1 e2. d = D e1 e2` by (Cases_on `d` >> simp[]) >>
-  simp[dreadAction_def, touches_def] >> strip_tac >>
+  simp[domreadAction_def, touches_def] >> strip_tac >>
   `a ≁ₜ readAction i m0 e1 ∧ a ≁ₜ readAction i m0 e2`
     by (simp[touches_def, readAction_def] >> metis_tac[]) >>
   `evalexpr m e1 = evalexpr m0 e1 ∧ readAction i m e1 = readAction i m0 e1 ∧
@@ -1940,6 +2002,43 @@ val pcg_eval_apply_action_diamond = store_thm(
         apply_action b (SOME m2) = SOME mm`
     by metis_tac [successful_action_diamond] >> metis_tac[]);
 
+val IN_FOLDRi_merge_graph = store_thm(
+  "IN_FOLDRi_merge_graph",
+  ``(∀i. i < LENGTH list ⇒
+         DISJOINT (iterations (f i (EL i list))) (iterations acc)) ∧
+    (∀i j. i < j ∧ j < LENGTH list ⇒
+           DISJOINT (iterations (f i (EL i list)))
+                    (iterations (f j (EL j list)))) ⇒
+    (a ∈ FOLDRi (λn c. merge_graph (f n c)) acc list ⇔
+     a ∈ acc ∨ ∃i. i < LENGTH list ∧ a ∈ f i (EL i list))``,
+  qid_spec_tac `f` >>
+  Induct_on `list` >> dsimp[combinTheory.o_ABS_L, LT_SUC] >>
+  rw[EQ_IMP_THM] >> simp[]
+  >- metis_tac[]
+  >- (`a.iter ∈ iterations acc` by simp[iterations_thm] >>
+      fs[DISJOINT_DEF, EXTENSION] >> metis_tac[])
+  >- (`a.iter ∉ iterations (f 0 h)` suffices_by metis_tac[] >>
+      `a.iter ∈ iterations (f (SUC n0) (EL n0 list))` by simp[iterations_thm] >>
+      fs[DISJOINT_DEF, EXTENSION] >> metis_tac[]))
+
+val apply_action_dvreadAction_commutes = store_thm(
+  "apply_action_dvreadAction_commutes",
+  ``a ≁ₜ dvreadAction i m0 ds ∧ apply_action a (SOME m0) = SOME m ⇒
+    dvreadAction i m ds = dvreadAction i m0 ds ∧
+    getReads m ds = getReads m0 ds``,
+  simp[dvreadAction_def, touches_def, MEM_FLAT, MEM_MAP, PULL_FORALL,
+       GSYM IMP_DISJ_THM] >>
+  `a.write = NONE ∨ ∃w. a.write = SOME w` by (Cases_on `a.write` >> simp[]) >>
+  simp[FORALL_AND_THM, GSYM LEFT_FORALL_OR_THM, PULL_EXISTS,
+       GSYM RIGHT_FORALL_OR_THM] >- simp[apply_action_def] >>
+  Cases_on `apply_action a (SOME m0) = SOME m` >> simp[] >> Induct_on `ds` >>
+  simp[getReads_def] >> Cases >> simp[getReads_def, dvread_def, evalDexpr_def]
+  >- (simp[dvread_def, DISJ_IMP_THM, FORALL_AND_THM] >> strip_tac >>
+      `readAction i m0 e ≁ₜ a` by simp[readAction_def, touches_def] >>
+      `readAction i m e = readAction i m0 e ∧ evalexpr m e = evalexpr m0 e`
+        by metis_tac[apply_action_expr_eval_commutes] >>
+      fs[readAction_def]))
+
 (*
 val graphOf_apply_action_commutes = store_thm(
   "graphOf_apply_action_commutes",
@@ -1974,7 +2073,7 @@ val graphOf_apply_action_commutes = store_thm(
       `i0 ∉ iterations g`
         by metis_tac[ilistLT_stackInc, ilistLTE_trans,
                      stackInc_EQ_NIL, ilistLE_REFL, graphOf_iterations_apart] >>
-      `dvalues m2 d = dvalues m0 d ∧ dreadAction i0 m2 d = dreadAction i0 m0 d`
+      `dvalues m2 d = dvalues m0 d ∧ domreadAction i0 m2 d = domreadAction i0 m0 d`
         by metis_tac[apply_action_dvalues_commutes] >>
       simp[] >> metis_tac[])
   >- ((* seq *) qx_gen_tac `cmds` >> Cases_on `cmds` >> simp[]
@@ -2001,11 +2100,84 @@ val graphOf_apply_action_commutes = store_thm(
       `i0 ∉ iterations g`
         by metis_tac[ilistLT_stackInc, ilistLTE_trans,
                      stackInc_EQ_NIL, ilistLE_REFL, graphOf_iterations_apart] >>
-      `dvalues m2 d = dvalues m0 d ∧ dreadAction i0 m2 d = dreadAction i0 m0 d`
+      `dvalues m2 d = dvalues m0 d ∧
+       domreadAction i0 m2 d = domreadAction i0 m0 d`
         by metis_tac[apply_action_dvalues_commutes] >>
       simp[] >> metis_tac[])
   >- ((* par *)
-      qx_gen_tac `cmds` >>
+      qx_gen_tac `cmds` >> strip_tac >> map_every qx_gen_tac [`i`, `m1`, `m2`, `a`, `g`] >>
+      ONCE_REWRITE_TAC [graphOf_def] >>
+      simp[OPT_SEQUENCE_EQ_SOME, combinTheory.o_ABS_R, MEM_MAPi, PULL_EXISTS] >>
+      qabbrev_tac `TOS = λt:(num list # memory #
+                                 (value, actionRW, num list)action_graph) option.
+                            THE (OPTION_MAP (SND o SND) t)` >> simp[] >>
+      simp[FOLDR_MAPi, combinTheory.o_ABS_R] >> fs[] >> strip_tac >> fs[] >>
+      csimp[] >>
+      `∃m. pcg_eval g (SOME m2) = SOME m ∧ apply_action a (SOME m1) = SOME m`
+        by metis_tac[pcg_eval_apply_action_diamond] >> simp[] >>
+      qabbrev_tac `GG = λi. graphOf (i0 ++ [i;0])` >> simp[] >>
+      `∀it j. j < LENGTH cmds ∧ it ∈ iterations (TOS (GG j m0 (EL j cmds))) ⇒
+              EL (LENGTH i0) it = j`
+        by (rpt strip_tac >>
+            `∃j' m' g'. graphOf (i0 ++ [j;0]) m0 (EL j cmds) = SOME (j',m',g')`
+              by (fs[EXISTS_PROD] >> metis_tac[]) >>
+            `TOS (GG j m0 (EL j cmds)) = g'` by simp[Abbr`GG`, Abbr`TOS`] >>
+            `∀k. k ∈ iterations g' ⇒
+                 LENGTH (i0 ++ [j;0]) ≤ LENGTH k ∧
+                 TAKE (LENGTH (i0 ++ [j;0]) - 1) k = FRONT (i0 ++ [j;0])`
+              by metis_tac[APPEND_eq_NIL, NOT_CONS_NIL,
+                           graphOf_iterations_apart] >>
+            lfs[FRONT_APPEND] >> pop_assum (qspec_then `it` mp_tac) >>
+            simp[] >> strip_tac >>
+            `EL (LENGTH i0) it = EL (LENGTH i0) (TAKE (LENGTH i0 + 1) it)`
+              by simp[EL_TAKE] >> simp[EL_APPEND2]) >>
+      `∀b. b ∈ g ⇔
+           b ∈ emptyG ∨
+           ∃i. i < LENGTH cmds ∧ b ∈ TOS (graphOf (i0 ++ [i;0]) m0 (EL i cmds))`
+        by (RW_TAC bool_ss [] >> ho_match_mp_tac IN_FOLDRi_merge_graph >>
+            simp[] >> simp[DISJOINT_DEF, EXTENSION] >> rpt strip_tac >>
+            spose_not_then strip_assume_tac >>
+            qmatch_assum_rename_tac
+              `iter ∈ iterations (TOS (GG i m0 (EL i cmds)))` [] >>
+            `i < LENGTH cmds ∧ i ≠ j` by decide_tac >> metis_tac[]) >>
+      fs[PULL_EXISTS] >>
+      `∀n. n < LENGTH cmds ⇒ ∃z. graphOf (i0 ++ [n;0]) m2 (EL n cmds) = SOME z`
+        by (rpt strip_tac >>
+            `∃z. graphOf (i0 ++ [n;0]) m0 (EL n cmds) = SOME z` by metis_tac[] >>
+            PairCases_on `z` >> `MEM (EL n cmds) cmds` by metis_tac[MEM_EL] >>
+            simp[EXISTS_PROD] >>
+            first_x_assum (qspecl_then [`EL n cmds`, `n`] mp_tac) >> simp[] >>
+            simp[Abbr`GG`] >> fs[] >>
+            disch_then (qspecl_then [`m2`, `a`] mp_tac) >> simp[] >>
+            qpat_assum `∀b i. i < LENGTH cmds ∧ PP ⇒ a ≁ₜ b`
+              (qspec_then `n` mp_tac o CONV_RULE SWAP_FORALL_CONV) >>
+            simp[Abbr`TOS`] >> metis_tac[]) >>
+      conj_tac >- simp[Abbr`GG`] >>
+      `∀i. i < LENGTH cmds ⇒
+           TOS (GG i m2 (EL i cmds)) = TOS (GG i m0 (EL i cmds))`
+        suffices_by
+        (simp[] >> rw[] >> match_mp_tac FOLDRi_CONG' >> simp[]) >>
+      qx_gen_tac `j` >> strip_tac >>
+      first_x_assum (qspecl_then [`EL j cmds`, `j`] mp_tac) >>
+      simp[EL_MEM] >>
+      `∃it m' g'. graphOf (i0 ++ [j; 0]) m0 (EL j cmds) = SOME(it,m',g')`
+        by (fs[EXISTS_PROD] >> metis_tac[]) >> pop_assum mp_tac >>
+      simp[] >> strip_tac >> disch_then (qspecl_then [`m2`, `a`] mp_tac) >>
+      simp[] >>
+      qpat_assum `∀b i. i < LENGTH cmds ∧ PP ⇒ a ≁ₜ b`
+       (qspec_then `j` mp_tac o CONV_RULE SWAP_FORALL_CONV) >>
+      simp[Abbr`TOS`] >> rpt strip_tac >> simp[])
+  >- ((* assign *)
+      simp[graphOf_def, FORALL_PROD, PULL_EXISTS] >>
+      map_every qx_gen_tac [`anm`, `i_e`, `ds`, `opn`, `m1`, `m2`, `a`, `iv`,
+                            `rds`, `rvs`] >> strip_tac >>
+      pop_assum mp_tac >> dsimp[] >> strip_tac >>
+      `readAction i0 m2 i_e = readAction i0 m0 i_e ∧
+       evalexpr m2 i_e = evalexpr m0 i_e`
+        by metis_tac[apply_action_expr_eval_commutes, touches_SYM] >>
+      simp[]
+
+
 
 val graphOf_preserved = store_thm(
   "graphOf_preserved",
