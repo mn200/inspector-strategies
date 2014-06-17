@@ -109,6 +109,16 @@ val upd_array_def = Define`
       | _ => NONE
 `;
 
+val upd_var_def = Define`
+  upd_var m vnm v =
+    if vnm ∈ FDOM m ∧ v ≠ Error ∧ (∀els. m ' vnm ≠ Array els) ∧
+       (∀els. v ≠ Array els)
+    then
+      SOME (m |+ (vnm,v))
+    else
+      NONE
+`;
+
 (* lookup_v : memory -> string -> value *)
 val lookup_v_def = Define`
   lookup_v m v =
@@ -217,6 +227,20 @@ val (eval_rules, eval_ind, eval_cases) = Hol_reln`
      (∀b. evalexpr m g ≠ Bool b)
     ⇒
      eval (m,IfStmt g t e) (m,Abort))
+
+     ∧
+
+  (∀vnm e m0 m.
+     upd_var m0 vnm (evalexpr m0 e) = SOME m
+    ⇒
+     eval (m0, AssignVar vnm e) (m, Done))
+
+     ∧
+
+  (∀vnm e m.
+     upd_var m vnm (evalexpr m e) = NONE
+    ⇒
+     eval (m, AssignVar vnm e) (m, Abort))
 
      ∧
 
