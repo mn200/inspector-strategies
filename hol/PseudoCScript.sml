@@ -286,7 +286,7 @@ val (eval_rules, eval_ind, eval_cases) = Hol_reln`
 
      ∧
 
-  (∀rds pfx vname sfx w vf.
+  (∀rds pfx vname sfx w vf m.
       rds = pfx ++ [VRead vname] ++ sfx ⇒
       eval (m, Assign w rds vf)
            (m,
