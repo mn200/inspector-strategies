@@ -294,12 +294,7 @@ val updf_def = Define`
   updf w value m =
     case w of
       | Array a i => upd_array m a i value
-      | Variable vnm => case FLOOKUP m vnm of
-                          NONE => NONE
-                        | SOME (Array _) => NONE
-                        | SOME _ => if ∀els. value ≠ Array els then
-                                      SOME(m |+ (vnm, value))
-                                    else NONE
+      | Variable vnm => upd_var m vnm value
 `;
 
 val apply_action_def = Define`
@@ -325,10 +320,15 @@ val updf_EQ_NONE = store_thm(
   "updf_EQ_NONE",
   ``updf w value m = NONE ⇔
      (∃a i. w = Array a i ∧ upd_array m a i value = NONE) ∨
-     ∃vnm. w = Variable vnm ∧ (vnm ∉ FDOM m ∨ (∃els. value = Array els) ∨
-                               vnm ∈ FDOM m ∧ ∃els. m ' vnm = Array els)``,
-  Cases_on `w` >> simp[updf_def] >>
-  rw[FLOOKUP_DEF] >> fs[] >> Cases_on `m ' s` >> simp[]) ;
+     ∃vnm. w = Variable vnm ∧ upd_var m vnm value = NONE``,
+  Cases_on `w` >> simp[updf_def]);
+
+val upd_var_EQ_NONE = store_thm(
+  "upd_var_EQ_NONE",
+  ``upd_var m vnm v = NONE ⇔
+      vnm ∉ FDOM m ∨ (∃els. m ' vnm = Array els) ∨
+      v = Error ∨ ∃els. v = Array els``,
+  rw[upd_var_def] >> metis_tac[]);
 
 val updarray_EQ_NONE = store_thm(
   "updarray_EQ_NONE",
@@ -341,7 +341,7 @@ val updarray_EQ_NONE = store_thm(
 val updf_preserves_FDOMs = store_thm(
   "updf_preserves_FDOMs",
   ``updf w value m = SOME m' ⇒ FDOM m' = FDOM m``,
-  Cases_on `w` >> simp[updf_def, upd_array_def] >> rw[] >>
+  Cases_on `w` >> simp[updf_def, upd_array_def, upd_var_def] >> rw[] >>
   simp[ABSORPTION_RWT] >>
   Cases_on `FLOOKUP m s` >> fs[] >>
   Cases_on `x` >> fs[] >> rw[] >>
@@ -363,9 +363,8 @@ val updf_preserves_array_presence_length_back = store_thm(
     Cases_on `x` >> simp[] >> rw[] >> fs[FLOOKUP_DEF]
     >- (rw[] >> fs[] >> rw[]) >>
     Cases_on `a = s` >> fs[FAPPLY_FUPDATE_THM] >> rw[],
-    rw[FLOOKUP_DEF] >> Cases_on `m ' s` >>
-    fs[] >> rw[] >> fs[] >> rw[] >> fs[] >>
-    Cases_on `a = s` >> fs[FAPPLY_FUPDATE_THM]
+    rw[FLOOKUP_DEF, upd_var_def] >> fs[] >> rw[] >> fs[] >>
+    fs[FAPPLY_FUPDATE_THM] >> pop_assum mp_tac >> rw[]
   ]);
 
 val updf_preserves_array_presence_length_forward = store_thm(
@@ -376,10 +375,8 @@ val updf_preserves_array_presence_length_forward = store_thm(
     simp[upd_array_def] >> Cases_on `FLOOKUP m s` >> simp[] >>
     Cases_on `x` >> simp[] >> rw[] >> fs[FLOOKUP_DEF] >>
     Cases_on `a = s` >> fs[FAPPLY_FUPDATE_THM] >> rw[],
-    rw[FLOOKUP_DEF] >> Cases_on `m ' s` >> fs[] >> rw[] >> fs[] >>
-    rw[] >> fs[] >>
-    Cases_on `a = s` >> fs[FAPPLY_FUPDATE_THM]
-  ]);
+    rw[FLOOKUP_DEF, upd_var_def] >> simp[FAPPLY_FUPDATE_THM] >> rw[] >> fs[]
+  ])
 
 val m_t = ``m:memory``
 val m'_t = ``m':memory``
@@ -389,7 +386,8 @@ val nontouching_updfs_read_after_write = store_thm(
   ``updf w value m = SOME m' ∧ w ≠ rd ⇒ lookupRW m' rd = lookupRW m rd``,
   `(∃a i. w = Array a i) ∨ ∃s. w = Variable s` by (Cases_on `w` >> simp[]) >>
   `(∃b j. rd = Array b j) ∨ ∃t. rd = Variable t` by (Cases_on `rd` >> simp[]) >>
-  simp[updf_def, lookupRW_def, lookup_array_def, upd_array_def, lookup_v_def] >>
+  simp[updf_def, lookupRW_def, lookup_array_def, upd_array_def, lookup_v_def,
+       upd_var_def] >>
   strip_tac
   >- (`FLOOKUP m a = NONE ∨ ∃v. FLOOKUP m a = SOME v`
         by (Cases_on `FLOOKUP m a` >> simp[]) >> fs[] >>
@@ -412,14 +410,10 @@ val nontouching_updfs_read_after_write = store_thm(
         by (Cases_on `FLOOKUP m a` >> simp[]) >> fs[] >>
       Cases_on `v` >> fs[FLOOKUP_DEF] >> rw[FAPPLY_FUPDATE_THM] >>
       fs[])
-  >- (`FLOOKUP m s = NONE ∨ ∃v. FLOOKUP m s = SOME v`
-        by (Cases_on `FLOOKUP m s` >> simp[]) >> fs[] >>
-      Cases_on `v` >> fs[FLOOKUP_DEF] >> rw[FAPPLY_FUPDATE_THM] >>
-      fs[] >> Cases_on `value` >> fs[])
-  >- (`FLOOKUP m s = NONE ∨ ∃v. FLOOKUP m s = SOME v`
-        by (Cases_on `FLOOKUP m s` >> simp[]) >> fs[] >>
-      Cases_on `v` >> fs[FLOOKUP_DEF] >> rw[FAPPLY_FUPDATE_THM] >>
-      fs[] >> Cases_on `value` >> fs[]));
+  >- (rw[FAPPLY_FUPDATE_THM, FLOOKUP_DEF] >>
+      TRY (Cases_on `value` >> fs[]) >>
+      TRY (Cases_on `m ' b` >> fs[]))
+  >- rw[FAPPLY_FUPDATE_THM, FLOOKUP_DEF]);
 
 val nontouching_updfs_expreval = store_thm(
   "nontouching_updfs_expreval",
@@ -509,8 +503,14 @@ fun eqNONE_tac (g as (asl,w)) = let
           mp_tac (SPEC (rand (rand (rhs (concl th2)))) imp)) >>
         assume_tac th2) >>
       assume_tac th1) >> simp[]
+  val expr_error_case =
+    qpat_assum `XX = Error` (SUBST1_TAC o SYM) >>
+    disj2_tac >> disj2_tac >> disj1_tac >> AP_TERM_TAC >>
+    simp[MAP_EQ_f] >> rpt strip_tac >>
+    qunabbrev_tac [QUOTE other_name] >> fs[] >>
+    metis_tac[nontouching_updfs_read_after_write, touches_def]
   val expr_case =
-    disj2_tac >> disj1_tac >>
+    rpt disj2_tac >>
     qpat_assum `XX = Array ZZ:value`
       (fn th => EXISTS_TAC (rand (rhs (concl th))) THEN
                 REWRITE_TAC [SYM th]) >> AP_TERM_TAC >>
@@ -518,36 +518,82 @@ fun eqNONE_tac (g as (asl,w)) = let
     qunabbrev_tac [QUOTE other_name] >> fs[] >>
     metis_tac[nontouching_updfs_read_after_write, touches_def]
   val vararray_case =
-    disj2_tac >> qunabbrev_tac [QUOTE other_name] >> fs[] >>
-    qpat_assum `vv ∈ FDOM (mm:memory)`
-      (fn th => let
-         val m_t = rand (rand (concl th))
-       in
-         assume_tac th >>
-         qpat_assum `updf ww vv ^m_t = SOME mm'`
-           (fn th => mp_tac th >>
-                     Cases_on `^(hd (#2 (strip_comb (lhs (concl th)))))`)
-       end) >> simp[updf_def, upd_array_def] >>
-    flookupmem_tac >> simp[] >> rw[] >>
-    rw[FAPPLY_FUPDATE_THM] >>
-    fs[touches_def, FAPPLY_FUPDATE_THM, FLOOKUP_DEF] >>
-    full_simp_tac (srw_ss() ++ COND_elim_ss) [] >> fs[]
-  val None_subtac = flookup_case ORELSE expr_case ORELSE vararray_case
+    qunabbrev_tac [QUOTE other_name] >> fs[] >>
+    qpat_assum `mm : memory ' vv = Array eee` assume_tac >>
+    metis_tac[SIMP_RULE (srw_ss() ++ COND_elim_ss) [FLOOKUP_DEF]
+                        (CONJ updf_preserves_array_presence_length_back
+                              updf_preserves_array_presence_length_forward)]
+
+  val None_subtac = flookup_case ORELSE expr_error_case ORELSE
+                    vararray_case ORELSE expr_case
 in
   rearrange_tac >>
   RES_TAC >>
   qunabbrev_tac [QUOTE upd_name] >>
-  fs[updf_EQ_NONE, updarray_EQ_NONE] >>
+  fs[updf_EQ_NONE, updarray_EQ_NONE, upd_var_EQ_NONE] >>
   None_subtac
 end g
 
 val updf_VAR_SOME_EQN = store_thm(
   "updf_VAR_SOME_EQN",
   ``updf (Variable s) v m = SOME m' ⇔
-    (∀es. v ≠ Array es) ∧ s ∈ FDOM m ∧ (∀es. m ' s ≠ Array es) ∧
+    (∀es. v ≠ Array es) ∧ s ∈ FDOM m ∧ (∀es. m ' s ≠ Array es) ∧ v ≠ Error ∧
     m' = m |+ (s,v)``,
-  simp[updf_def] >> flookupmem_tac >> simp[] >> fs[FLOOKUP_DEF] >>
-  metis_tac[]);
+  simp[updf_def, upd_var_def] >> metis_tac[]);
+
+fun disjneq_search (g as (asl,w)) = let
+  val ds = strip_disj w
+  fun is_neq t = is_eq (dest_neg t) handle HOL_ERR _ => false
+in
+  case List.find is_neq ds of
+      NONE => NO_TAC
+    | SOME d => ASM_CASES_TAC (dest_neg d) THEN ASM_REWRITE_TAC[]
+end g
+
+fun has_cond t = can (find_term (same_const ``COND``)) t
+
+val successful_upd_array_diamond = store_thm(
+  "successful_upd_array_diamond",
+  ``(a1 ≠ a2 ∨ i1 ≠ i2) ∧ upd_array (m0:memory) a1 i1 v1 = SOME m1 ∧
+    upd_array m0 a2 i2 v2 = SOME m2 ⇒
+    ∃m. upd_array m2 a1 i1 v1 = SOME m ∧
+        upd_array m1 a2 i2 v2 = SOME m``,
+  Cases_on `a1 = a2` >| [Cases_on `i1 = i2`, ALL_TAC] >> simp[] >>
+  simp[upd_array_def] >> rpt (flookupmem_tac >> simp[]) >>
+  map_every (fn q => Cases_on q >> simp[]) [`i1 < 0`, `i2 < 0`] >>
+  rpt disjneq_search >> rw[] >> fs[FLOOKUP_UPDATE] >> rw[] >>
+  rpt (first_x_assum (mp_tac o assert (has_cond o concl)) >> simp[]) >>
+  rw[] >> rw[] >| [
+    `0 ≤ i1 ∧ 0 ≤ i2` by ARITH_TAC >>
+    `i1 = &(Num i1) ∧ i2 = &(Num i2)` by metis_tac[integerTheory.INT_OF_NUM] >>
+    rpt AP_TERM_TAC >>
+    qmatch_assum_rename_tac `¬(&LENGTH vl ≤ i1)` [] >>
+    `Num i1 < LENGTH vl ∧ Num i2 < LENGTH vl`
+              by (fs[integerTheory.INT_NOT_LE] >>
+                  metis_tac[integerTheory.INT_LT]) >>
+    simp[LIST_EQ_REWRITE, LUPDATE_SEM] >> rw[] >>
+    `Num i1 ≠ Num i2`
+      by metis_tac[integerTheory.INT_INJ, integerTheory.INT_OF_NUM],
+    simp[FUPDATE_COMMUTES]
+  ])
+
+val FLOOKUP_EQ_NONE = store_thm(
+  "FLOOKUP_EQ_NONE[simp]",
+  ``FLOOKUP f k = NONE ⇔ k ∉ FDOM f``,
+  simp[FLOOKUP_DEF]);
+
+val successful_updf_diamond = store_thm(
+  "successful_updf_diamond",
+  ``w1 ≠ w2 ∧ updf w1 v1 m0 = SOME m1 ∧ updf w2 v2 m0 = SOME m2 ⇒
+    ∃m. updf w1 v1 m2 = SOME m ∧ updf w2 v2 m1 = SOME m``,
+  simp[updf_def] >> Cases_on `w1` >> Cases_on `w2` >> simp[]
+  >- metis_tac[successful_upd_array_diamond] >>
+  simp[upd_array_def, upd_var_def] >>
+  rpt (flookupmem_tac >> simp[]) >> rw[] >>
+  rpt disjneq_search >> rw[] >> fs[FLOOKUP_UPDATE] >>
+  rpt (first_x_assum (mp_tac o assert (has_cond o concl)) >> simp[]) >>
+  rw[] >> fs[FLOOKUP_DEF, FUPDATE_COMMUTES, FAPPLY_FUPDATE_THM] >>
+  first_x_assum (mp_tac o assert (has_cond o concl)) >> simp[]);
 
 val updf_writes_commute = store_thm(
   "updf_writes_commute",
@@ -555,58 +601,7 @@ val updf_writes_commute = store_thm(
     updf w1 v1 m0 = SOME m11 ∧ updf w2 v2 m11 = SOME m12 ∧
     updf w2 v2 m0 = SOME m21 ∧ updf w1 v1 m21 = SOME m22 ⇒
     m12 = m22``,
-  Cases_on `w1` >> Cases_on `w2` >| [
-    simp[updf_def, upd_array_def] >>
-    rpt (flookupmem_tac >> simp[]) >> rw[] >>
-    fs[FLOOKUP_DEF, FAPPLY_FUPDATE_THM, integerTheory.INT_NOT_LE,
-       integerTheory.INT_NOT_LT] >|
-    [
-      dsimp[fmap_EXT, FAPPLY_FUPDATE_THM] >> conj_tac
-      >- (simp[EXTENSION] >> metis_tac[]) >>
-      rw[],
-      rw[] >> dsimp[fmap_EXT, FAPPLY_FUPDATE_THM] >> csimp[] >>
-      qmatch_rename_tac `
-        LUPDATE v2 (Num j) (LUPDATE v1 (Num i) a1) =
-        LUPDATE v1 (Num i) (LUPDATE v2 (Num j) a2)` [] >>
-      `a1 = a2` by fs[] >> rw[] >>
-      simp[LIST_EQ_REWRITE, LUPDATE_SEM] >>
-      `Num i ≠ Num j`
-        by metis_tac[integerTheory.INT_INJ, integerTheory.INT_OF_NUM] >>
-      rw[] >> fs[],
-      qmatch_rename_tac `
-        m0 |+ (s, Array (LUPDATE v1 (Num i) a1))
-           |+ (t, Array (LUPDATE v2 (Num j) a2)) = XX` ["XX"] >>
-      reverse (Cases_on `s = t`)
-      >- (fs[] >> dsimp[fmap_EXT, FAPPLY_FUPDATE_THM] >>
-          rw[EXTENSION] >> metis_tac[]) >>
-      fs[] >> rw[] >> dsimp[fmap_EXT, FAPPLY_FUPDATE_THM] >> csimp[] >>
-      `Num i ≠ Num j`
-        by metis_tac[integerTheory.INT_INJ, integerTheory.INT_OF_NUM] >>
-      simp[LIST_EQ_REWRITE, LUPDATE_SEM] >>
-      rw[] >> fs[]
-    ],
-
-    simp[SPEC ``Array a i`` updf_def, upd_array_def,
-         updf_VAR_SOME_EQN] >>
-    rpt (flookupmem_tac >> simp[]) >> fs[FLOOKUP_DEF] >>
-    rpt strip_tac >> rw[] >>
-    qmatch_rename_tac `m0 |+ (s, XX) |+ (t, YY) = ZZ`
-      ["XX", "YY", "ZZ"] >>
-    `s ≠ t` by (strip_tac >> fs[]) >>
-    fs[FAPPLY_FUPDATE_THM] >> metis_tac[FUPDATE_COMMUTES],
-
-    simp[SPEC ``Array a i`` updf_def, upd_array_def,
-         updf_VAR_SOME_EQN] >>
-    rpt (flookupmem_tac >> simp[]) >> fs[FLOOKUP_DEF] >>
-    rpt strip_tac >> rw[] >>
-    qmatch_rename_tac `m0 |+ (s, XX) |+ (t, YY) = ZZ`
-      ["XX", "YY", "ZZ"] >>
-    `s ≠ t` by (strip_tac >> fs[]) >>
-    fs[FAPPLY_FUPDATE_THM] >> metis_tac[FUPDATE_COMMUTES],
-
-    simp[updf_VAR_SOME_EQN] >> rpt strip_tac >>
-    simp[FUPDATE_COMMUTES]
-  ])
+  metis_tac[successful_updf_diamond, optionTheory.SOME_11]);
 
 fun ae_equate_tac anm (g as (asl,w)) = let
   fun ae_term t = let
@@ -1879,15 +1874,15 @@ val apply_action_expr_eval_commutes = store_thm(
               by (fs[integerTheory.INT_NOT_LE] >>
                   metis_tac[integerTheory.INT_LT]) >>
           metis_tac[]) >>
-      flookupmem_tac >> simp[] >> fs[FLOOKUP_DEF] >> rw[] >>
-      simp[lookup_array_def] >> Cases_on `anm = s` >>
-      TRY (simp[FLOOKUP_UPDATE] >> NO_TAC) >>
-      simp[FLOOKUP_UPDATE] >> simp[FLOOKUP_DEF] >>
+      simp[upd_var_def] >> rw[] >> simp[lookup_array_def, FLOOKUP_UPDATE] >>
+      Cases_on `anm = s` >> simp[] >> flookupmem_tac >> simp[] >>
+      fs[FLOOKUP_DEF] >>
       Cases_on `expr (MAP (lookupRW m0) rds)` >> simp[] >> fs[])
-  >- (rpt gen_tac >> simp[updf_def] >> Cases_on `w` >> simp[upd_array_def]
+  >- (rpt gen_tac >> simp[updf_def] >> Cases_on `w` >>
+      simp[upd_array_def, upd_var_def]
       >- (flookupmem_tac >> simp[] >> rw[lookup_v_def] >> Cases_on `s = s'` >>
           simp[FLOOKUP_UPDATE]) >>
-      flookupmem_tac >> simp[] >> rw[lookup_v_def] >> simp[FLOOKUP_UPDATE]))
+      rw[lookup_v_def] >> simp[FLOOKUP_UPDATE]))
 
 val pcg_eval_expreval_preserves = store_thm(
   "pcg_eval_expreval_preserves",
@@ -1913,53 +1908,6 @@ val apply_action_dvalues_commutes = store_thm(
     by metis_tac[apply_action_expr_eval_commutes, touches_SYM] >>
   simp[dvalues_def] >> fs[readAction_def, action_component_equality]);
 
-fun disjneq_search (g as (asl,w)) = let
-  val ds = strip_disj w
-  fun is_neq t = is_eq (dest_neg t) handle HOL_ERR _ => false
-in
-  case List.find is_neq ds of
-      NONE => NO_TAC
-    | SOME d => ASM_CASES_TAC (dest_neg d) THEN ASM_REWRITE_TAC[]
-end g
-
-fun has_cond t = can (find_term (same_const ``COND``)) t
-
-val successful_upd_array_diamond = store_thm(
-  "successful_upd_array_diamond",
-  ``(a1 ≠ a2 ∨ i1 ≠ i2) ∧ upd_array (m0:memory) a1 i1 v1 = SOME m1 ∧
-    upd_array m0 a2 i2 v2 = SOME m2 ⇒
-    ∃m. upd_array m2 a1 i1 v1 = SOME m ∧
-        upd_array m1 a2 i2 v2 = SOME m``,
-  Cases_on `a1 = a2` >| [Cases_on `i1 = i2`, ALL_TAC] >> simp[] >>
-  simp[upd_array_def] >> rpt (flookupmem_tac >> simp[]) >>
-  map_every (fn q => Cases_on q >> simp[]) [`i1 < 0`, `i2 < 0`] >>
-  rpt disjneq_search >> rw[] >> fs[FLOOKUP_UPDATE] >> rw[] >>
-  rpt (first_x_assum (mp_tac o assert (has_cond o concl)) >> simp[]) >>
-  rw[] >> rw[] >| [
-    `0 ≤ i1 ∧ 0 ≤ i2` by ARITH_TAC >>
-    `i1 = &(Num i1) ∧ i2 = &(Num i2)` by metis_tac[integerTheory.INT_OF_NUM] >>
-    rpt AP_TERM_TAC >>
-    qmatch_assum_rename_tac `¬(&LENGTH vl ≤ i1)` [] >>
-    `Num i1 < LENGTH vl ∧ Num i2 < LENGTH vl`
-              by (fs[integerTheory.INT_NOT_LE] >>
-                  metis_tac[integerTheory.INT_LT]) >>
-    simp[LIST_EQ_REWRITE, LUPDATE_SEM] >> rw[] >>
-    `Num i1 ≠ Num i2`
-      by metis_tac[integerTheory.INT_INJ, integerTheory.INT_OF_NUM],
-    simp[FUPDATE_COMMUTES]
-  ])
-
-val successful_updf_diamond = store_thm(
-  "successful_updf_diamond",
-  ``w1 ≠ w2 ∧ updf w1 v1 m0 = SOME m1 ∧ updf w2 v2 m0 = SOME m2 ⇒
-    ∃m. updf w1 v1 m2 = SOME m ∧ updf w2 v2 m1 = SOME m``,
-  simp[updf_def] >> Cases_on `w1` >> Cases_on `w2` >> simp[]
-  >- metis_tac[successful_upd_array_diamond] >>
-  simp[upd_array_def] >>
-  rpt (flookupmem_tac >> simp[]) >> rw[] >>
-  rpt disjneq_search >> rw[] >> fs[FLOOKUP_UPDATE] >>
-  rpt (first_x_assum (mp_tac o assert (has_cond o concl)) >> simp[]) >>
-  rw[] >> fs[FUPDATE_COMMUTES]);
 
 val successful_action_diamond = store_thm(
   "successful_action_diamond",
@@ -2230,7 +2178,6 @@ val graphOf_apply_action_diamond = store_thm(
   >- ((* Done *) simp[graphOf_def])
   >- ((* malloc *) simp[graphOf_def]))
 
-
 val graphOf_pcg_eval_diamond = store_thm(
   "graphOf_pcg_eval_diamond",
   ``∀g1 m0 m1 i c i' m2 g2.
@@ -2248,7 +2195,176 @@ val graphOf_pcg_eval_diamond = store_thm(
     by metis_tac[graphOf_apply_action_diamond, touches_SYM] >>
   metis_tac[]);
 
+val pregraph_def = Define`
+  pregraph a G = ITSET (λb g. g \\ b) { b | b ∈ G ∧ b -<G>/-> a } G
+`;
+
+val pregraph_emptyG = store_thm(
+  "pregraph_emptyG[simp]",
+  ``pregraph a emptyG = emptyG``,
+  simp[pregraph_def, ITSET_EMPTY]);
+
+val ITSET_gDELETE_ALL = store_thm(
+  "ITSET_gDELETE_ALL",
+  ``∀g. ITSET (λb g. g \\ b) (ag_nodes g) g = emptyG``,
+  ho_match_mp_tac graph_ind >> simp[ITSET_EMPTY] >>
+  map_every qx_gen_tac [`a`, `g`] >> strip_tac >>
+  `ag_nodes (a ⊕ g) = a INSERT ag_nodes g` by simp[EXTENSION] >>
+  simp[] >>
+  `(a ⊕ g) \\ a = g`
+    by (simp[graph_equality, add_action_edges] >> metis_tac[IN_edges]) >>
+  `ITSET (λb g. g \\ b) (a INSERT ag_nodes g) (a ⊕ g) =
+   ITSET (λb g. g \\ b) (ag_nodes g DELETE a) ((λb g. g \\ b) a (a ⊕ g))`
+    suffices_by simp[DELETE_NON_ELEMENT_RWT] >>
+  match_mp_tac COMMUTING_ITSET_INSERT >> simp[gDELETE_commutes]);
+                 `
+val pregreph_add_action_id = store_thm(
+  "pregreph_add_action_id[simp]",
+  ``a.iter ∉ iterations g ⇒ pregraph a (a ⊕ g) = emptyG``,
+  dsimp[pregraph_def, add_action_edges] >> csimp[] >> strip_tac >>
+  `a ∉ g` by (strip_tac >> fs[iterations_thm]) >>
+  simp[] >>
+  qmatch_abbrev_tac `ITSET (λb g. g \\ b) ss (a ⊕ g) = emptyG` >>
+  `ss = ag_nodes (a ⊕ g)`
+    by (simp[Abbr`ss`, EXTENSION] >> qx_gen_tac `e` >> eq_tac >> strip_tac >>
+        simp[] >> `e ≠ a` by metis_tac [] >> simp[] >>
+        metis_tac[IN_edges]) >>
+  simp[ITSET_gDELETE_ALL]);
+
+val pregraph_absent = store_thm(
+  "pregraph_absent",
+  ``b ∉ g ⇒ pregraph b g = emptyG``,
+  simp[pregraph_def] >> strip_tac >>
+  `∀a. a -<g>/-> b` by metis_tac[IN_edges] >>
+  simp[ITSET_gDELETE_ALL]);
+
+val pregraph_subset = store_thm(
+  "pregraph_subset",
+  ``∀g b. b ∈ pregraph a g ⇒ b ∈ g``,
+  simp[pregraph_def] >> rpt gen_tac >>
+  `∀s. FINITE s ⇒ ∀g. b ∈ ITSET (λb g. g \\ b) s g ⇒ b ∈ g`
+    suffices_by (disch_then match_mp_tac >>
+                 match_mp_tac SUBSET_FINITE_I >>
+                 qexists_tac `ag_nodes g` >> simp[SUBSET_DEF]) >>
+  Induct_on `FINITE s` >>
+  simp[ITSET_EMPTY, gDELETE_commutes, COMMUTING_ITSET_INSERT,
+       DELETE_NON_ELEMENT_RWT] >> rpt strip_tac >>
+  res_tac >> fs[]);
+
+val ITSET_DEL = prove(
+  ``∀s. FINITE s ⇒ ∀g a. a ∉ s ∧ a.iter ∉ iterations g ⇒
+        ITSET (λb g. g \\ b) s (a ⊕ g) = a ⊕ ITSET (λb g. g \\ b) s g``,
+  Induct_on `FINITE s` >>
+  simp[ITSET_EMPTY, COMMUTING_ITSET_INSERT, gDELETE_commutes,
+       DELETE_NON_ELEMENT_RWT] >>
+  rpt strip_tac >>
+  `a.iter ∉ iterations (g \\ e)` by (fs[iterations_thm] >> metis_tac[]) >>
+  `(a ⊕ g) \\ e = a ⊕ (g \\ e)` suffices_by simp[] >>
+  simp[graph_equality, add_action_edges, EQ_IMP_THM] >> rpt strip_tac >>
+  simp[] >> metis_tac[]);
+
+val pregraph_add_action_1 = prove(
+  ``a.iter ∉ iterations g ∧ a ≠ b ∧ b ∈ g ∧ a ∼ₜ b ⇒
+    pregraph b (a ⊕ g) = a ⊕ pregraph b g``,
+  simp[pregraph_def, add_action_edges] >> dsimp[] >> csimp[] >>
+  strip_tac >>
+  qmatch_abbrev_tac `ITSET del s1 (a ⊕ g) = a ⊕ ITSET del s2 g` >>
+  `a ∉ g` by (strip_tac >> fs[iterations_thm]) >>
+  `s1 = s2`
+    by dsimp[EXTENSION, Abbr`s1`, Abbr`s2`, EQ_IMP_THM] >>
+  simp[Abbr`del`] >> `FINITE s2 ∧ a ∉ s2` suffices_by metis_tac[ITSET_DEL] >>
+  rpt strip_tac
+  >- (match_mp_tac SUBSET_FINITE_I >> qexists_tac `ag_nodes g` >>
+      simp[SUBSET_DEF, Abbr`s2`]) >>
+  qunabbrev_tac `s2` >> fs[]);
+
+val pregraph_add_action_2 = prove(
+  ``a.iter ∉ iterations g ∧ a ≠ b ∧ b ∈ g ∧ a ≁ₜ b ⇒
+    pregraph b (a ⊕ g) = pregraph b g``,
+  simp[pregraph_def, add_action_edges] >> rpt strip_tac >>
+  `a ∉ g` by (strip_tac >> fs[iterations_thm]) >>
+  qmatch_abbrev_tac `ITSET del s1 (a ⊕ g) = ITSET del s2 g` >>
+  `s1 = a INSERT s2`
+    by (dsimp[EXTENSION, Abbr`s1`, Abbr`s2`, EQ_IMP_THM] >> csimp[] >>
+        metis_tac[IN_edges]) >>
+  `FINITE s2`
+    by (match_mp_tac SUBSET_FINITE_I >> qexists_tac `ag_nodes g` >>
+        simp[SUBSET_DEF, Abbr`s2`]) >>
+  `a ∉ s2` by simp[Abbr`s2`] >>
+  simp[Abbr`del`, COMMUTING_ITSET_INSERT, gDELETE_commutes,
+       DELETE_NON_ELEMENT_RWT] >>
+  `(a ⊕ g) \\ a = g` suffices_by simp[] >>
+  simp[graph_equality, add_action_edges] >> metis_tac[IN_edges])
+
+val pregraph_add_action = store_thm(
+  "pregraph_add_action",
+  ``a.iter ∉ iterations g ⇒
+    pregraph b (a ⊕ g) =
+      if b ∈ g then
+        (if a ∼ₜ b then add_action a else I)
+        (pregraph b g)
+      else emptyG``,
+  strip_tac >> `a ∉ g` by (strip_tac >> fs[iterations_thm]) >>
+  rw[]
+  >- (`a ≠ b` by (strip_tac >> fs[]) >>
+      simp[pregraph_add_action_1])
+  >- (`a ≠ b` by (strip_tac >> fs[]) >>
+      simp[pregraph_add_action_2]) >>
+  Cases_on `a = b` >> rw[] >>
+  simp[pregraph_absent]);
+
+val pregraph_add_postaction = store_thm(
+  "pregraph_add_postaction",
+  ``∀g a. a ∈ g ⇒ pregraph a (add_postaction b g) = pregraph a g``,
+  ho_match_mp_tac graph_ind >> dsimp[] >> conj_tac
+  >- (map_every qx_gen_tac [`a`, `g`] >> strip_tac >>
+      Cases_on `a.iter = b.iter` >- simp[add_postactionID] >>
+      simp[add_action_add_postaction_ASSOC]) >>
+  map_every qx_gen_tac [`a`, `g`, `c`] >> rpt strip_tac >>
+  Cases_on `a.iter = b.iter` >- simp[add_postactionID] >>
+  simp[add_action_add_postaction_ASSOC, pregraph_add_action]);
+
+val pregraph_merge_graph = store_thm(
+  "pregraph_merge_graph",
+  ``∀g2 g1 a. a ∈ g1 ⇒ pregraph a (merge_graph g1 g2) = pregraph a g1``,
+  ho_match_mp_tac graph_ind >> dsimp[merge_graph_thm, pregraph_add_postaction]);
+
 (*
+val eval_graphOf_action = store_thm(
+  "eval_graphOf_action",
+  ``∀m0 c0 m c.
+      (m0,c0) ---> (m,c) ⇒
+      m0 ≠ m ⇒
+      ∀i0 i0' m0' g0.
+        i0 ≠ [] ∧ graphOf i0 m0 c0 = SOME(i0', m0', g0) ⇒
+        ∃a. a ∈ g0 ∧ (∀b. b ∈ pregraph a g0 ⇒ b.write = NONE) ∧
+            apply_action a (SOME m0) = SOME m``,
+  ho_match_mp_tac eval_ind' >> rpt conj_tac >> REWRITE_TAC []
+  >- ((* head of Seq steps *)
+      rpt gen_tac >> strip_tac >> strip_tac >> fs[] >>
+      rpt gen_tac >> simp[Once graphOf_def] >>
+      simp[EXISTS_PROD, PULL_EXISTS] >>
+      map_every qx_gen_tac [`ci`, `cm`, `cg`, `rg`] >>
+      strip_tac >> rw[] >>
+      `∃a. a ∈ cg ∧ (∀b. b ∈ pregraph a cg ⇒ b.write = NONE) ∧
+           apply_action a (SOME m0) = SOME m`
+        by metis_tac[] >>
+      qexists_tac `a` >> simp[pregraph_merge_graph])
+  >- ((* assignvar *)
+      simp[graphOf_def] >> simp[apply_action_def, updf_def])
+  >- ((* assign *)
+      simp[graphOf_def, PULL_EXISTS] >> rpt gen_tac >> strip_tac >>
+      rpt strip_tac >> dsimp[] >> disj2_tac >>
+      simp[apply_action_def, updf_def, mergeReads_def] >>
+      reverse conj_tac
+      >- (imp_res_tac assign_lemma >> simp[] >>
+          fs[OPT_SEQUENCE_EQ_SOME, evalexpr_def] >> rw[] >>
+          imp_res_tac isDValue_destDValue >> fs[]) >>
+      simp[pregraph_add_action] >>
+      simp[touches_def, readAction_def, expr_reads_def, dvreadAction_def] >>
+      rw[])
+  >- ((* par *)
+
 val graphOf_correct_lemma = store_thm(
   "graphOf_correct_lemma",
   ``∀m0 c0 m c.
@@ -2362,14 +2478,23 @@ val graphOf_correct_lemma = store_thm(
       map_every qx_gen_tac [`i0`, `m00`] >>
       qabbrev_tac `GG = λn. graphOf (i0 ++ [n;0])` >> simp[] >>
       strip_tac >>
+      `∃ci cm cg. GG (LENGTH pfx) m0 c0 = SOME(ci,cm,cg)`
+        by (`LENGTH pfx < LENGTH pfx + (LENGTH sfx + 1)` by decide_tac >>
+            pop_assum (fn th => first_x_assum (mp_tac o C MATCH_MP th)) >>
+            simp[EXISTS_PROD, EL_APPEND1, EL_APPEND2]) >>
+      `pcg_eval cg (SOME m0) = SOME cm`
+        by (simp[Abbr`GG`] >> fs[] >>
+            metis_tac[graphOf_pcg_eval, APPEND_eq_NIL]) >>
       `∀n. n < LENGTH pfx + (LENGTH sfx + 1) ⇒
            ∃z. GG n m (EL n (pfx ++ [c] ++ sfx)) = SOME z`
-        by (gen_tac >> strip_tac >>
-            Cases_on `n < LENGTH pfx`
+        by (gen_tac >> strip_tac >> Cases_on `n < LENGTH pfx`
             >- (simp[EL_APPEND1] >>
                 first_x_assum
                   (fn th => qspec_then `n` mp_tac th >>
-                            simp[EL_APPEND1] >> NO_TAC)
+                            CHANGED_TAC (simp[])) >>
+                simp[EXISTS_PROD] >>
+                disch_then (qx_choosel_then [`it'`, `m0'`, `g'`] mp_tac) >>
+                simp[Abbr`GG`] >>
 
 
       simp[FOLDR_MAPi, combinTheory.o_ABS_R, FOLDRi_APPEND,
