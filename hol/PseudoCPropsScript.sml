@@ -2314,19 +2314,28 @@ val graphOf_correct_lemma = store_thm(
            expr_reads_def] >> rpt strip_tac >- fs[touches_def] >>
       metis_tac[])
   >- ((* array-read inside array assignment has index evaluated *)
-      dsimp[graphOf_def, PULL_EXISTS, evalDexpr_def, evalexpr_def,
-            OPT_SEQUENCE_EQ_SOME, MEM_MAP, getReads_APPEND,
-            getReads_def] >> rpt strip_tac >>
-      imp_res_tac some_EQ_SOME_E >> fs[touches_def] >> metis_tac[])
+      map_every qx_gen_tac [`pfx`, `ray`, `ri_e`, `sfx`, `way`, `wi_e`,
+                            `vf`, `m0`] >> strip_tac >>
+      simp[graphOf_def, PULL_EXISTS, evalDexpr_def, evalexpr_def,
+           OPT_SEQUENCE_EQ_SOME, MEM_MAP, getReads_APPEND,
+           getReads_def] >>
+      map_every qx_gen_tac [`it`, `m0'`, `wi`, `sr`, `pr`, `ri`] >>
+      simp[MAP_MAP_o, DISJ_IMP_THM, FORALL_AND_THM, PULL_EXISTS] >>
+      csimp[] >> rpt strip_tac
+      >- metis_tac[]
+      >- (fs[dvreadAction_def, touches_def, dvread_def,
+             expr_reads_def] >> metis_tac[])
+      >- (fs[touches_def] >> metis_tac[]))
   >- ((* array-read inside array assignment actually reads memory *)
       dsimp[graphOf_def, OPT_SEQUENCE_EQ_SOME, MEM_MAP, evalDexpr_def,
             evalexpr_def] >>
       dsimp[getReads_APPEND, getReads_def] >>
-      simp[touches_def] >> metis_tac[])
+      simp[touches_def, dvreadAction_def, dvread_def] >>
+      metis_tac[])
   >- ((* var-read inside array assignment reads memory *)
       dsimp[graphOf_def, OPT_SEQUENCE_EQ_SOME, evalDexpr_def, MEM_MAP] >>
       dsimp[getReads_def, getReads_APPEND] >>
-      simp[touches_def] >> metis_tac[])
+      simp[touches_def, dvreadAction_def, dvread_def] >> metis_tac[])
   >- ((* forloop turns into seq *)
       rpt gen_tac >> strip_tac >> simp[Once graphOf_def, SimpL ``$==>``] >>
       simp[EXISTS_PROD, PULL_EXISTS] >>
