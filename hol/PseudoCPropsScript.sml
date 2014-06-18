@@ -2439,6 +2439,59 @@ val eval_graphOf_action = store_thm(
            (Q.ISPEC_THEN `λn c. TOS (GG n m0 c)` mp_tac))
         pregraph_FOLDRi_merge_graph >> simp[]))
 
+val gtouches_SYM = store_thm(
+  "gtouches_SYM",
+  ``gtouches g1 g2 ⇒ gtouches g2 g1``,
+  metis_tac[gtouches_def, touches_SYM]);
+
+val MAPi_APPEND = store_thm(
+  "MAPi_APPEND",
+  ``∀l1 l2 f. MAPi f (l1 ++ l2) = MAPi f l1 ++ MAPi (f o (+) (LENGTH l1)) l2``,
+  Induct >> simp[] >> rpt gen_tac >> rpt (AP_TERM_TAC ORELSE AP_THM_TAC) >>
+  simp[FUN_EQ_THM]);
+
+val MAPi_GENLIST = store_thm(
+  "MAPi_GENLIST",
+  ``∀l f. MAPi f l = GENLIST (S f (combin$C EL l)) (LENGTH l)``,
+  Induct >> simp[GENLIST_CONS] >> rpt gen_tac >>
+  rpt (AP_TERM_TAC ORELSE AP_THM_TAC) >> simp[FUN_EQ_THM]);
+
+val GENLIST_CONG = store_thm(
+  "GENLIST_CONG",
+  ``(∀m. m < n ⇒ f1 m = f2 m) ⇒ GENLIST f1 n = GENLIST f2 n``,
+  map_every qid_spec_tac [`f1`, `f2`] >> Induct_on `n` >>
+  simp[GENLIST_CONS]);
+
+val _ = temp_overload_on ("MergeL", ``FOLDR merge_graph emptyG``)
+
+val FOLDR_merge_lemma = prove(
+  ``(∀g. MEM g l1 ⇒ ¬gtouches g e ∧ DISJOINT (iterations g) (iterations e)) ⇒
+    FOLDR merge_graph emptyG (l1 ++ [e] ++ l2) =
+    merge_graph e (FOLDR merge_graph emptyG (l1 ++ l2))``,
+  Induct_on `l1` >> dsimp[merge_graph_ASSOC] >>
+  metis_tac[nontouching_merge_COMM])
+
+val pcg_eval_merge_graph' = prove(
+  ``DISJOINT (iterations g1) (iterations g2) ⇒
+    pcg_eval (merge_graph g1 g2) = pcg_eval g2 o pcg_eval g1``,
+  simp[FUN_EQ_THM] >> rpt strip_tac >>
+  match_mp_tac pcg_eval_merge_graph >>
+  fs[DISJOINT_DEF, EXTENSION, iterations_thm] >>
+  metis_tac[]);
+
+val iterations_MergeL = prove(
+  ``iterations (MergeL l) = BIGUNION (IMAGE iterations (set l))``,
+  dsimp[Once EXTENSION, iterations_FOLDR_merge_graph] >>
+  metis_tac[]);
+
+val MergeL_empty = prove(
+  ``MergeL (l1 ++ [emptyG] ++ l2) = MergeL (l1 ++ l2)``,
+  Induct_on `l1` >> simp[]);
+
+val MergeL_append = prove(
+  ``MergeL (l1 ++ l2) = merge_graph (MergeL l1) (MergeL l2)``,
+  Induct_on `l1` >> simp[merge_graph_ASSOC])
+
 (*
 val graphOf_correct_lemma = store_thm(
   "graphOf_correct_lemma",
@@ -2494,6 +2547,11 @@ val graphOf_correct_lemma = store_thm(
   >- ((* guard of if evaluates to non-boolean (type error) *)
       rpt gen_tac >> strip_tac >> simp[graphOf_def] >>
       Cases_on `evalexpr m0 g` >> simp[] >> fs[])
+  >- ((* assignment to var completes *)
+      simp[graphOf_def, PULL_EXISTS, evalexpr_def, OPT_SEQUENCE_EQ_SOME,
+           MEM_MAP, isDValue_destDValue, updf_def])
+  >- ((* assignment to var fails *)
+      simp[graphOf_def, PULL_EXISTS, updf_def])
   >- ((* assignment to array completes *)
       simp[graphOf_def, PULL_EXISTS, evalexpr_def, OPT_SEQUENCE_EQ_SOME,
            MEM_MAP, isDValue_destDValue])
@@ -2553,27 +2611,261 @@ val graphOf_correct_lemma = store_thm(
       map_every qx_gen_tac [`i0`, `m00`] >>
       qabbrev_tac `GG = λn. graphOf (i0 ++ [n;0])` >> simp[] >>
       strip_tac >>
-      `∃ci cm cg. GG (LENGTH pfx) m0 c0 = SOME(ci,cm,cg)`
-        by (`LENGTH pfx < LENGTH pfx + (LENGTH sfx + 1)` by decide_tac >>
-            pop_assum (fn th => first_x_assum (mp_tac o C MATCH_MP th)) >>
-            simp[EXISTS_PROD, EL_APPEND1, EL_APPEND2]) >>
-      `pcg_eval cg (SOME m0) = SOME cm`
+      first_x_assum (qx_choosel_then [`gi`, `gm`, `gg`] assume_tac o
+                     SIMP_RULE (srw_ss()) [GSYM RIGHT_EXISTS_IMP_THM,
+                                           EXISTS_PROD,
+                                           SKOLEM_THM]) >>
+      qabbrev_tac `ci = LENGTH pfx` >>
+      `GG ci m0 c0 = SOME(gi ci,gm ci,gg ci)`
+        by (first_x_assum (qspec_then `ci` mp_tac) >>
+            simp[Abbr`ci`, EL_APPEND1, EL_APPEND2]) >>
+      first_x_assum (qspec_then `i0 ++ [ci;0]` mp_tac) >> simp[] >>
+      disch_then (qx_choosel_then [`ci'`, `cg'`] strip_assume_tac) >>
+      `pcg_eval (gg ci) (SOME m0) = SOME (gm ci)`
         by (simp[Abbr`GG`] >> fs[] >>
             metis_tac[graphOf_pcg_eval, APPEND_eq_NIL]) >>
-      `∀n. n < LENGTH pfx + (LENGTH sfx + 1) ⇒
-           ∃z. GG n m (EL n (pfx ++ [c] ++ sfx)) = SOME z`
-        by (gen_tac >> strip_tac >> Cases_on `n < LENGTH pfx`
+      `∀a b c. TOS (SOME (a,b,c)) = c` by simp[Abbr`TOS`] >>
+      lfs[] >>
+      `∀n. n < ci + (LENGTH sfx + 1) ∧ n ≠ ci ⇒
+           ∃m'. GG n m (EL n (pfx ++ [c] ++ sfx)) = SOME (gi n, m', gg n)`
+        by (gen_tac >> strip_tac >>
+            Cases_on `n < ci`
             >- (simp[EL_APPEND1] >>
-                first_x_assum
-                  (fn th => qspec_then `n` mp_tac th >>
-                            CHANGED_TAC (simp[])) >>
-                simp[EXISTS_PROD] >>
-                disch_then (qx_choosel_then [`it'`, `m0'`, `g'`] mp_tac) >>
-                simp[Abbr`GG`] >>
+                Cases_on `m = m0` >> simp[]
+                >- (first_x_assum (qspec_then `n` mp_tac) >>
+                    simp[EL_APPEND1]) >>
+                `∃a. a ∈ gg ci ∧ (∀b. b ∈ pregraph a (gg ci) ⇒ b.write = NONE) ∧
+                     apply_action a (SOME m0) = SOME m`
+                  by metis_tac[eval_graphOf_action, APPEND_eq_NIL] >>
+                first_x_assum (qspec_then `n` mp_tac) >> simp[EL_APPEND1] >>
+                strip_tac >>
+                `∀b. b ∈ gg n ⇒ a ≁ₜ b`
+                  by (first_x_assum (qspecl_then [`n`, `ci`] mp_tac) >>
+                      simp[gtouches_def] >> metis_tac[touches_SYM]) >>
+                simp[Abbr`GG`] >> fs[] >>
+                metis_tac[graphOf_apply_action_diamond, APPEND_eq_NIL]) >>
+            `ci < n ∧ n < ci + (LENGTH sfx + 1)` by decide_tac >>
+            simp[EL_APPEND1, EL_APPEND2] >>
+            Cases_on `m = m0` >> simp[]
+            >- (first_x_assum (qspec_then `n` mp_tac) >>
+                simp[EL_APPEND1, EL_APPEND2]) >>
+            `∃a. a ∈ gg ci ∧ (∀b. b ∈ pregraph a (gg ci) ⇒ b.write = NONE) ∧
+                 apply_action a (SOME m0) = SOME m`
+              by metis_tac[eval_graphOf_action, APPEND_eq_NIL] >>
+            first_x_assum (qspec_then `n` mp_tac) >>
+            simp[EL_APPEND1, EL_APPEND2] >> strip_tac >>
+            `∀b. b ∈ gg n ⇒ a ≁ₜ b`
+              by (first_x_assum (qspecl_then [`ci`, `n`] mp_tac) >>
+                  simp[gtouches_def] >> metis_tac[touches_SYM]) >>
+            simp[Abbr`GG`] >> fs[] >>
+            metis_tac[graphOf_apply_action_diamond, APPEND_eq_NIL]) >>
+      conj_tac
+      >- (qx_gen_tac `n` >> strip_tac >> reverse (Cases_on `n = ci`)
+          >- metis_tac[] >> simp[EL_APPEND2, EL_APPEND1]) >>
+      pop_assum (qx_choose_then `gm'` assume_tac o
+                 SIMP_RULE (srw_ss()) [GSYM RIGHT_EXISTS_IMP_THM, SKOLEM_THM])>>
+      `∀i j. i < j ∧ j < ci + (LENGTH sfx + 1) ⇒
+             ¬gtouches (TOS (GG i m (EL i (pfx ++ [c] ++ sfx))))
+                       (TOS (GG j m (EL j (pfx ++ [c] ++ sfx))))`
+        by (rpt gen_tac >> strip_tac >>
+            Cases_on `i = ci` >> simp[]
+            >- (simp[EL_APPEND1, EL_APPEND2] >> metis_tac[]) >>
+            Cases_on `j = ci` >> simp[] >>
+            simp[EL_APPEND1, EL_APPEND2] >> metis_tac[gtouches_SYM]) >>
+      conj_tac >- metis_tac[] >>
+      `pcg_eval cg' (SOME m) = SOME (gm ci)`
+        by (simp[Abbr`GG`] >> fs[] >>
+            metis_tac[graphOf_pcg_eval, APPEND_eq_NIL]) >>
+      fs[MAPi_APPEND, combinTheory.o_ABS_L] >>
+      `∀n. n < ci ⇒ TOS (GG n m (EL n pfx)) = gg n ∧
+                     TOS (GG n m0 (EL n pfx)) = gg n`
+        by (rpt strip_tac
+            >- (Q.SUBGOAL_THEN `n < ci + (LENGTH sfx + 1) ∧ n ≠ ci`
+                 (fn th => first_x_assum (mp_tac o C MATCH_MP th))
+                >- decide_tac >> simp[EL_APPEND1]) >>
+            `n < ci + (LENGTH sfx + 1)` by decide_tac >>
+            pop_assum (fn th => first_x_assum (mp_tac o C MATCH_MP th)) >>
+            simp[EL_APPEND1]) >>
+      `∀n. n < LENGTH sfx ⇒
+           TOS (GG (ci + (n + 1)) m0 (EL n sfx)) = gg (ci + (n + 1)) ∧
+           TOS (GG (ci + (n + 1)) m (EL n sfx)) = gg (ci + (n + 1))`
+        by (rpt strip_tac
+            >- (`ci + (n + 1) < ci + (LENGTH sfx + 1)` by decide_tac >>
+                pop_assum (fn th => first_x_assum (mp_tac o C MATCH_MP th)) >>
+                simp[EL_APPEND2]) >>
+            Q.SUBGOAL_THEN
+              `ci + (n + 1) < ci + (LENGTH sfx + 1) ∧ ci + (n + 1) ≠ ci`
+              (fn th => first_x_assum (mp_tac o C MATCH_MP th))
+            >- decide_tac >>
+            simp[EL_APPEND2]) >>
+      lfs[MAPi_GENLIST, Cong GENLIST_CONG] >>
+      full_simp_tac (srw_ss() ++ ETA_ss) [] >>
+      `∀g. MEM g (GENLIST gg ci) ⇒
+           ¬gtouches g cg' ∧ ¬gtouches g (gg ci) ∧
+           DISJOINT (iterations g) (iterations cg') ∧
+           DISJOINT (iterations g) (iterations (gg ci))`
+        by (simp[MEM_GENLIST, PULL_EXISTS] >> qx_gen_tac `n` >>
+            strip_tac >> conj_tac
+            >- (first_x_assum (qspecl_then [`n`, `ci`] mp_tac) >>
+                simp[EL_APPEND2, EL_APPEND1] >>
+                first_x_assum (qspec_then `n` mp_tac) >>
+                simp[EL_APPEND2, EL_APPEND1]) >>
+            `n < ci + (LENGTH sfx + 1)` by decide_tac >>
+            pop_assum (fn th => first_x_assum (mp_tac o C MATCH_MP th)) >>
+            simp[EL_APPEND1] >> qunabbrev_tac `GG` >> fs[] >> strip_tac >>
+            `(∀it. it ∈ iterations (gg n) ⇒
+                   TAKE (LENGTH (i0 ++ [n;0]) - 1) it =
+                   FRONT (i0 ++ [n;0])) ∧
+             (∀it. it ∈ iterations cg' ∨ it ∈ iterations (gg ci) ⇒
+                   TAKE (LENGTH (i0 ++ [ci;0]) - 1) it =
+                   FRONT (i0 ++ [ci;0]))`
+              by metis_tac[graphOf_iterations_apart, APPEND_eq_NIL] >>
+            fs[FRONT_APPEND] >> simp[DISJOINT_DEF, EXTENSION] >>
+            `i0 ++ [ci] ≠ i0 ++ [n]` by simp[] >>
+            metis_tac[]) >>
+      fs[FOLDR_merge_lemma] >>
+      conj_tac
+      >- (qmatch_abbrev_tac `
+            pcg_eval (merge_graph cg' RestG) (SOME m) = SOME m00
+          ` >>
+          `DISJOINT (iterations cg') (iterations RestG) ∧
+           DISJOINT (iterations (gg ci)) (iterations RestG)`
+            suffices_by (strip_tac >> fs[pcg_eval_merge_graph']) >>
+          ONCE_REWRITE_TAC [DISJOINT_SYM] >>
+          simp[Abbr`RestG`, iterations_MergeL, PULL_EXISTS] >>
+          simp[MEM_GENLIST, PULL_EXISTS, PULL_FORALL] >>
+          `∀n. n < LENGTH sfx ⇒
+               DISJOINT (iterations (gg (ci + (n + 1))))
+                        (iterations cg') ∧
+               DISJOINT (iterations (gg (ci + (n + 1))))
+                        (iterations (gg ci))`
+            suffices_by metis_tac[] >>
+          gen_tac >> strip_tac >>
+          `ci + (n + 1) < ci + (LENGTH sfx + 1)` by decide_tac >>
+          pop_assum (fn th => first_x_assum (mp_tac o C MATCH_MP th)) >>
+          simp[EL_APPEND2] >> qunabbrev_tac `GG` >> fs[] >> strip_tac >>
+          `(∀it. it ∈ iterations (gg (ci + (n + 1))) ⇒
+                 TAKE (LENGTH (i0 ++ [ci + (n + 1);0]) - 1) it =
+                 FRONT (i0 ++ [ci + (n + 1);0])) ∧
+           (∀it. it ∈ iterations cg' ∨ it ∈ iterations (gg ci) ⇒
+                 TAKE (LENGTH (i0 ++ [ci;0]) - 1) it =
+                 FRONT (i0 ++ [ci;0]))`
+            by metis_tac[graphOf_iterations_apart, APPEND_eq_NIL] >>
+          fs[FRONT_APPEND] >>
+          `i0 ++ [ci] ≠ i0 ++ [ci + (n + 1)]` by simp[] >>
+          simp[DISJOINT_DEF, EXTENSION] >> metis_tac[]) >>
+      qmatch_abbrev_tac `
+        ∀g'. gtouches (merge_graph cg' BG) g' ⇒
+             gtouches (merge_graph (gg ci) BG) g'` >>
+      simp[gtouches_def, IN_merge_graph, PULL_EXISTS] >>
+      map_every qx_gen_tac [`g'`, `a1`, `a2`] >> strip_tac
+      >- metis_tac[gtouches_def] >>
+      map_every qexists_tac [`a1`, `a2`] >> simp[] >>
+      `a1.iter ∉ iterations (gg ci)` suffices_by simp[] >>
+      strip_tac >>
+      `a1.iter ∈ iterations BG` by simp[iterations_thm] >>
+      fs[iterations_FOLDR_merge_graph, Abbr`BG`]
+      >- (res_tac >> fs[DISJOINT_DEF, EXTENSION] >>
+          metis_tac[]) >>
+      qpat_assum `MEM g (GENLIST f n)` mp_tac >>
+      simp[MEM_GENLIST, PULL_EXISTS] >> qx_gen_tac `n` >>
+      disjneq_search >> BasicProvers.VAR_EQ_TAC >> strip_tac >>
+      `ci + (n + 1) < ci + (LENGTH sfx + 1)` by decide_tac >>
+      pop_assum (fn th => first_x_assum (mp_tac o C MATCH_MP th)) >>
+      simp[EL_APPEND2, Abbr`GG`] >> strip_tac >> fs[] >>
+      `TAKE (LENGTH (i0 ++ [ci; 0]) - 1) a1.iter =
+       FRONT (i0 ++ [ci;0]) ∧
+       TAKE (LENGTH (i0 ++ [ci + (n + 1); 0]) - 1) a1.iter =
+       FRONT (i0 ++ [ci + (n + 1);0])`
+        by metis_tac[graphOf_iterations_apart, APPEND_eq_NIL] >>
+      fs[FRONT_APPEND])
+  >- ((* par has a Done component *)
+      ONCE_REWRITE_TAC [graphOf_def] >>
+      simp[OPT_SEQUENCE_EQ_SOME, combinTheory.o_ABS_R, MEM_MAP,
+           MEM_MAPi, PULL_EXISTS, MergeL_empty, combinTheory.o_ABS_L] >>
+      qabbrev_tac `
+        TOS = λt:(num list # memory #
+                  (value, actionRW, num list)action_graph) option.
+               THE (OPTION_MAP (SND o SND) t)` >>
+      simp[] >>
+      map_every qx_gen_tac [`m0`, `pfx`, `sfx`, `i0`, `m0'`] >>
+      qabbrev_tac `GG = λn. graphOf (i0 ++ [n;0])` >> simp[] >>
+      strip_tac >>
+      first_x_assum (qx_choosel_then [`gi`, `gm`, `gg`] assume_tac o
+                     SIMP_RULE (srw_ss()) [EXISTS_PROD, SKOLEM_THM,
+                                           GSYM RIGHT_EXISTS_IMP_THM]) >>
+      `∀n. n < LENGTH pfx ⇒ GG n m0 (EL n pfx) = SOME(gi n, gm n, gg n)`
+        by (rpt strip_tac >> first_x_assum (qspec_then `n` mp_tac) >>
+            simp[EL_APPEND1]) >>
+      qabbrev_tac `p = LENGTH pfx` >>
+      `∀n. n < LENGTH sfx ⇒
+           ∃f. GG (n + p) m0 (EL n sfx) =
+               SOME (f (gi (n + (p + 1))),
+                     gm (n + (p + 1)),
+                     imap f (gg (n + (p + 1))))`
+        by (rpt strip_tac >>
+            `n + (p + 1) < p + (LENGTH sfx + 1)` by decide_tac >>
+            pop_assum (fn th => first_x_assum (mp_tac o C MATCH_MP th)) >>
+            simp[Abbr`GG`, EL_APPEND2] >>
+            `i0 ++ [n + (p + 1); 0] ≠ []` by simp[] >>
+            disch_then (fn c1 => pop_assum (fn c2 =>
+              mp_tac (MATCH_MP graphOf_starting_id_irrelevant
+                               (CONJ c1 c2)))) >>
+            disch_then (qspec_then `i0 ++ [n + p; 0]` mp_tac) >> simp[] >>
+            metis_tac[]) >>
+      pop_assum (qx_choose_then `ff` assume_tac o
+                 SIMP_RULE (srw_ss()) [SKOLEM_THM, GSYM RIGHT_EXISTS_IMP_THM])>>
+      `∀a b c. TOS (SOME (a,b,c)) = c` by simp[Abbr`TOS`] >>
+      rpt conj_tac
+      >- (qx_gen_tac `n` >> strip_tac >>
+          Cases_on `n < p` >> simp[EL_APPEND1, EL_APPEND2] >>
+          first_x_assum (qspec_then `n - p` mp_tac) >> simp[])
+      >- (map_every qx_gen_tac [`i`, `j`] >> strip_tac >>
+          Cases_on `j < p`
+          >- (first_x_assum (qspecl_then [`i`, `j`] mp_tac) >>
+              simp[EL_APPEND1]) >>
+          `0 < LENGTH sfx` by decide_tac >>
+          simp[EL_APPEND2] >>
+          first_assum (qspec_then `j - p` mp_tac) >>
+          simp_tac (srw_ss() ++ ARITH_ss) [ASSUME ``¬(j:num < p)``] >>
+          simp[] >> strip_tac >> lfs[] >>
+          Cases_on `i < p` >- simp[EL_APPEND1] >>
+          first_x_assum (qspec_then `i - p` mp_tac) >> simp[EL_APPEND2])
+      >- (simp[MAPi_APPEND] >>
+          simp[MAPi_GENLIST, combinTheory.S_ABS_L, combinTheory.o_ABS_L] >>
+          simp[Cong GENLIST_CONG] >>
+          fs[MAPi_APPEND] >>
+          `∀i m. GG i m Done = SOME(i0 ++ [i;0], m, emptyG)`
+            by simp[Abbr`GG`, graphOf_def] >>
+          fs[MergeL_empty] >>
+          fs[MAPi_GENLIST, combinTheory.o_ABS_L, combinTheory.S_ABS_L] >>
+          lfs[Cong GENLIST_CONG] >>
+          `GENLIST (λn. TOS (GG (n + (p + 1)) m0 (EL n sfx))) (LENGTH sfx) =
+           GENLIST (λn. gg (n + (p + 1))) (LENGTH sfx)`
+            by (simp[LIST_EQ_REWRITE] >> qx_gen_tac `m` >> strip_tac >>
+                `p + (m + 1) < p + (LENGTH sfx + 1)` by simp[] >>
+                pop_assum (fn th => first_x_assum (mp_tac o C MATCH_MP th)) >>
+                simp[EL_APPEND2]) >>
+          fs[] >> fs[MergeL_append] >> full_simp_tac (srw_ss() ++ ETA_ss) [] >>
+          qmatch_abbrev_tac `
+            pcg_eval (merge_graph (MergeL (GENLIST gg p)) BG1) (SOME m0) =
+            SOME m0'` >>
+          `DISJOINT (iterations (MergeL (GENLIST gg p))) (iterations BG1)`
+            by simp[Abbr`BG1`, iterations_MergeL, PULL_EXISTS, MEM_GENLIST]
+
+          pcg_eval_merge_graph'
 
 
-      simp[FOLDR_MAPi, combinTheory.o_ABS_R, FOLDRi_APPEND,
-           combinTheory.o_ABS_L]
+
+
+
+
+
+
+
+
+
+
 
 
 ``
