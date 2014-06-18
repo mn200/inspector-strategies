@@ -331,13 +331,17 @@ val (eval_rules, eval_ind, eval_cases) = Hol_reln`
 
      ∧
 
-  (∀m pfx ps sfx.
-      ps = pfx ++ [Done] ++ sfx ⇒
-      eval (m, Par ps) (m, Par (pfx ++ sfx)))
+  (∀m cs.
+      EVERY ((=) Done) cs
+     ⇒
+      eval (m, Par cs) (m, Done))
 
      ∧
 
-  (∀m. eval (m, Par []) (m, Done))
+  (∀m cs.
+      MEM Abort cs
+     ⇒
+      eval (m, Par cs) (m, Abort))
 `
 
 val _ = set_fixity "--->" (Infix(NONASSOC, 450))

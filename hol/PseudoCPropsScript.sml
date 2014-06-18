@@ -176,8 +176,11 @@ val eval_terminates = store_thm(
   >- (disj1_tac >> rw[] >> Induct_on `pfx` >> simp[] >>
       Induct_on `sfx` >> simp[])
   >- (disj2_tac >> simp[SUM_APPEND] >> rw[] >>
-      Induct_on `pfx` >> simp[]) >>
-  disj1_tac >> rw[] >> Induct_on `pfx` >> simp[]);
+      Induct_on `pfx` >> simp[])
+  >- (simp[mltLT_SING0] >> Induct_on `cs` >> simp[] >>
+      metis_tac[BAG_UNION_LEFT_CANCEL, BAG_UNION_EMPTY])
+  >- (simp[mltLT_SING0] >> Induct_on `cs` >> simp[] >>
+      rw[] >> simp[] >> metis_tac[BAG_UNION_LEFT_CANCEL, BAG_UNION_EMPTY]));
 
 (* ----------------------------------------------------------------------
     Create an action graph from a PseudoC program.
@@ -2539,19 +2542,10 @@ val imap_MergeL = prove(
         fs[DISJOINT_DEF, EXTENSION] >> metis_tac[MEM_EL]) >>
   simp[imap_merge_graph]);
 
-(*
-val MergeL_GENLIST_imap = prove(
-  ``∀f gf.
-       (∀i j. i < j ∧ j < n ⇒
-              DISJOINT (iterations (imap (f i) (gf i)))
-                       (iterations (imap (f j) (gf j))) ∧
-              DISJOINT (iterations (gf i)) (iterations (gf j))) ⇒
-     ∃g.
-       MergeL (GENLIST (λi. imap (f i) (gf i)) n) =
-        imap g (MergeL (GENLIST gf n))``,
-  rpt strip_tac >>
-  qexists_tac `λit. f (@i. it ∈ iterations (gf i)) it`
-  Induct_on `n` >> simp[GENLIST_CONS, combinTheory.o_ABS_L]
+val MergeL_empties = store_thm(
+  "MergeL_empties",
+  ``(∀g. MEM g glist ⇒ g = emptyG) ⇒ MergeL glist = emptyG``,
+  Induct_on `glist` >> simp[]);
 
 val graphOf_correct_lemma = store_thm(
   "graphOf_correct_lemma",
@@ -2839,135 +2833,41 @@ val graphOf_correct_lemma = store_thm(
        FRONT (i0 ++ [ci + (n + 1);0])`
         by metis_tac[graphOf_iterations_apart, APPEND_eq_NIL] >>
       fs[FRONT_APPEND])
-  >- ((* par has a Done component *)
-      ONCE_REWRITE_TAC [graphOf_def] >>
-      simp[OPT_SEQUENCE_EQ_SOME, combinTheory.o_ABS_R, MEM_MAP,
-           MEM_MAPi, PULL_EXISTS, MergeL_empty, combinTheory.o_ABS_L] >>
-      qabbrev_tac `
-        TOS = λt:(num list # memory #
-                  (value, actionRW, num list)action_graph) option.
-               THE (OPTION_MAP (SND o SND) t)` >>
-      simp[] >>
-      map_every qx_gen_tac [`m0`, `pfx`, `sfx`, `i0`, `m0'`] >>
-      qabbrev_tac `GG = λn. graphOf (i0 ++ [n;0])` >> simp[] >>
-      strip_tac >>
-      first_x_assum (qx_choosel_then [`gi`, `gm`, `gg`] assume_tac o
-                     SIMP_RULE (srw_ss()) [EXISTS_PROD, SKOLEM_THM,
-                                           GSYM RIGHT_EXISTS_IMP_THM]) >>
-      `∀n. n < LENGTH pfx ⇒ GG n m0 (EL n pfx) = SOME(gi n, gm n, gg n)`
-        by (rpt strip_tac >> first_x_assum (qspec_then `n` mp_tac) >>
-            simp[EL_APPEND1]) >>
-      qabbrev_tac `p = LENGTH pfx` >>
-      `∀n. n < LENGTH sfx ⇒
-           ∃f. GG (n + p) m0 (EL n sfx) =
-               SOME (f (gi (n + (p + 1))),
-                     gm (n + (p + 1)),
-                     imap f (gg (n + (p + 1))))`
-        by (rpt strip_tac >>
-            `n + (p + 1) < p + (LENGTH sfx + 1)` by decide_tac >>
-            pop_assum (fn th => first_x_assum (mp_tac o C MATCH_MP th)) >>
-            simp[Abbr`GG`, EL_APPEND2] >>
-            `i0 ++ [n + (p + 1); 0] ≠ []` by simp[] >>
-            disch_then (fn c1 => pop_assum (fn c2 =>
-              mp_tac (MATCH_MP graphOf_starting_id_irrelevant
-                               (CONJ c1 c2)))) >>
-            disch_then (qspec_then `i0 ++ [n + p; 0]` mp_tac) >> simp[] >>
-            metis_tac[]) >>
-      pop_assum (qx_choose_then `ff` assume_tac o
-                 SIMP_RULE (srw_ss()) [SKOLEM_THM, GSYM RIGHT_EXISTS_IMP_THM])>>
-      `∀a b c. TOS (SOME (a,b,c)) = c` by simp[Abbr`TOS`] >>
-      rpt conj_tac
-      >- (qx_gen_tac `n` >> strip_tac >>
-          Cases_on `n < p` >> simp[EL_APPEND1, EL_APPEND2] >>
-          first_x_assum (qspec_then `n - p` mp_tac) >> simp[])
-      >- (map_every qx_gen_tac [`i`, `j`] >> strip_tac >>
-          Cases_on `j < p`
-          >- (first_x_assum (qspecl_then [`i`, `j`] mp_tac) >>
-              simp[EL_APPEND1]) >>
-          `0 < LENGTH sfx` by decide_tac >>
-          simp[EL_APPEND2] >>
-          first_assum (qspec_then `j - p` mp_tac) >>
-          simp_tac (srw_ss() ++ ARITH_ss) [ASSUME ``¬(j:num < p)``] >>
-          simp[] >> strip_tac >> lfs[] >>
-          Cases_on `i < p` >- simp[EL_APPEND1] >>
-          first_x_assum (qspec_then `i - p` mp_tac) >> simp[EL_APPEND2])
-      >- (simp[MAPi_APPEND] >>
-          simp[MAPi_GENLIST, combinTheory.S_ABS_L, combinTheory.o_ABS_L] >>
-          simp[Cong GENLIST_CONG] >>
-          fs[MAPi_APPEND] >>
-          `∀i m. GG i m Done = SOME(i0 ++ [i;0], m, emptyG)`
-            by simp[Abbr`GG`, graphOf_def] >>
-          fs[MergeL_empty] >>
-          fs[MAPi_GENLIST, combinTheory.o_ABS_L, combinTheory.S_ABS_L] >>
-          lfs[Cong GENLIST_CONG] >>
-          `GENLIST (λn. TOS (GG (n + (p + 1)) m0 (EL n sfx))) (LENGTH sfx) =
-           GENLIST (λn. gg (n + (p + 1))) (LENGTH sfx)`
-            by (simp[LIST_EQ_REWRITE] >> qx_gen_tac `m` >> strip_tac >>
-                `p + (m + 1) < p + (LENGTH sfx + 1)` by simp[] >>
-                pop_assum (fn th => first_x_assum (mp_tac o C MATCH_MP th)) >>
-                simp[EL_APPEND2]) >>
-          fs[] >> fs[MergeL_append] >> full_simp_tac (srw_ss() ++ ETA_ss) [] >>
-          qmatch_abbrev_tac `
-            pcg_eval (merge_graph (MergeL (GENLIST gg p)) BG1) (SOME m0) =
-            SOME m0'` >>
-          `DISJOINT (iterations (MergeL (GENLIST gg p))) (iterations BG1)`
-            by (simp[Abbr`BG1`, iterations_MergeL, PULL_EXISTS, MEM_GENLIST] >>
-                qx_gen_tac `m` >> strip_tac >> qx_gen_tac `n` >> strip_tac >>
-                pop_assum (fn th =>
-                  first_x_assum (mp_tac o C MATCH_MP th) >>
-                  pop_assum (fn th => first_x_assum (mp_tac o C MATCH_MP th) >>
-                                      assume_tac th) >>
-                  assume_tac th) >>
-                simp[Abbr`GG`, EL_APPEND2, EL_APPEND1] >> rpt strip_tac >>
-                simp[DISJOINT_DEF, EXTENSION] >> qx_gen_tac `it` >>
-                spose_not_then strip_assume_tac >>
-                `TAKE (LENGTH (i0 ++ [m; 0]) - 1) it = FRONT (i0 ++ [m;0]) ∧
-                 TAKE (LENGTH (i0 ++ [n + p; 0]) - 1) it =
-                 FRONT (i0 ++ [n + p; 0])`
-                  by metis_tac[graphOf_iterations_apart, APPEND_eq_NIL] >>
-                lfs[FRONT_APPEND]) >>
-          simp[pcg_eval_merge_graph'] >>
-          qmatch_assum_abbrev_tac `
-            pcg_eval (merge_graph XX BG2) (SOME m0) = SOME m0'` >>
-          `DISJOINT (iterations XX) (iterations BG2)`
-            by (simp[Abbr`BG2`, Abbr`XX`, iterations_MergeL, PULL_EXISTS,
-                     MEM_GENLIST] >>
-                qx_gen_tac `m` >> strip_tac >> qx_gen_tac `n` >> strip_tac >>
-                `n + (p + 1) < p + (LENGTH sfx + 1)` by decide_tac
-                pop_assum (fn th =>
-                  first_x_assum (mp_tac o C MATCH_MP th) >>
-                  pop_assum kall_tac >>
-                  pop_assum (fn th => first_x_assum (mp_tac o C MATCH_MP th) >>
-                                      assume_tac th) >>
-                  assume_tac th) >>
-                simp[Abbr`GG`, EL_APPEND2, EL_APPEND1] >> rpt strip_tac >>
-                simp[DISJOINT_DEF, EXTENSION] >> qx_gen_tac `it` >>
-                spose_not_then strip_assume_tac >>
-                `TAKE (LENGTH (i0 ++ [m; 0]) - 1) it = FRONT (i0 ++ [m;0]) ∧
-                 TAKE (LENGTH (i0 ++ [n + (p + 1); 0]) - 1) it =
-                 FRONT (i0 ++ [n + (p + 1); 0])`
-                  by metis_tac[graphOf_iterations_apart, APPEND_eq_NIL] >>
-                lfs[FRONT_APPEND]) >>
-          fs[pcg_eval_merge_graph'] >>
-          `∃f. BG1 = imap f BG2` suffices_by simp[PULL_EXISTS] >>
+  >- ((* par is all Dones component *)
+      simp[graphOf_def, PULL_EXISTS, OPT_SEQUENCE_EQ_SOME,
+           combinTheory.o_ABS_L, combinTheory.o_ABS_R,
+           MEM_MAPi] >>
+      map_every qx_gen_tac [`m0`, `cs`] >> strip_tac >>
+      `∀n. n < LENGTH cs ⇒ EL n cs = Done` by fs[EVERY_EL] >>
+      simp[MAPi_GENLIST, combinTheory.S_ABS_L] >>
+      simp[Cong GENLIST_CONG] >>
+      simp[MergeL_empties, MEM_GENLIST, PULL_EXISTS] >>
+      simp[pcg_eval_thm])
+  >- ((* Par contains an abort *)
+      simp[graphOf_def, OPT_SEQUENCE_EQ_SOME, MEM_MAPi,
+           PULL_EXISTS] >>
+      map_every qx_gen_tac [`m0`, `cs`] >> simp[MEM_EL] >>
+      disch_then (qx_choose_then `n` strip_assume_tac) >>
+      `∀i m. graphOf i m Abort = NONE` by simp[] >>
+      metis_tac[optionTheory.NOT_NONE_SOME]));
 
+val _ = overload_on("--->*", ``RTC eval``)
+val _ = overload_on("--->⁺", ``TC eval``)
+val _ = set_fixity "--->*" (Infix(NONASSOC, 450))
+val _ = set_fixity "--->⁺" (Infix(NONASSOC, 450))
 
+val graphOf_correct0 = prove(
+  ``∀p1 p2.
+      p1 --->* p2 ⇒
+      ∀m0 c0 m i0 i g gm.
+        p1 = (m0,c0) ∧ p2 = (m,Done) ∧ i0 ≠ [] ∧
+        graphOf i0 m0 c0 = SOME(i,gm,g) ⇒
+        gm = m``,
+  ho_match_mp_tac relationTheory.RTC_INDUCT >> simp[] >>
+  simp[FORALL_PROD] >> metis_tac[graphOf_correct_lemma]);
 
-
-
-
-
-
-
-
-
-
-
-
-
-``
-*)
-
-
+val graphOf_correct = save_thm(
+  "graphOf_correct",
+  graphOf_correct0 |> SIMP_RULE (srw_ss()) [PULL_FORALL])
 
 val _ = export_theory();
