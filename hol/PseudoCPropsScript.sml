@@ -2492,7 +2492,67 @@ val MergeL_append = prove(
   ``MergeL (l1 ++ l2) = merge_graph (MergeL l1) (MergeL l2)``,
   Induct_on `l1` >> simp[merge_graph_ASSOC])
 
+val imap_MergeL = prove(
+  ``(∀g. MEM g glist ⇒ INJ f (iterations g) UNIV) ∧
+    (∀i j. i < j ∧ j < LENGTH glist ⇒
+           DISJOINT (iterations (EL i glist)) (iterations (EL j glist)) ∧
+           DISJOINT (IMAGE f (iterations (EL i glist)))
+                    (IMAGE f (iterations (EL j glist))))
+    ⇒
+     imap f (MergeL glist) = MergeL (MAP (λg. imap f g) glist)``,
+  Induct_on `glist` >> simp[] >> dsimp[LT_SUC] >> qx_gen_tac `h` >>
+  strip_tac >> fs[] >>
+  `INJ f (iterations h ∪ iterations (MergeL glist)) UNIV`
+    by (simp[INJ_UNION_DOMAIN, iterations_MergeL] >>
+        dsimp[INJ_DEF] >> conj_tac
+        >- (map_every qx_gen_tac [`it1`, `it2`, `g1`, `g2`] >> strip_tac >>
+            Cases_on `g1 = g2` >- metis_tac [INJ_DEF] >>
+            `(∃i. i < LENGTH glist ∧ g1 = EL i glist) ∧
+             ∃j. j < LENGTH glist ∧ g2 = EL j glist` by metis_tac[MEM_EL] >>
+            `i ≠ j` by (strip_tac >> fs[]) >>
+            fs[DISJOINT_DEF, EXTENSION] >>
+            `i < j ∨ j < i` by decide_tac >> metis_tac[]) >>
+        `iterations h DIFF BIGUNION (IMAGE iterations (set glist)) =
+         iterations h`
+          by (simp[Once EXTENSION] >> qx_gen_tac `it` >> eq_tac >> simp[] >>
+              strip_tac >> qx_gen_tac `s` >> Cases_on `it ∈ s` >> simp[] >>
+              qx_gen_tac `g` >> disjneq_search >> BasicProvers.VAR_EQ_TAC >>
+              fs[DISJOINT_DEF, EXTENSION] >> metis_tac[MEM_EL]) >>
+        `BIGUNION (IMAGE iterations (set glist)) DIFF iterations h =
+         BIGUNION (IMAGE iterations (set glist))`
+          by (simp[Once EXTENSION] >> dsimp[] >> qx_gen_tac `it` >>
+              eq_tac >> strip_tac >- metis_tac[] >>
+              fs[DISJOINT_DEF, EXTENSION] >> metis_tac[MEM_EL]) >>
+        simp[] >> simp[DISJOINT_DEF, Once EXTENSION] >>
+        simp[GSYM IMP_DISJ_THM, PULL_FORALL] >>
+        qx_gen_tac `it` >>
+        ONCE_REWRITE_TAC [DECIDE ``p \/ q ⇔ ¬p ⇒ q``] >>
+        simp[PULL_EXISTS] >> qx_gen_tac `it0` >> strip_tac >>
+        BasicProvers.VAR_EQ_TAC >> map_every qx_gen_tac [`it'`, `g`] >>
+        rpt strip_tac >>
+        `g ≠ h` by (strip_tac >> fs[DISJOINT_DEF, EXTENSION] >>
+                    metis_tac[MEM_EL]) >>
+        fs[DISJOINT_DEF, EXTENSION] >> metis_tac[MEM_EL]) >>
+  `DISJOINT (iterations h) (iterations (MergeL glist))`
+    by (simp[iterations_MergeL, DISJOINT_DEF, Once EXTENSION] >>
+        simp[GSYM IMP_DISJ_THM, PULL_FORALL] >>
+        fs[DISJOINT_DEF, EXTENSION] >> metis_tac[MEM_EL]) >>
+  simp[imap_merge_graph]);
+
 (*
+val MergeL_GENLIST_imap = prove(
+  ``∀f gf.
+       (∀i j. i < j ∧ j < n ⇒
+              DISJOINT (iterations (imap (f i) (gf i)))
+                       (iterations (imap (f j) (gf j))) ∧
+              DISJOINT (iterations (gf i)) (iterations (gf j))) ⇒
+     ∃g.
+       MergeL (GENLIST (λi. imap (f i) (gf i)) n) =
+        imap g (MergeL (GENLIST gf n))``,
+  rpt strip_tac >>
+  qexists_tac `λit. f (@i. it ∈ iterations (gf i)) it`
+  Induct_on `n` >> simp[GENLIST_CONS, combinTheory.o_ABS_L]
+
 val graphOf_correct_lemma = store_thm(
   "graphOf_correct_lemma",
   ``∀m0 c0 m c.
@@ -2851,9 +2911,46 @@ val graphOf_correct_lemma = store_thm(
             pcg_eval (merge_graph (MergeL (GENLIST gg p)) BG1) (SOME m0) =
             SOME m0'` >>
           `DISJOINT (iterations (MergeL (GENLIST gg p))) (iterations BG1)`
-            by simp[Abbr`BG1`, iterations_MergeL, PULL_EXISTS, MEM_GENLIST]
+            by (simp[Abbr`BG1`, iterations_MergeL, PULL_EXISTS, MEM_GENLIST] >>
+                qx_gen_tac `m` >> strip_tac >> qx_gen_tac `n` >> strip_tac >>
+                pop_assum (fn th =>
+                  first_x_assum (mp_tac o C MATCH_MP th) >>
+                  pop_assum (fn th => first_x_assum (mp_tac o C MATCH_MP th) >>
+                                      assume_tac th) >>
+                  assume_tac th) >>
+                simp[Abbr`GG`, EL_APPEND2, EL_APPEND1] >> rpt strip_tac >>
+                simp[DISJOINT_DEF, EXTENSION] >> qx_gen_tac `it` >>
+                spose_not_then strip_assume_tac >>
+                `TAKE (LENGTH (i0 ++ [m; 0]) - 1) it = FRONT (i0 ++ [m;0]) ∧
+                 TAKE (LENGTH (i0 ++ [n + p; 0]) - 1) it =
+                 FRONT (i0 ++ [n + p; 0])`
+                  by metis_tac[graphOf_iterations_apart, APPEND_eq_NIL] >>
+                lfs[FRONT_APPEND]) >>
+          simp[pcg_eval_merge_graph'] >>
+          qmatch_assum_abbrev_tac `
+            pcg_eval (merge_graph XX BG2) (SOME m0) = SOME m0'` >>
+          `DISJOINT (iterations XX) (iterations BG2)`
+            by (simp[Abbr`BG2`, Abbr`XX`, iterations_MergeL, PULL_EXISTS,
+                     MEM_GENLIST] >>
+                qx_gen_tac `m` >> strip_tac >> qx_gen_tac `n` >> strip_tac >>
+                `n + (p + 1) < p + (LENGTH sfx + 1)` by decide_tac
+                pop_assum (fn th =>
+                  first_x_assum (mp_tac o C MATCH_MP th) >>
+                  pop_assum kall_tac >>
+                  pop_assum (fn th => first_x_assum (mp_tac o C MATCH_MP th) >>
+                                      assume_tac th) >>
+                  assume_tac th) >>
+                simp[Abbr`GG`, EL_APPEND2, EL_APPEND1] >> rpt strip_tac >>
+                simp[DISJOINT_DEF, EXTENSION] >> qx_gen_tac `it` >>
+                spose_not_then strip_assume_tac >>
+                `TAKE (LENGTH (i0 ++ [m; 0]) - 1) it = FRONT (i0 ++ [m;0]) ∧
+                 TAKE (LENGTH (i0 ++ [n + (p + 1); 0]) - 1) it =
+                 FRONT (i0 ++ [n + (p + 1); 0])`
+                  by metis_tac[graphOf_iterations_apart, APPEND_eq_NIL] >>
+                lfs[FRONT_APPEND]) >>
+          fs[pcg_eval_merge_graph'] >>
+          `∃f. BG1 = imap f BG2` suffices_by simp[PULL_EXISTS] >>
 
-          pcg_eval_merge_graph'
 
 
 
