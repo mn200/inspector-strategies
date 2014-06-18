@@ -1,83 +1,185 @@
+(* New Opn functions needed below:
+    - divval, real division
+    - using plusval for both integer and real addition
+    - expval, exponent function
+    - multval, multiplication
+    - minusvalval, subtraction
+    - maxval, returns max of two numbers
+    - cmpGTEval, returns true on greater than or equal else false
+    
+    
+   Other conversion questions:
+   - do we need ~ for -1?
+   - VRead for doubles?  VarExp for ints?
+   - where is the definition of "write" for "stmt = Assign write ..."
+   - the inspector has some Assign's that involve ivecs instead of dvecs.  Do we need to differentiate there?
+        - used idval for identity function on these, except those are not dexprs, hmmm...
+    - should I just make orgbody a list
+*)
 
-findWavesFast = SeqStmt ([
-        Malloc("lw_iter",VarExp("N"),Int(~1)),
-        Malloc("lr_iter",VarExp("N"),(Int (~1)),
-        Malloc("wave",VarExp("nnz"),(Int(0)),
-        AssignVar "max_wave" (Value (Int(0))),
-        ForLoop "p" (D1D (Value(Int(1))) VarExp("nnz"))
-            (SeqStmt [
+(**** Original Code ****)
+
+(* sum = Sum_{k=0}^{w-1} 1 / exp( k * data[i] * data[j] ) *)
+val summationLoop =
+    Seq [
+        AssignVar "sum" Value(Real(0.0));
+        ForLoop "k" (D (Value(Int 0)) (VarExp "workPerIter") )
+            AssignVar "sum" 
+                (Opn plusval [ 
+                    VarExp "sum";
+                    Opn divval [
+                        Value (Real 1.0);
+                        Opn expval [
+                            Opn multval [
+                                Opn multval [
+                                    VRead "k";
+                                    ARead "data_org"
+                                        (ISub "row" (VarExp "p"))
+                                ];
+                                ARead "data_org"
+                                    (ISub "col" (VarExp "p"))
+                            ]
+                        ]
+                    ]
+                ])
+    ]
+
+val orgbody = 
+    Seq [
+        summation; (* FIXME Michael syntax: 
+                      probably have to pull list out of summation? *)
+                      
+        (* data_org[ row[p] ] += 1.0 + sum; *)
+        Assign "data_org" (ISub "row" (VarExp "p"))
+            [ ARead "data_org" (ISub "row" (VarExp "p"));
+              Opn plusval [Value (Real 1.0)); VarExp "sum" ]
+              
+        (* data_org[ col[p] ] += 1.0 + sum; *)
+        Assign "data_org" (ISub "col" (VarExp "p"))
+            [ ARead "data_org" (ISub "col" (VarExp "p"));
+              Opn plusval [Value (Real 1.0)); VarExp "sum" ]
+    ]
+
+val original = ForLoop "p" (D (Value(Int 0)) (VarExp "nnz")) orgbody)
+                             
+
+(**** Wavefront Inspector ****)
+val findWavesFast =
+    Seq [
+        Malloc "lw_iter" (VarExp "N") (Int (-1));
+        Malloc "lr_iter" (VarExp "N") (Int (-1));
+        Malloc "wave" (VarExp "nnz") (Int 0);
+        AssignVar "max_wave" (Value(Int 0));
+        ForLoop "p" (D (Value(Int 1)) (VarExp "nnz") )
+            (Seq [
                 Assign "lr_iter"
-                    (ARead "row" (Minus (VarExp "p") (Value(Int(1)))))
-                    (Minus (VarExp "p") (Value(Int(1)))),
+                    (ISub "row" (Opn minusval [(VarExp "p"); (Value(Int(1)))]))
+                    (Opn minusval [(VarExp "p"); (Value(Int(1)))] );
                 Assign "lr_iter"
-                    (ARead "col" (Minus (VarExp "p") (Value(Int(1)))))
-                    (Minus (VarExp "p") (Value(Int(1)))),
+                    (ISub "col" (Opn minusval [(VarExp "p"); (Value(Int(1)))]))
+                    (Opn minusval [(VarExp "p"); (Value(Int(1)))] );
                 Assign "lw_iter"
-                    (ARead "row" (Minus (VarExp "p") (Value(Int(1)))))
-                    (Minus (VarExp "p") (Value(Int(1)))),
+                    (ISub "row" (Opn minusval [(VarExp "p"); (Value(Int(1)))]))
+                    (Opn minusval [(VarExp "p"); (Value(Int(1)))] );
                 Assign "lw_iter"
-                    (ARead "col" (Minus (VarExp "p") (Value(Int(1)))))
-                    (Minus (VarExp "p") (Value(Int(1)))),
-                AssignVar "r" (ARead "row" (VarExp "p")),
-                AssignVar "c" (ARead "col" (VarExp "p")),
-                IfStmt  (CmpGTE (ARead "lw_iter" (VarExp "r")) 
-                                (Value(Int(0))))
+                    (ISub "col" (Opn minusval [(VarExp "p"); (Value(Int(1)))]))
+                    (Opn minusval [(VarExp "p"); (Value(Int(1)))] );
+                AssignVar "r" (ISub "row" (VarExp "p"));
+                AssignVar "c" (ISub "col" (VarExp "p"));
+                IfStmt  (Opn cmpGTEval [(ISub "lw_iter" (VarExp "r")); 
+                                (Value(Int(0)))] )
                         (Assign "wave" (VarExp "p")
-                                (Max (ARead "wave" (VarExp "p"))
-                                     (Plus (ARead "wave"
-                                                (ARead "lw_iter" (VarExp "r")))
-                                           (Value(Int(1))))))
-                        (SeqStmt []),
-                IfStmt  (CmpGTE (ARead "lr_iter" (VarExp "r")) 
-                                (Value(Int(0))))
+                                (Opn maxval [
+                                    (ISub "wave" (VarExp "p"));
+                                    (Opn plusval [
+                                        (ISub "wave"
+                                            (ISub "lw_iter" (VarExp "r")));
+                                        (Value(Int(1)))
+                                    ])
+                                ]) )
+                        (Seq []);
+                IfStmt  (Opn cmpGTEval [(ISub "lr_iter" (VarExp "r"));
+                                (Value(Int(0)))] )
                         (Assign "wave" (VarExp "p")
-                                (Max (ARead "wave" (VarExp "p"))
-                                     (Plus (ARead "wave"
-                                                (ARead "lr_iter" (VarExp "r")))
-                                           (Value(Int(1))))))
-                        (SeqStmt []),
-                IfStmt  (CmpGTE (ARead "lw_iter" (VarExp "c")) 
-                                (Value(Int(0))))
+                                (Opn maxval [
+                                    (ISub "wave" (VarExp "p"));
+                                    (Opn plusval [
+                                        (ISub "wave"
+                                            (ISub "lr_iter" (VarExp "r")));
+                                        (Value(Int(1)))
+                                    ])
+                                ]) )
+                        (Seq []);
+                IfStmt  (Opn cmpGTEval [(ISub "lw_iter" (VarExp "c"));
+                                (Value(Int(0)))] )
                         (Assign "wave" (VarExp "p")
-                                (Max (ARead "wave" (VarExp "p"))
-                                     (Plus (ARead "wave"
-                                                (ARead "lw_iter" (VarExp "c")))
-                                           (Value(Int(1))))))
-                        (SeqStmt []),
-                IfStmt  (CmpGTE (ARead "lr_iter" (VarExp "c")) 
-                                (Value(Int(0))))
+                                (Opn maxval [
+                                    (ISub "wave" (VarExp "p"));
+                                    (Opn plusval [
+                                        (ISub "wave"
+                                            (ISub "lw_iter" (VarExp "c")));
+                                        (Value(Int(1)))
+                                    ])
+                                ]) )
+                        (Seq []);
+                IfStmt  (Opn cmpGTEval [(ISub "lr_iter" (VarExp "c"));
+                                (Value(Int(0)))] )
                         (Assign "wave" (VarExp "p")
-                                (Max (ARead "wave" (VarExp "p"))
-                                     (Plus (ARead "wave"
-                                                (ARead "lr_iter" (VarExp "c")))
-                                           (Value(Int(1))))))
-                        (SeqStmt []),
-                AssignVar "max_wave" (Max (VarExp "max_wave")
-                                          (ARead "wave" (VarExp "p")))
-            ]),
-            Malloc "wavestart" (Plus (VarExp "max_wave") (Value(Int 2)))
-                                (Int(0)),
-            ForLoop "p" (D1D (Value(Int(0))) VarExp("nnz"))
-                (Assign "wavestart" (ARead "wave" (VarExp "p"))
-                    (Plus (ARead "wavestart" (ARead "wave" (VarExp "p")))
-                          (Value(Int(1))))),
-            ForLoop "w" (D1D (Value(Int(1))) (Plus (VarExp "max_wave")
-                                                     (Value(Int(1)))))
+                                (Opn maxval [
+                                    (ISub "wave" (VarExp "p"));
+                                    (Opn plusval [
+                                        (ISub "wave"
+                                            (ISub "lr_iter" (VarExp "c")));
+                                        (Value(Int(1)))
+                                    ])
+                                ]) )
+                        (Seq []);
+                AssignVar "max_wave" (Opn maxval [
+                                        (VarExp "max_wave");
+                                        (ISub "wave" (VarExp "p"))] )
+            ]);
+            
+            Malloc "wavestart" (Opn plusval [VarExp "max_wave"; Value (Int 2)] )
+                (Int(0));
+            ForLoop "p" (D (Value(Int(0))) VarExp("nnz"))
+                (Assign "wavestart" (ISub "wave" (VarExp "p"))
+                    (Opn plusval [ISub "wavestart" (ISub "wave" (VarExp "p"));
+                                  Value (Int 1)] );
+            ForLoop "w" (D (Value(Int 1)) (Opn plusval [
+                                                (VarExp "max_wave");
+                                                (Value(Int 1)) ]))
                 (Assign "wavestart" (VarExp "w")
-                    (Plus (ARead "wavestart" 
-                              (Minus (VarExp "w") (Value(Int(1)))))
-                          (ARead "wavestart" (VarExp "w")))),
-            Malloc "wavefronts" VarExp("nnz") (Int(0)),
-            ForLoop "prev" (D1D (Value(Int(1))) (Plus VarExp("nnz")
-                                                         (Value(Int(1)))))
-                (SeqStmt [
-                    AssignVar "p" (Minus VarExp("nnz") (VarExp "prev")),
-                    AssignVar "w" (ARead "wave" (VarExp "p")),
+                    (Opn plusval [
+                        (ISub "wavestart" 
+                              (Opn minusval (VarExp "w") (Value(Int(1)))));
+                        (ISub "wavestart" (VarExp "w"))] ));
+                          
+            Malloc "wavefronts" (VarExp "nnz") (Int 0);
+            ForLoop "prev" (D (Value(Int 1)) (Opn plusval [(VarExp "nnz");
+                                                           (Value(Int 1))] ))
+                (Seq [
+                    AssignVar "p" (Opn minusval [VarExp "nnz"; VarExp "prev"]),
+                    AssignVar "w" (ISub "wave" (VarExp "p")),
                     Assign "wavestart" (VarExp "w")
-                        (Minus (ARead "wavestart" (VarExp"w"))
-                               (Value(Int(1)))),
+                        (Opn minusval [
+                            ISub "wavestart" (VarExp "w");
+                            Value(Int 1)] ),
                     Assign "wavefronts"
-                        (ARead "wavestart" (VarExp "w"))
-                        (VarExp "p")
+                        (ISub "wavestart" (VarExp "w"))
+                        [(VarExp "p")]
+                        idval
                 ])    
     ]
+
+(**** Wavefront Executor ****)
+
+executor =
+    ForLoop "w" (D (Value(Int 0)) (VarExp max_wave"))
+        (ParLoop "k" (D (ISub "wavestart" (VarExp "w"))
+                        (ISub "wavestart" (Opn plusval (VarExp "w")
+                                                        (Value(Int 1)))))
+            (Seq [
+                AssignVar "p" (ISub "wavefronts" (VarExp "k"));
+                orgbody
+            ]))
+
