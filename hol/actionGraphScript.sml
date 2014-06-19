@@ -8,10 +8,12 @@ val _ = new_theory "actionGraph";
 
 val _ = Hol_datatype`
   action = <|
-    write : 'access option;
-    reads : 'access list ;
-    expr : 'a list -> 'a;
-    iter : 'iter
+    writes : 'rw list;
+    reads : 'rw list ;
+    data : 'data;
+    ident : 's_ident
+     (* bogus ty variable name chosen to preserve order of
+        type arguments *)
   |>
 `;
 
@@ -19,8 +21,9 @@ val action_component_equality = theorem "action_component_equality"
 
 val touches_def = Define`
   touches a1 a2 ⇔
-     (∃w. a1.write = SOME w ∧ (a2.write = SOME w ∨ MEM w a2.reads)) ∨
-     (∃w. a2.write = SOME w ∧ MEM w a1.reads)
+     (∃w. MEM w a1.writes ∧ MEM w a2.writes) ∨
+     (∃w. MEM w a1.writes ∧ MEM w a2.reads) ∨
+     (∃w. MEM w a2.writes ∧ MEM w a1.reads)
 `;
 
 val _ = set_mapped_fixity {term_name = "touches", fixity = Infix(NONASSOC, 450),
@@ -30,12 +33,12 @@ val _ = set_mapped_fixity {term_name = "not_touches",
                            tok = "≁ₜ"}
 val _ = overload_on("not_touches", ``λa1 a2. ¬(touches a1 a2)``)
 
-val touches_ignores_iter = store_thm(
-  "touches_ignores_iter",
-  ``(touches a1 (a2 with iter updated_by f) ⇔ touches a1 a2) ∧
-    (touches (a1 with iter updated_by f) a2 ⇔ touches a1 a2)``,
+val touches_ignores_ident = store_thm(
+  "touches_ignores_ident",
+  ``(touches a1 (a2 with ident updated_by f) ⇔ touches a1 a2) ∧
+    (touches (a1 with ident updated_by f) a2 ⇔ touches a1 a2)``,
   simp[touches_def]);
-val _ = export_rewrites ["touches_ignores_iter"]
+val _ = export_rewrites ["touches_ignores_ident"]
 
 val touches_SYM = store_thm(
   "touches_SYM",
@@ -44,8 +47,8 @@ val touches_SYM = store_thm(
 
 val _ = Hol_datatype`
   action_graph0 = <|
-    nodes : ('a,'acc,'iter) action set;
-    edges : ('a,'acc,'iter) action -> ('a,'acc,'iter) action set
+    nodes : ('a,'acc,'ident) action set;
+    edges : ('a,'acc,'ident) action -> ('a,'acc,'ident) action set
   |>
 `
 
@@ -55,7 +58,7 @@ val wfG_def = Define`
       (∀a1 a2. G.edges a1 a2 ⇒ touches a1 a2 ∧ a1 ∈ G.nodes ∧ a2 ∈ G.nodes) ∧
       (∀a1 a2. a1 ∈ G.nodes ∧ a2 ∈ G.nodes ∧ touches a1 a2 ∧ a1 ≠ a2 ⇒ (¬G.edges a1 a2 ⇔ G.edges a2 a1)) ∧
       (∀a1 a2. a1 ∈ G.nodes ∧ a2 ∈ G.nodes ∧ G.edges⁺ a1 a2 ⇒ ¬G.edges⁺ a2 a1) ∧
-      INJ (λa. a.iter) G.nodes univ(:'iter)
+      INJ (λa. a.ident) G.nodes univ(:'ident)
 `;
 
 val touching_actions_link0 = prove(
@@ -121,13 +124,13 @@ val graph0_equality = prove(
        quotientTheory.respects_def, INWR] >>
   ntac 5 strip_tac >> conj_tac >- simp[EXTENSION] >> simp[FUN_EQ_THM])
 
-val iterations0_def = Define`
-  iterations0 G = IMAGE (\a. a.iter) G.nodes
+val idents0_def = Define`
+  idents0 G = IMAGE (\a. a.ident) G.nodes
 `;
 
 val add_action0_def = Define`
   add_action0 a G =
-    if a.iter ∈ iterations0 G then G
+    if a.ident ∈ idents0 G then G
     else
       <| nodes := a INSERT G.nodes ;
          edges := (λsrc tgt. G.edges src tgt ∨
@@ -136,7 +139,7 @@ val add_action0_def = Define`
 
 val add_postaction0_def = Define`
   add_postaction0 a G =
-    if a.iter ∈ iterations0 G then G
+    if a.ident ∈ idents0 G then G
     else
       <| nodes := a INSERT G.nodes ;
          edges := (λsrc tgt. G.edges src tgt ∨
@@ -192,7 +195,7 @@ val wfG_add_action0 = prove(
   ` >>
   `∀x y. G.edges x y ∨ x = a ∧ touches a y ∧ y ∈ G.nodes <=> R' x y`
     by simp[Abbr`R'`] >>
-  markerLib.RM_ALL_ABBREVS_TAC >> fs[wfG_def, iterations0_def] >> reverse (rpt strip_tac)
+  markerLib.RM_ALL_ABBREVS_TAC >> fs[wfG_def, idents0_def] >> reverse (rpt strip_tac)
   >- (fs[INJ_THM] >> metis_tac[])
   >- (`∀b. ¬G.edges a b ∧ ¬G.edges b a` by metis_tac[] >>
       `∀a1 a2. R' a1 a2 ⇒ G.edges a1 a2 ∨ a1 = a ∧ a2 ≠ a` by metis_tac[] >>
@@ -225,7 +228,7 @@ val wfG_add_postaction0 = prove(
   `∀x y. G.edges x y ∨ x ∈ G.nodes ∧ touches x y ∧ y = a <=> R' x y`
     by simp[Abbr`R'`] >>
   markerLib.RM_ALL_ABBREVS_TAC >>
-  fs[wfG_def, iterations0_def] >> reverse (rpt strip_tac)
+  fs[wfG_def, idents0_def] >> reverse (rpt strip_tac)
   >- (fs[INJ_THM] >> metis_tac[])
   >- (`∀b. ¬G.edges a b ∧ ¬G.edges b a` by metis_tac[] >>
       `∀a1 a2. R' a1 a2 ⇒ G.edges a1 a2 ∨ a2 = a ∧ a1 ≠ a`
@@ -242,50 +245,50 @@ val wfEQ_add_postaction0 = prove(
 
 val IN_add_action0 = prove(
   ``x ∈ (add_action0 a G).nodes <=>
-    a.iter ∉ iterations0 G ∧ x = a ∨ x ∈ G.nodes``,
+    a.ident ∉ idents0 G ∧ x = a ∨ x ∈ G.nodes``,
   rw[add_action0_def]);
 
 val IN_add_postaction0 = prove(
   ``x ∈ (add_postaction0 a G).nodes <=>
-    a.iter ∉ iterations0 G ∧ x = a ∨ x ∈ G.nodes``,
+    a.ident ∉ idents0 G ∧ x = a ∨ x ∈ G.nodes``,
   rw[add_postaction0_def]);
 
 val add_action0_edges = prove(
   ``(add_action0 a G).edges a1 a2 ⇔
-      a.iter ∉ iterations0 G ∧ a1 = a ∧ a2 ∈ G.nodes ∧ touches a1 a2 ∨
+      a.ident ∉ idents0 G ∧ a1 = a ∧ a2 ∈ G.nodes ∧ touches a1 a2 ∨
       G.edges a1 a2``,
   rw[add_action0_def] >> metis_tac[]);
 
 val add_postaction0_edges = prove(
   ``(add_postaction0 a G).edges a1 a2 <=>
-       a.iter ∉ iterations0 G ∧ a1 ∈ G.nodes ∧ a2 = a ∧ touches a1 a2 ∨
+       a.ident ∉ idents0 G ∧ a1 ∈ G.nodes ∧ a2 = a ∧ touches a1 a2 ∨
        G.edges a1 a2``,
   rw[add_postaction0_def] >> metis_tac[]);
 
 val fmap0_def = Define`
-  fmap0 G = FUN_FMAP (λi. @a. a ∈ G.nodes ∧ a.iter = i) (iterations0 G)
+  fmap0 G = FUN_FMAP (λi. @a. a ∈ G.nodes ∧ a.ident = i) (idents0 G)
 `;
 
 val FDOM_fmap0 = prove(
-  ``!g::respects wfEQ. FDOM (fmap0 g) = iterations0 g``,
-  simp[fmap0_def, FUN_FMAP_DEF, wfEQ_def, wfG_FINITE, iterations0_def,
+  ``!g::respects wfEQ. FDOM (fmap0 g) = idents0 g``,
+  simp[fmap0_def, FUN_FMAP_DEF, wfEQ_def, wfG_FINITE, idents0_def,
        IMAGE_FINITE, quotientTheory.respects_def, INWR]);
 
 val fmap0_add_action0 = prove(
   ``!g::respects wfEQ.
-       fmap0 (add_action0 a g) ' i = if a.iter = i ∧ i ∉ iterations0 g then a
+       fmap0 (add_action0 a g) ' i = if a.ident = i ∧ i ∉ idents0 g then a
                                      else fmap0 g ' i``,
   simp[wfEQ_def, quotientTheory.respects_def, INWR, RES_FORALL_THM] >>
-  rw[add_action0_def] >> fs[wfG_def, INJ_THM, fmap0_def, iterations0_def] >| [
+  rw[add_action0_def] >> fs[wfG_def, INJ_THM, fmap0_def, idents0_def] >| [
     metis_tac[],
     simp[IMAGE_FINITE, FUN_FMAP_DEF] >> dsimp[] >> csimp[] >>
-    `∀b. b ∈ g.nodes ∧ b.iter = a.iter <=> F`
+    `∀b. b ∈ g.nodes ∧ b.ident = a.ident <=> F`
       suffices_by disch_then (fn th => simp[th]) >>
     metis_tac[],
-    Cases_on `i ∈ IMAGE (λa. a.iter) g.nodes`
+    Cases_on `i ∈ IMAGE (λa. a.ident) g.nodes`
     >- (dsimp[IMAGE_FINITE, FUN_FMAP_DEF] >> csimp[]) >>
     simp[IMAGE_FINITE, NOT_FDOM_FAPPLY_FEMPTY, FUN_FMAP_DEF],
-    `a.iter ≠ a'.iter` by metis_tac[] >>
+    `a.ident ≠ a'.ident` by metis_tac[] >>
     simp[IMAGE_FINITE, FUN_FMAP_DEF] >> dsimp[] >> csimp[] >>
     metis_tac[]
   ]);
@@ -293,19 +296,19 @@ val fmap0_add_action0 = prove(
 val fmap0_add_postaction0 = prove(
   ``!g::respects wfEQ.
        fmap0 (add_postaction0 a g) ' i =
-         if a.iter = i ∧ i ∉ iterations0 g then a
+         if a.ident = i ∧ i ∉ idents0 g then a
          else fmap0 g ' i``,
   simp[wfEQ_def, quotientTheory.respects_def, INWR, RES_FORALL_THM] >>
-  rw[add_postaction0_def] >> fs[wfG_def, INJ_THM, fmap0_def, iterations0_def] >| [
+  rw[add_postaction0_def] >> fs[wfG_def, INJ_THM, fmap0_def, idents0_def] >| [
     metis_tac[],
     simp[IMAGE_FINITE, FUN_FMAP_DEF] >> dsimp[] >> csimp[] >>
-    `∀b. b ∈ g.nodes ∧ b.iter = a.iter <=> F`
+    `∀b. b ∈ g.nodes ∧ b.ident = a.ident <=> F`
       suffices_by disch_then (fn th => simp[th]) >>
     metis_tac[],
-    Cases_on `i ∈ IMAGE (λa. a.iter) g.nodes`
+    Cases_on `i ∈ IMAGE (λa. a.ident) g.nodes`
     >- (dsimp[IMAGE_FINITE, FUN_FMAP_DEF] >> csimp[]) >>
     simp[IMAGE_FINITE, NOT_FDOM_FAPPLY_FEMPTY, FUN_FMAP_DEF],
-    `a.iter ≠ a'.iter` by metis_tac[] >>
+    `a.ident ≠ a'.ident` by metis_tac[] >>
     simp[IMAGE_FINITE, FUN_FMAP_DEF] >> dsimp[] >> csimp[] >>
     metis_tac[]
   ]);
@@ -403,22 +406,22 @@ val INJ_RIMAGE_TC = store_thm(
 
 
 val imap0_def = Define`
-  imap0 f G = if INJ f (iterations0 G) UNIV then
-                G with <| nodes updated_by IMAGE (λa. a with iter updated_by f);
-                          edges updated_by RIMAGE (λa. a with iter updated_by f)
+  imap0 f G = if INJ f (idents0 G) UNIV then
+                G with <| nodes updated_by IMAGE (λa. a with ident updated_by f);
+                          edges updated_by RIMAGE (λa. a with ident updated_by f)
                        |>
               else G
 `;
 
 val imap0_id = prove(
-  ``¬INJ f (iterations0 G) UNIV ⇒ imap0 f G = G``,
+  ``¬INJ f (idents0 G) UNIV ⇒ imap0 f G = G``,
   simp[imap0_def]);
 
 val wfG_imap = prove(
   ``wfG G ⇒ wfG (imap0 f G)``,
-  simp[imap0_def, iterations0_def] >> COND_CASES_TAC >> simp[] >>
+  simp[imap0_def, idents0_def] >> COND_CASES_TAC >> simp[] >>
   simp[wfG_def, RIMAGE_DEF] >> strip_tac >>
-  qabbrev_tac `f' = λa. a with iter updated_by f` >> simp[] >>
+  qabbrev_tac `f' = λa. a with ident updated_by f` >> simp[] >>
   `∀a1 a2. a1 ∈ G.nodes ∧ a2 ∈ G.nodes ⇒ (f' a1 = f' a2 ⇔ a1 = a2)`
     by (rpt strip_tac >> simp[action_component_equality, Abbr`f'`] >>
         full_simp_tac (srw_ss() ++ boolSimps.DNF_ss) [INJ_THM]) >>
@@ -454,23 +457,23 @@ val imap_emptyG0 = prove(
   simp[emptyG0_def, imap0_def]);
 
 val IN_imap0 = prove(
-  ``INJ f (iterations0 G) UNIV ⇒ (a ∈ (imap0 f G).nodes ⇔ ∃a0. a0 ∈ G.nodes ∧ a = a0 with iter updated_by f)``,
+  ``INJ f (idents0 G) UNIV ⇒ (a ∈ (imap0 f G).nodes ⇔ ∃a0. a0 ∈ G.nodes ∧ a = a0 with ident updated_by f)``,
   simp[imap0_def] >> metis_tac[]);
 
 val imap0_edges = prove(
-  ``INJ f (iterations0 G) UNIV ⇒
+  ``INJ f (idents0 G) UNIV ⇒
     ((imap0 f G).edges a1 a2 ⇔
-      ∃a10 a20. G.edges a10 a20 ∧ a1 = a10 with iter updated_by f ∧
-                a2 = a20 with iter updated_by f)``,
+      ∃a10 a20. G.edges a10 a20 ∧ a1 = a10 with ident updated_by f ∧
+                a2 = a20 with ident updated_by f)``,
   simp[imap0_def, RIMAGE_DEF] >> metis_tac[]);
 
 val iter0_11 = prove(
-  ``∀g. wfG g ⇒ INJ (λa. a.iter) g.nodes UNIV``,
+  ``∀g. wfG g ⇒ INJ (λa. a.ident) g.nodes UNIV``,
   simp[wfG_def]);
 
 val frange_fmap0 = prove(
   ``∀g. wfG g ⇒ FRANGE (fmap0 g) = g.nodes``,
-  simp[fmap0_def, FRANGE_FMAP, iterations0_def, IMAGE_FINITE, wfG_FINITE,
+  simp[fmap0_def, FRANGE_FMAP, idents0_def, IMAGE_FINITE, wfG_FINITE,
        GSYM IMAGE_COMPOSE, combinTheory.o_ABS_R] >>
   simp[EXTENSION, EQ_IMP_THM] >> rw[]
   >- (SELECT_ELIM_TAC >> conj_tac >- metis_tac[] >> simp[]) >>
@@ -478,9 +481,9 @@ val frange_fmap0 = prove(
   imp_res_tac iter0_11 >> fs[INJ_THM] >> SELECT_ELIM_TAC >>
   conj_tac >- metis_tac[] >> metis_tac[])
 
-val fmap0_inverts_iter = prove(
-  ``∀(g::respects wfEQ). ∀a. a ∈ g.nodes ⇒ fmap0 g ' a.iter = a``,
-  simp[fmap0_def, iterations0_def, FUN_FMAP_DEF, IMAGE_FINITE, wfG_FINITE,
+val fmap0_inverts_ident = prove(
+  ``∀(g::respects wfEQ). ∀a. a ∈ g.nodes ⇒ fmap0 g ' a.ident = a``,
+  simp[fmap0_def, idents0_def, FUN_FMAP_DEF, IMAGE_FINITE, wfG_FINITE,
        wfEQ_def, RES_FORALL_THM, quotientTheory.IN_RESPECTS] >>
   rpt strip_tac >> SELECT_ELIM_TAC >> conj_tac >- metis_tac[] >>
   fs[wfG_def, INJ_THM] >> metis_tac[]);
@@ -503,16 +506,16 @@ fun define_quotient {types,defs,thms,poly_preserves,poly_respects,respects} =
 val [emptyG_nodes, emptyG_edges, edges_irrefl, graph_equality,
      edges_WF, nodes_FINITE, IN_add_action, add_action_edges,
      IN_add_postaction, add_postaction_edges,
-     iterations_thm, FDOM_fmap,
+     idents_thm, FDOM_fmap,
      fmap_add_action, fmap_add_postaction,
      IN_edges,
      IN_gDELETE, nodes_gDELETE, gDELETE_edges, gDELETE_commutes,
      imap_emptyG, IN_imap, imap_edges, touching_actions_link, imap_id,
-     iter_INJ, frange_fmap, fmap_inverts_iter] =
+     ident_INJ, frange_fmap, fmap_inverts_ident] =
 define_quotient {
   types = [{name = "action_graph", equiv = wfEQ_equiv}],
   defs = [("emptyG",``emptyG0``),
-          ("iterations", ``iterations0``),
+          ("idents", ``idents0``),
           ("ag_nodes", ``action_graph0_nodes``),
           ("ag_edges", ``action_graph0_edges``),
           ("add_action", ``add_action0``),
@@ -530,7 +533,7 @@ define_quotient {
           ("add_action_edges", add_action0_edges),
           ("IN_add_postaction", IN_add_postaction0),
           ("add_postaction_edges", add_postaction0_edges),
-          ("iterations_thm", iterations0_def),
+          ("idents_thm", idents0_def),
           ("FDOM_fmap", FDOM_fmap0),
           ("fmap_add_action", fmap0_add_action0),
           ("fmap_add_postaction", fmap0_add_postaction0),
@@ -544,15 +547,15 @@ define_quotient {
           ("imap_edges", imap0_edges),
           ("touching_actions_link", mkwfeq (GEN_ALL touching_actions_link0)),
           ("imap_id", imap0_id),
-          ("iter_INJ", mkwfeq (iter0_11)),
+          ("ident_INJ", mkwfeq (iter0_11)),
           ("frange_fmap", mkwfeq (frange_fmap0)),
-          ("fmap_inverts_iter", fmap0_inverts_iter)],
+          ("fmap_inverts_ident", fmap0_inverts_ident)],
   poly_preserves = [],
   poly_respects = [],
   respects = [wfEQ_emptyG0, simple_rsp ``action_graph0_nodes``,
               simple_rsp ``action_graph0_edges``,
               simple_rsp ``fmap0``, wfEQ_delete,
-              simple_rsp ``iterations0``, wfEQ_add_action0,
+              simple_rsp ``idents0``, wfEQ_add_action0,
               wfEQ_add_postaction0,
               wfEQ_imap0]}
 
@@ -599,35 +602,35 @@ val gtouches_empty = store_thm(
 val gtouches_add_action = store_thm(
   "gtouches_add_action[simp]",
   ``(gtouches (a ⊕ g1) g2 ⇔
-       a.iter ∉ iterations g1 ∧ (∃b. b ∈ g2 ∧ touches a b) ∨ gtouches g1 g2) ∧
+       a.ident ∉ idents g1 ∧ (∃b. b ∈ g2 ∧ touches a b) ∨ gtouches g1 g2) ∧
     (gtouches g1 (a ⊕ g2) ⇔
-       a.iter ∉ iterations g2 ∧ (∃b. b ∈ g1 ∧ touches b a) ∨ gtouches g1 g2)``,
+       a.ident ∉ idents g2 ∧ (∃b. b ∈ g1 ∧ touches b a) ∨ gtouches g1 g2)``,
   simp[gtouches_def] >> metis_tac[]);
 
-val iterations_add_action = store_thm(
-  "iterations_add_action[simp]",
-  ``iterations (add_action a G) = a.iter INSERT iterations G``,
-  dsimp[iterations_thm, EXTENSION, EQ_IMP_THM] >> metis_tac[]);
+val idents_add_action = store_thm(
+  "idents_add_action[simp]",
+  ``idents (add_action a G) = a.ident INSERT idents G``,
+  dsimp[idents_thm, EXTENSION, EQ_IMP_THM] >> metis_tac[]);
 
-val iterations_add_postaction = store_thm(
-  "iterations_add_postaction[simp]",
-  ``iterations (add_postaction a G) = a.iter INSERT iterations G``,
-  dsimp[iterations_thm, EXTENSION, EQ_IMP_THM] >> metis_tac[]);
+val idents_add_postaction = store_thm(
+  "idents_add_postaction[simp]",
+  ``idents (add_postaction a G) = a.ident INSERT idents G``,
+  dsimp[idents_thm, EXTENSION, EQ_IMP_THM] >> metis_tac[]);
 
-val iterations_emptyG = store_thm(
-  "iterations_emptyG[simp]",
-  ``iterations emptyG = ∅``,
-  simp[iterations_thm]);
+val idents_emptyG = store_thm(
+  "idents_emptyG[simp]",
+  ``idents emptyG = ∅``,
+  simp[idents_thm]);
 
-val iter_11 = store_thm(
-  "iter_11",
-  ``a1 ∈ G ∧ a2 ∈ G ⇒ (a1.iter = a2.iter ⇔ a1 = a2)``,
-  metis_tac[iter_INJ, INJ_THM]);
+val ident_11 = store_thm(
+  "ident_11",
+  ``a1 ∈ G ∧ a2 ∈ G ⇒ (a1.ident = a2.ident ⇔ a1 = a2)``,
+  metis_tac[ident_INJ, INJ_THM]);
 
 val add_action_EQ_emptyG = store_thm(
   "add_action_EQ_emptyG[simp]",
   ``add_action a G ≠ emptyG``,
-  disch_then (mp_tac o Q.AP_TERM `iterations`) >> simp[]);
+  disch_then (mp_tac o Q.AP_TERM `idents`) >> simp[]);
 
 val nonempty_wfG_has_points = store_thm(
   "nonempty_wfG_has_points",
@@ -662,7 +665,7 @@ val IN_emptyG = store_thm(
   simp[]);
 
 val ilink_def = Define`
-  ilink i G j <=> i ∈ iterations G ∧ j ∈ iterations G ∧
+  ilink i G j <=> i ∈ idents G ∧ j ∈ idents G ∧
                   fmap G ' i -<G>-> fmap G ' j
 `;
 
@@ -718,56 +721,56 @@ val fmap_ONTO = store_thm(
 val fmap_11 = store_thm(
   "fmap_11",
   ``∀i j.
-     i ∈ iterations g ∧ j ∈ iterations g ⇒ (fmap g ' i = fmap g ' j ⇔ i = j)``,
-  simp[EQ_IMP_THM] >> rpt strip_tac >> fs[iterations_thm] >> rw[] >>
-  pop_assum mp_tac >> simp[fmap_inverts_iter]);
+     i ∈ idents g ∧ j ∈ idents g ⇒ (fmap g ' i = fmap g ' j ⇔ i = j)``,
+  simp[EQ_IMP_THM] >> rpt strip_tac >> fs[idents_thm] >> rw[] >>
+  pop_assum mp_tac >> simp[fmap_inverts_ident]);
 
-val BIJ_iterations_nodes = store_thm(
-  "BIJ_iterations_nodes",
-  ``BIJ (λa. a.iter) (ag_nodes g) (iterations g)``,
-  simp[BIJ_IFF_INV] >> conj_tac >- simp[iterations_thm] >>
+val BIJ_idents_nodes = store_thm(
+  "BIJ_idents_nodes",
+  ``BIJ (λa. a.ident) (ag_nodes g) (idents g)``,
+  simp[BIJ_IFF_INV] >> conj_tac >- simp[idents_thm] >>
   qexists_tac `FAPPLY (fmap g)` >> rpt strip_tac >>
-  fs[iterations_thm, fmap_inverts_iter]);
+  fs[idents_thm, fmap_inverts_ident]);
 
 (* ----------------------------------------------------------------------
     Properties of imap
    ---------------------------------------------------------------------- *)
 
-val iterations_imap = store_thm(
-  "iterations_imap",
-  ``INJ f (iterations G) UNIV ⇒
-    iterations (imap f G) = IMAGE f (iterations G)``,
-  dsimp[iterations_thm, EXTENSION]);
+val idents_imap = store_thm(
+  "idents_imap",
+  ``INJ f (idents G) UNIV ⇒
+    idents (imap f G) = IMAGE f (idents G)``,
+  dsimp[idents_thm, EXTENSION]);
 
 val add_action_id = store_thm(
   "add_action_id",
-  ``add_action a G = G ⇔ a.iter ∈ iterations G ``,
+  ``add_action a G = G ⇔ a.ident ∈ idents G ``,
   reverse eq_tac >- simp[graph_equality, add_action_edges] >>
   disch_then (mp_tac o Q.AP_TERM `λg. a ∈ g`) >> simp[] >>
-  simp[iterations_thm] >> metis_tac[]);
+  simp[idents_thm] >> metis_tac[]);
 
 val fds = full_simp_tac (srw_ss() ++ boolSimps.DNF_ss)
 val imap_add_action = store_thm(
   "imap_add_action",
-  ``INJ f (a.iter INSERT iterations G) UNIV ⇒
+  ``INJ f (a.ident INSERT idents G) UNIV ⇒
     (imap f (add_action a G) =
-     add_action (a with iter updated_by f) (imap f G))``,
+     add_action (a with ident updated_by f) (imap f G))``,
   strip_tac >>
-  `INJ f (iterations G) UNIV` by metis_tac[INJ_INSERT] >>
-  Cases_on `a.iter ∈ iterations G`
+  `INJ f (idents G) UNIV` by metis_tac[INJ_INSERT] >>
+  Cases_on `a.ident ∈ idents G`
   >- (`add_action a G = G` by simp[graph_equality, add_action_edges] >>
-      simp[add_action_id, iterations_imap]) >>
-  simp[graph_equality, imap_edges, IN_imap, iterations_imap, imap_edges,
+      simp[add_action_id, idents_imap]) >>
+  simp[graph_equality, imap_edges, IN_imap, idents_imap, imap_edges,
        add_action_edges] >> dsimp[] >> rpt strip_tac
   >- (fs[INJ_THM] >> metis_tac[]) >>
   `∀a1 a2. (a1 = a ∨ a1 ∈ G) ∧ (a2 = a ∨ a2 ∈ G) ⇒
-           (a1 with iter updated_by f = a2 with iter updated_by f ⇔
+           (a1 with ident updated_by f = a2 with ident updated_by f ⇔
             a1 = a2)`
-    by (simp[EQ_IMP_THM] >> fds [INJ_THM, iterations_thm] >>
+    by (simp[EQ_IMP_THM] >> fds [INJ_THM, idents_thm] >>
         simp[action_component_equality]) >>
   eq_tac >> rpt strip_tac
   >- (csimp[] >> disj1_tac >> spose_not_then strip_assume_tac >>
-      qpat_assum `f XX = f YY` mp_tac >> fds [INJ_THM, iterations_thm] >>
+      qpat_assum `f XX = f YY` mp_tac >> fds [INJ_THM, idents_thm] >>
       metis_tac[])
   >- metis_tac[]
   >- (csimp[] >> rw[] >> fs[]) >>
@@ -779,12 +782,12 @@ val INJ_COMPOSE2 = prove(
 
 val imap_imap_o = store_thm(
   "imap_imap_o",
-  ``INJ (f o g) (iterations G) UNIV ⇒ imap f (imap g G) = imap (f o g) G``,
+  ``INJ (f o g) (idents G) UNIV ⇒ imap f (imap g G) = imap (f o g) G``,
   strip_tac >> imp_res_tac INJ_COMPOSE2 >>
-  dsimp[graph_equality, IN_imap, imap_edges, iterations_imap]);
+  dsimp[graph_equality, IN_imap, imap_edges, idents_imap]);
 
-val iter_noop = prove(
-  ``a with iter updated_by (λn. n) = a``,
+val ident_noop = prove(
+  ``a with ident updated_by (λn. n) = a``,
   simp[action_component_equality]);
 
 val INJ_ID_UNIV = prove(
@@ -794,20 +797,20 @@ val INJ_ID_UNIV = prove(
 val imap_ID = store_thm(
   "imap_ID[simp]",
   ``imap (λn. n) G = G``,
-  dsimp[graph_equality, imap_edges, INJ_ID_UNIV, iter_noop]);
+  dsimp[graph_equality, imap_edges, INJ_ID_UNIV, ident_noop]);
 
 val imap_CONG = store_thm(
   "imap_CONG",
-  ``G = G' ⇒ (∀a. a ∈ iterations G' ⇒ f a = f' a) ⇒
+  ``G = G' ⇒ (∀a. a ∈ idents G' ⇒ f a = f' a) ⇒
     imap f G = imap f' G'``,
-  rpt strip_tac >> rw[] >> Cases_on `INJ f (iterations G) UNIV`
-  >- (`∀a. a ∈ G ⇒ a with iter updated_by f = a with iter updated_by f'`
-        by (fds[iterations_thm] >> rpt strip_tac >>
+  rpt strip_tac >> rw[] >> Cases_on `INJ f (idents G) UNIV`
+  >- (`∀a. a ∈ G ⇒ a with ident updated_by f = a with ident updated_by f'`
+        by (fds[idents_thm] >> rpt strip_tac >>
             simp[action_component_equality]) >>
-      `INJ f' (iterations G) UNIV` by (fs[INJ_THM] >> metis_tac[]) >>
+      `INJ f' (idents G) UNIV` by (fs[INJ_THM] >> metis_tac[]) >>
       dsimp[graph_equality, imap_edges] >> csimp[] >> rpt strip_tac >>
       eq_tac >> rpt strip_tac >> csimp[] >> metis_tac[IN_edges]) >>
-  `¬INJ f' (iterations G) UNIV` by (fs[INJ_THM] >> metis_tac[]) >>
+  `¬INJ f' (idents G) UNIV` by (fs[INJ_THM] >> metis_tac[]) >>
   simp[imap_id]);
 
 (* ----------------------------------------------------------------------
@@ -816,20 +819,20 @@ val imap_CONG = store_thm(
 
 val IN_FOLD_add_action = store_thm(
   "IN_FOLD_add_action",
-  ``ALL_DISTINCT l ∧ (∀x y. (f x).iter = (f y).iter ⇔ x = y) ⇒
+  ``ALL_DISTINCT l ∧ (∀x y. (f x).ident = (f y).ident ⇔ x = y) ⇒
     ∀a. a ∈ FOLDR (add_action o f) emptyG l ⇔ ∃i. MEM i l ∧ a = f i``,
   Induct_on `l` >> simp[] >> rpt strip_tac >>
-  simp[iterations_thm] >> metis_tac[]);
+  simp[idents_thm] >> metis_tac[]);
 
 (* the ALL_DISTINCT assumption is reasonable given our setting *)
 val FOLD_add_action_edges_ALL_DISTINCT = store_thm(
   "FOLD_add_action_edges_ALL_DISTINCT",
-  ``ALL_DISTINCT l ∧ (∀x y. (f x).iter = (f y).iter ⇔ x = y) ⇒
+  ``ALL_DISTINCT l ∧ (∀x y. (f x).ident = (f y).ident ⇔ x = y) ⇒
     (a1 -<FOLDR (add_action o f) emptyG l>-> a2 ⇔
      ∃i j. i < j ∧ j < LENGTH l ∧ a1 = f (EL i l) ∧ a2 = f (EL j l) ∧
            touches a1 a2)``,
   Induct_on `l` >> simp[IN_FOLD_add_action, add_action_edges] >>
-  simp[iterations_thm] >> qx_gen_tac `h` >> strip_tac >>
+  simp[idents_thm] >> qx_gen_tac `h` >> strip_tac >>
   fs[] >> qpat_assum `XX a1 a2 ⇔ YY` kall_tac >> eq_tac >> strip_tac >| [
     qmatch_assum_rename_tac `MEM i l` [] >>
     `∃n. n < LENGTH l ∧ i = EL n l` by metis_tac[MEM_EL] >>
@@ -850,10 +853,10 @@ val FOLD_add_action_edges_ALL_DISTINCT = store_thm(
 
 val FOLDR_add_action_nodes = store_thm(
   "FOLDR_add_action_nodes",
-  ``ALL_DISTINCT (MAP action_iter l) ∧
-    DISJOINT (IMAGE action_iter (set l)) (iterations G) ⇒
+  ``ALL_DISTINCT (MAP action_ident l) ∧
+    DISJOINT (IMAGE action_ident (set l)) (idents G) ⇒
     ag_nodes (FOLDR add_action G l) = ag_nodes G ∪ set l``,
-  simp[EXTENSION] >> Induct_on `l` >> simp[iterations_thm] >>
+  simp[EXTENSION] >> Induct_on `l` >> simp[idents_thm] >>
   metis_tac[MEM_MAP]);
 
 val INJ_COMPOSE_IMAGE = store_thm(
@@ -863,8 +866,8 @@ val INJ_COMPOSE_IMAGE = store_thm(
 
 val FOLDR_add_iterupd = store_thm(
   "FOLDR_add_iterupd",
-  ``INJ g (iterations (FOLDR (add_action o f) emptyG l)) UNIV ⇒
-    FOLDR (add_action o (λa. a with iter updated_by g) o f) emptyG l =
+  ``INJ g (idents (FOLDR (add_action o f) emptyG l)) UNIV ⇒
+    FOLDR (add_action o (λa. a with ident updated_by g) o f) emptyG l =
     imap g (FOLDR (add_action o f) emptyG l)``,
   Induct_on `l` >> simp[] >> rpt strip_tac >>
   simp[imap_add_action] >>
@@ -901,7 +904,7 @@ val genEvalG_total = store_thm(
 
 val genEvalG_det = store_thm(
   "genEvalG_det",
-  ``(∀a1 a2 s. ¬touches a1 a2 ∧ a1.iter ≠ a2.iter ⇒
+  ``(∀a1 a2 s. ¬touches a1 a2 ∧ a1.ident ≠ a2.ident ⇒
                ap a2 (ap a1 s) = ap a1 (ap a2 s)) ⇒
     ∀s0 g s1 s2. genEvalG ap s0 g s1 ∧ genEvalG ap s0 g s2 ⇒ s1 = s2``,
   strip_tac >> rpt gen_tac >> map_every qid_spec_tac [`s0`, `s1`, `s2`] >>
@@ -921,7 +924,7 @@ val genEvalG_det = store_thm(
   Cases_on `a1 = a2`
   >- (`gCARD (g \\ a2) < n` by simp[] >> metis_tac[]) >>
   `¬touches a1 a2` by metis_tac[touching_actions_link] >>
-  `a1.iter ≠ a2.iter` by metis_tac[iter_11] >>
+  `a1.ident ≠ a2.ident` by metis_tac[ident_11] >>
   `a2 ∈ g \\ a1 ∧ a1 ∈ g \\ a2` by simp[] >>
   `g \\ a2 \\ a1 = g \\ a1 \\ a2`
     by (simp[graph_equality] >> metis_tac[]) >>
@@ -935,10 +938,10 @@ val genEvalG_det = store_thm(
 
 val genEvalG_imap_irrelevance = store_thm(
   "genEvalG_imap_irrelevance",
-  ``(∀a f s. ap (a with iter updated_by f) s = ap a s) ⇒
+  ``(∀a f s. ap (a with ident updated_by f) s = ap a s) ⇒
     ∀s0 G s. genEvalG ap s0 G s ⇒ genEvalG ap s0 (imap f G) s``,
   strip_tac >> map_every qx_gen_tac [`s0`, `G`, `s`] >>
-  reverse (Cases_on `INJ f (iterations G) UNIV`)
+  reverse (Cases_on `INJ f (idents G) UNIV`)
   >- simp[imap_id] >>
   pop_assum (fn inj => disch_then (fn g => mp_tac inj >> mp_tac g)) >>
   map_every qid_spec_tac [`s`, `G`, `s0`] >>
@@ -947,13 +950,13 @@ val genEvalG_imap_irrelevance = store_thm(
   dsimp[imap_edges] >>
   qexists_tac `a` >> simp[] >>
   `∀a1 a2. a1 ∈ G ∧ a2 ∈ G ⇒
-           (a1 with iter updated_by f = a2 with iter updated_by f ⇔
+           (a1 with ident updated_by f = a2 with ident updated_by f ⇔
             a1 = a2)`
-    by (rpt strip_tac >> fds[INJ_THM, iterations_thm] >> simp[EQ_IMP_THM] >>
+    by (rpt strip_tac >> fds[INJ_THM, idents_thm] >> simp[EQ_IMP_THM] >>
         simp[action_component_equality]) >>
   reverse conj_tac
-  >- (`INJ f (iterations (G \\ a)) UNIV` by fds[INJ_THM, iterations_thm] >>
-      `imap f G \\ (a with iter updated_by f) = imap f (G \\ a)`
+  >- (`INJ f (idents (G \\ a)) UNIV` by fds[INJ_THM, idents_thm] >>
+      `imap f G \\ (a with ident updated_by f) = imap f (G \\ a)`
          suffices_by simp[] >>
       dsimp[graph_equality, imap_edges, EQ_IMP_THM, IN_imap] >> csimp[] >>
       rpt strip_tac
@@ -975,16 +978,16 @@ val gEVAL_def = new_specification(
 
 val gEVAL_thm = store_thm(
   "gEVAL_thm",
-  ``(∀a1 a2 s. ¬touches a1 a2 ∧ a1.iter ≠ a2.iter ⇒
+  ``(∀a1 a2 s. ¬touches a1 a2 ∧ a1.ident ≠ a2.ident ⇒
                ap a2 (ap a1 s) = ap a1 (ap a2 s)) ⇒
     (∀s0. gEVAL ap s0 emptyG = s0) ∧
-    (∀a s0. a.iter ∉ iterations g ⇒
+    (∀a s0. a.ident ∉ idents g ⇒
             gEVAL ap s0 (a ⊕ g) = gEVAL ap (ap a s0) g)``,
   rpt strip_tac
   >- (`genEvalG ap s0 emptyG s0` by simp[genEvalG_rules] >>
       metis_tac[gEVAL_def, genEvalG_det]) >>
   `a ∈ a ⊕ g` by simp[] >>
-  `a ∉ g` by (strip_tac >> fs[iterations_thm]) >>
+  `a ∉ g` by (strip_tac >> fs[idents_thm]) >>
   `∀a'. a' ∈ a ⊕ g ⇒ a' -<a ⊕ g>/-> a`
      by (dsimp[add_action_edges] >> metis_tac[IN_edges]) >>
   `genEvalG ap (ap a s0) g (gEVAL ap (ap a s0) g)` by metis_tac[gEVAL_def] >>
@@ -996,8 +999,8 @@ val gEVAL_thm = store_thm(
 
 val gEVAL_imap_irrelevance = store_thm(
   "gEVAL_imap_irrelevance",
-  ``(∀a f s. ap (a with iter updated_by f) s = ap a s) ∧
-    (∀a1 a2 s. ¬(a1 ∼ₜ a2) ∧ a1.iter ≠ a2.iter ⇒
+  ``(∀a f s. ap (a with ident updated_by f) s = ap a s) ∧
+    (∀a1 a2 s. ¬(a1 ∼ₜ a2) ∧ a1.ident ≠ a2.ident ⇒
                ap a2 (ap a1 s) = ap a1 (ap a2 s)) ⇒
     ∀s0 f G. gEVAL ap s0 (imap f G) = gEVAL ap s0 G``,
   rpt strip_tac >>
@@ -1009,7 +1012,7 @@ val gEVAL_imap_irrelevance = store_thm(
 
 val graph_ind = store_thm(
   "graph_ind",
-  ``∀P. P emptyG ∧ (∀a g. P g ∧ a ∉ g ∧ a.iter ∉ iterations g ⇒ P (a ⊕ g)) ⇒
+  ``∀P. P emptyG ∧ (∀a g. P g ∧ a ∉ g ∧ a.ident ∉ idents g ⇒ P (a ⊕ g)) ⇒
         ∀g. P g``,
   rpt strip_tac >>
   Induct_on `gCARD g` >> simp[] >> rpt strip_tac >>
@@ -1019,17 +1022,17 @@ val graph_ind = store_thm(
   qmatch_assum_rename_tac `SUC n = gCARD g` [] >>
   `gCARD (g \\ a) = n` by simp[gCARD_gDELETE] >>
   `a ⊕ (g \\ a) = g`
-    by (dsimp[graph_equality, iterations_thm, gDELETE_edges,
+    by (dsimp[graph_equality, idents_thm, gDELETE_edges,
               add_action_edges] >> conj_tac
-        >- metis_tac[iter_11] >>
+        >- metis_tac[ident_11] >>
         dsimp[EQ_IMP_THM] >> rpt strip_tac
         >- metis_tac[touching_actions_link] >>
         qmatch_assum_rename_tac `a1 -<g>-> a2` [] >>
         `a ≠ a2` by metis_tac[] >> simp[] >>
         Cases_on `a = a1` >> simp[] >>
-        metis_tac[IN_edges, iter_11]) >>
-  `a.iter ∉ iterations (g \\ a)`
-    by (dsimp[iterations_thm] >> metis_tac[iter_11]) >>
+        metis_tac[IN_edges, ident_11]) >>
+  `a.ident ∉ idents (g \\ a)`
+    by (dsimp[idents_thm] >> metis_tac[ident_11]) >>
   `P (g \\ a)` by metis_tac[] >>
   `a ∉ g \\ a` by simp[] >>
   `P (a ⊕ g \\ a)` by metis_tac[] >>
@@ -1041,7 +1044,7 @@ val graph_ind = store_thm(
 
 val add_postaction_commutes = store_thm(
   "add_postaction_commutes",
-  ``∀a1 a2 g. ¬touches a1 a2 ∧ a1.iter ≠ a2.iter ⇒
+  ``∀a1 a2 g. ¬touches a1 a2 ∧ a1.ident ≠ a2.ident ⇒
               add_postaction a2 (add_postaction a1 g) =
               add_postaction a1 (add_postaction a2 g)``,
   rpt strip_tac >>
@@ -1059,17 +1062,17 @@ val merge_graph_thm = save_thm(
 val IN_merge_graph = store_thm(
   "IN_merge_graph[simp]",
   ``a ∈ merge_graph g1 g2 ⇔
-     a ∈ g1 ∨ a.iter ∉ iterations g1 ∧ a ∈ g2``,
+     a ∈ g1 ∨ a.ident ∉ idents g1 ∧ a ∈ g2``,
   map_every qid_spec_tac [`a`, `g1`, `g2`] >> ho_match_mp_tac graph_ind >>
   simp[merge_graph_thm] >> rpt gen_tac >> strip_tac >>
   dsimp[EQ_IMP_THM] >> rpt strip_tac >>
-  qmatch_assum_rename_tac `b.iter ∉ iterations g1` [] >>
-  Cases_on `a.iter = b.iter` >> fs[iterations_thm]);
+  qmatch_assum_rename_tac `b.ident ∉ idents g1` [] >>
+  Cases_on `a.ident = b.ident` >> fs[idents_thm]);
 
-val iterations_merge_graph = store_thm(
-  "iterations_merge_graph[simp]",
-  ``iterations (merge_graph g1 g2) = iterations g1 ∪ iterations g2``,
-  dsimp[iterations_thm, EXTENSION] >> metis_tac[iter_11]);
+val idents_merge_graph = store_thm(
+  "idents_merge_graph[simp]",
+  ``idents (merge_graph g1 g2) = idents g1 ∪ idents g2``,
+  dsimp[idents_thm, EXTENSION] >> metis_tac[ident_11]);
 
 val add_postaction_empty = store_thm(
   "add_postaction_empty[simp]",
@@ -1078,16 +1081,16 @@ val add_postaction_empty = store_thm(
 
 val add_action_add_postaction_ASSOC = store_thm(
   "add_action_add_postaction_ASSOC",
-  ``a.iter ≠ b.iter ⇒
+  ``a.ident ≠ b.ident ⇒
     add_postaction b (a ⊕ g) = a ⊕ (add_postaction b g)``,
   dsimp[graph_equality, IN_add_postaction, add_postaction_edges,
-        add_action_edges, iterations_thm] >> metis_tac[]);
+        add_action_edges, idents_thm] >> metis_tac[]);
 
 val merge_graph_postaction_ASSOC = store_thm(
   "merge_graph_postaction_ASSOC",
   ``merge_graph g1 (add_postaction a g2) =
     add_postaction a (merge_graph g1 g2)``,
-  Cases_on `a.iter ∈ iterations g2`
+  Cases_on `a.ident ∈ idents g2`
   >- (`add_postaction a g2 = g2`
         by simp[graph_equality, add_postaction_edges] >>
       `add_postaction a (merge_graph g1 g2) = merge_graph g1 g2`
@@ -1101,7 +1104,7 @@ val merge_graph_postaction_ASSOC = store_thm(
 
 val merge_graph_addaction_ASSOC = store_thm(
   "merge_graph_addaction_ASSOC",
-  ``a.iter ∉ iterations g2 ⇒ merge_graph (a ⊕ g1) g2 = a ⊕ merge_graph g1 g2``,
+  ``a.ident ∉ idents g2 ⇒ merge_graph (a ⊕ g1) g2 = a ⊕ merge_graph g1 g2``,
   map_every qid_spec_tac [`a`, `g1`, `g2`] >> ho_match_mp_tac graph_ind >>
   simp[merge_graph_thm, add_action_add_postaction_ASSOC]);
 
@@ -1130,7 +1133,7 @@ val add_postaction_EQ_add_action = store_thm(
 
 val nontouching_merge_COMM = store_thm(
   "nontouching_merge_COMM",
-  ``∀g1 g2. ¬gtouches g1 g2 ∧ DISJOINT (iterations g1) (iterations g2) ⇒
+  ``∀g1 g2. ¬gtouches g1 g2 ∧ DISJOINT (idents g1) (idents g2) ⇒
             merge_graph g1 g2 = merge_graph g2 g1``,
   ho_match_mp_tac graph_ind >> simp[merge_graph_thm] >> rpt strip_tac >>
   `add_postaction a g2 = a ⊕ g2` by metis_tac[add_postaction_EQ_add_action] >>
@@ -1141,9 +1144,9 @@ val gtouches_imap = store_thm(
   ``(gtouches (imap f g1) g2 ⇔ gtouches g1 g2) ∧
     (gtouches g1 (imap f g2) ⇔ gtouches g1 g2)``,
   simp[gtouches_def] >> conj_tac
-  >- (Cases_on `INJ f (iterations g1) UNIV` >>
+  >- (Cases_on `INJ f (idents g1) UNIV` >>
       simp[IN_imap, PULL_EXISTS, imap_id] >> metis_tac[])
-  >- (Cases_on `INJ f (iterations g2) UNIV` >>
+  >- (Cases_on `INJ f (idents g2) UNIV` >>
       simp[IN_imap, PULL_EXISTS, imap_id] >> metis_tac[]))
 
 val _ = export_theory();

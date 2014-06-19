@@ -17,9 +17,9 @@ val eval_def = Define`
 
 val apply_action_def = Define`
   apply_action a (A:'a mvector) =
-    case a.write of
-        NONE => A
-      | SOME w => update A w (a.expr (MAP (vsub A) a.reads))
+    case a.writes of
+        [] => A
+      | (w::_) => update A w (a.data (MAP (vsub A) a.reads))
 `;
 
 val MAP_vsub = store_thm(
@@ -32,14 +32,19 @@ val nontouching_actions_commute = store_thm(
   ``¬touches a1 a2 ⇒
     apply_action a1 (apply_action a2 A) = apply_action a2 (apply_action a1 A)``,
   simp[touches_def, apply_action_def, vector_EQ] >> rpt strip_tac >>
-  map_every Cases_on [`a1.write`, `a2.write`] >> fs[] >>
+  map_every Cases_on [`a1.writes`, `a2.writes`] >> fs[] >>
   ONCE_REWRITE_TAC [update_sub] >> simp[] >>
-  qpat_assum `aa.write = SOME xx` mp_tac >>
-  qmatch_assum_rename_tac `a1.write = SOME w1` [] >>
+  qpat_assum `aa.writes = xx` mp_tac >>
+  qmatch_assum_rename_tac `a1.writes = w1::ws1` [] >> strip_tac >>
+  `w1 ≠ HD a2.writes` by (simp[] >> metis_tac[]) >> pop_assum mp_tac >> simp[]>>
+  strip_tac >> simp[] >>
+  `¬MEM (HD a2.writes) a1.reads` by (simp[] >> metis_tac[]) >>
+  pop_assum mp_tac >> simp[] >> strip_tac >>
   Cases_on `i = w1` >> simp[]
   >- (simp[SimpRHS, update_sub] >>
-      reverse (Cases_on `w1 < vsz A`) >>
+      Cases_on `w1 < vsz A` >>
       simp[update_sub, MAP_vsub]) >>
+  `¬MEM w1 a2.reads` by metis_tac[] >>
   simp[update_sub, MAP_vsub]);
 
 val _ = overload_on("evalG", ``genEvalG apply_action``)
@@ -52,8 +57,8 @@ val graphs_evaluate_deterministically = store_thm(
 
 val mkEAction_def = Define`
   mkEAction wf rfs body i =
-    <| write := SOME (wf i); reads := rfs <*> [i];
-       expr := body i; iter := i |>
+    <| writes := [wf i]; reads := rfs <*> [i];
+       data := body i; ident := i |>
 `;
 
 val mkEAction_11 = store_thm(
@@ -87,10 +92,10 @@ val eval_apply_action = store_thm(
   rpt (AP_TERM_TAC ORELSE AP_THM_TAC) >> Induct_on `rfs` >>
   simp[listTheory.LIST_APPLY_DEF]);
 
-val loop_to_graph_iterations = store_thm(
-  "loop_to_graph_iterations",
+val loop_to_graph_idents = store_thm(
+  "loop_to_graph_idents",
   ``loop_to_graph (lo,hi) wf rfs body = G ⇒
-      (∀a. a ∈ G ⇒ lo ≤ a.iter ∧ a.iter < hi) ∧
+      (∀a. a ∈ G ⇒ lo ≤ a.ident ∧ a.ident < hi) ∧
       (∀a1 a2. a1 -<G>-> a2 ⇒ a1 ∈ G ∧ a2 ∈ G)``,
   qid_spec_tac `G` >> Induct_on `hi - lo` >>
   ONCE_REWRITE_TAC [loop_to_graph_def] >- simp[] >>
@@ -98,7 +103,7 @@ val loop_to_graph_iterations = store_thm(
   disch_then (assume_tac o SYM) >> qx_gen_tac `G` >> simp[] >>
   `∃G0. loop_to_graph (lo + 1, hi) wf rfs body = G0` by simp[] >>
   `n = hi - (lo + 1)` by decide_tac >>
-  `(∀a. a ∈ G0 ⇒ lo + 1 ≤ a.iter ∧ a.iter < hi) ∧
+  `(∀a. a ∈ G0 ⇒ lo + 1 ≤ a.ident ∧ a.ident < hi) ∧
    ∀a1 a2. a1 -<G0>-> a2 ⇒ a1 ∈ G0 ∧ a2 ∈ G0` by metis_tac[] >>
   rw[] >> fs[mkEAction_def]
   >- (res_tac >> decide_tac)
@@ -106,11 +111,11 @@ val loop_to_graph_iterations = store_thm(
   >- (fs[add_action_edges] >> metis_tac[])
   >- (fs[add_action_edges] >> metis_tac[]));
 
-val mkEAction_iter = store_thm(
-  "mkEAction_iter",
-  ``(mkEAction wf rfs body i).iter = i``,
+val mkEAction_ident = store_thm(
+  "mkEAction_ident",
+  ``(mkEAction wf rfs body i).ident = i``,
   simp[mkEAction_def]);
-val _ = export_rewrites ["mkEAction_iter"]
+val _ = export_rewrites ["mkEAction_ident"]
 
 val loop_to_graph_correct = store_thm(
   "loop_to_graph_correct",
@@ -125,15 +130,15 @@ val loop_to_graph_correct = store_thm(
   match_mp_tac (CONJUNCT2 evalG_rules) >>
   `∃G. loop_to_graph (lo + 1, hi) wf rfs body = G` by simp[] >>
   simp[IN_add_action, add_action_edges] >>
-  `lo ∉ iterations G`
-    by (simp[iterations_thm] >> qx_gen_tac `a` >>
+  `lo ∉ idents G`
+    by (simp[idents_thm] >> qx_gen_tac `a` >>
         Cases_on `a ∈ G` >> simp[] >>
-        `lo + 1 ≤ a.iter` by metis_tac[loop_to_graph_iterations] >>
+        `lo + 1 ≤ a.ident` by metis_tac[loop_to_graph_idents] >>
         decide_tac) >>
   `mkEAction wf rfs body lo ∉ G`
     by (strip_tac >>
-        Q.UNDISCH_THEN `lo ∉ iterations G` MP_TAC >> simp[] >>
-        simp[iterations_thm] >> qexists_tac `mkEAction wf rfs body lo` >>
+        Q.UNDISCH_THEN `lo ∉ idents G` MP_TAC >> simp[] >>
+        simp[idents_thm] >> qexists_tac `mkEAction wf rfs body lo` >>
         simp[]) >>
   simp[] >>
   qexists_tac `mkEAction wf rfs body lo` >>
@@ -149,16 +154,16 @@ val loop_to_graph_correct = store_thm(
   csimp[graph_equality, add_action_edges] >> (conj_tac >- metis_tac[]) >>
   metis_tac[IN_edges]);
 
-val apply_action_ignores_iter = store_thm(
-  "apply_action_ignores_iter",
-  ``apply_action (a with iter updated_by f) A = apply_action a A``,
+val apply_action_ignores_ident = store_thm(
+  "apply_action_ignores_ident",
+  ``apply_action (a with ident updated_by f) A = apply_action a A``,
   simp[apply_action_def]);
-val _ = export_rewrites ["apply_action_ignores_iter"]
+val _ = export_rewrites ["apply_action_ignores_ident"]
 
 val imap_irrelevance = save_thm(
   "imap_irrelevance",
   genEvalG_imap_irrelevance
-    |> C MATCH_MP (apply_action_ignores_iter |> Q.GENL [`A`, `f`, `a`]))
+    |> C MATCH_MP (apply_action_ignores_ident |> Q.GENL [`A`, `f`, `a`]))
 
 val INJ_COMPOSE' = prove(
   ``¬INJ f s UNIV ⇒ ¬INJ (g o f) s UNIV``,
@@ -222,7 +227,7 @@ val FOLDL_MAP_combins = store_thm(
 val mkEAction_o = store_thm(
   "mkEAction_o",
   ``mkEAction wf rfs body o f =
-    iter_fupd f o mkEAction (wf o f) (MAP (\rf. rf o f) rfs) (body o f)``,
+    ident_fupd f o mkEAction (wf o f) (MAP (\rf. rf o f) rfs) (body o f)``,
   simp[FUN_EQ_THM, mkEAction_def, SINGL_APPLY_PERMUTE, MAP_MAP_o,
        combinTheory.o_ABS_R, SINGL_APPLY_MAP]);
 
@@ -258,30 +263,30 @@ val same_graphs = store_thm(
     by simp[] >>
   `_ = FOLDR (add o γ) emptyG (MAP δ [0 ..< N])`
     by simp[GSYM MAP_MAP_o, FOLDR_MAP_o] >>
-  `add o γ = add_action o (λa. a with iter updated_by γ) o mk'`
+  `add o γ = add_action o (λa. a with ident updated_by γ) o mk'`
     by simp[Abbr`add`, Abbr`mk'`, Once FUN_EQ_THM, mkEAction_def,
             SINGL_APPLY_PERMUTE, SINGL_APPLY_MAP, MAP_MAP_o,
             combinTheory.o_ABS_R] >>
   pop_assum SUBST_ALL_TAC >>
   `ALL_DISTINCT (MAP δ [0 ..< N])` by simp[ALL_DISTINCT_MAP_INJ] >>
-  `∀x. (mk' x).iter = x` by simp[Abbr`mk'`] >>
-  `INJ (δ o γ) (iterations (FOLDR (add_action o mk') emptyG (MAP δ [0 ..< N])))
+  `∀x. (mk' x).ident = x` by simp[Abbr`mk'`] >>
+  `INJ (δ o γ) (idents (FOLDR (add_action o mk') emptyG (MAP δ [0 ..< N])))
                UNIV`
-    by dsimp[INJ_DEF, iterations_thm, IN_imap, imap_edges, MEM_MAP,
+    by dsimp[INJ_DEF, idents_thm, IN_imap, imap_edges, MEM_MAP,
              Abbr`add`, IN_FOLD_add_action, Abbr`mk'`] >>
-  `INJ γ (iterations (FOLDR (add_action o mk') emptyG (MAP δ [0 ..< N]))) UNIV`
-    by (dsimp[INJ_THM, IN_FOLD_add_action, MEM_MAP, iterations_thm] >>
+  `INJ γ (idents (FOLDR (add_action o mk') emptyG (MAP δ [0 ..< N]))) UNIV`
+    by (dsimp[INJ_THM, IN_FOLD_add_action, MEM_MAP, idents_thm] >>
         simp[Abbr`mk'`, mkEAction_def]) >>
   pop_assum (assume_tac o MATCH_MP FOLDR_add_iterupd) >>
   pop_assum SUBST_ALL_TAC >> simp[imap_imap_o] >>
   qabbrev_tac `G' = FOLDR (add_action o mk') emptyG (MAP δ [0 ..< N])` >>
-  `∀a. a ∈ G' ⇒ a.iter < N`
+  `∀a. a ∈ G' ⇒ a.ident < N`
     by (dsimp[Abbr`G'`, IN_FOLD_add_action, GSYM FOLDR_MAP_o, MEM_MAP,
               MAP_MAP_o] >>
         dsimp[Abbr`mk'`, mkEAction_def]) >>
   `imap (δ o γ) G' = imap (λi. i) G'`
     by (ho_match_mp_tac (REWRITE_RULE [AND_IMP_INTRO] imap_CONG) >>
-        dsimp[iterations_thm]) >>
+        dsimp[idents_thm]) >>
   simp[imap_ID] >> simp[Abbr`G'`] >>
   dsimp[graph_equality, IN_FOLD_add_action, MEM_MAP] >>
   conj_tac >- metis_tac[] >>
@@ -339,13 +344,15 @@ val correctness = store_thm(
              `rfs` |-> `MAP (λf. f o (γ:num->num)) rds`,
              `wf` |-> `wf o γ`, `body` |-> `body o γ`]
             loop_to_graph_correct) >>
-  mp_tac (INST_TYPE [alpha |-> ``:num``, beta |-> alpha] same_graphs) >> simp[] >>
+  mp_tac (INST_TYPE [alpha |-> ``:num``, beta |-> ``:α list -> α``]
+                    same_graphs) >>
+  simp[] >>
   disch_then SUBST_ALL_TAC >>
   qabbrev_tac `G = loop_to_graph (0,N) wf rds body` >>
-  `INJ δ (iterations G) UNIV`
-    by (dsimp[Abbr`G`, loop_to_graph_FOLDR, iterations_thm, INJ_DEF] >>
+  `INJ δ (idents G) UNIV`
+    by (dsimp[Abbr`G`, loop_to_graph_FOLDR, idents_thm, INJ_DEF] >>
         qabbrev_tac `mk = mkEAction wf rds body` >>
-        `∀x. (mk x).iter = x` by simp[Abbr`mk`] >>
+        `∀x. (mk x).ident = x` by simp[Abbr`mk`] >>
         dsimp [IN_FOLD_add_action]) >>
   metis_tac[imap_irrelevance, graphs_evaluate_deterministically]);
 
