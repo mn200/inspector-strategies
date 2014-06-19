@@ -5,7 +5,7 @@ open listTheory
 open pairTheory
 open PseudoCTheory
 open PseudoCPropsTheory
-open action_graphTheory
+open actionGraphTheory
 
 val _ = new_theory "forparConvert";
 
@@ -16,7 +16,7 @@ for (w ∈ 0 .. gdepth g) {
   parfor (p ∈ 0 .. wsizes[w])
     body[ v := wave_doms[wave_offs[w] + p] ]
 *)
-
+(*
 val simple_executor_equivalence = store_thm(
   "simple_executor_equivalence",
   ``graphOf i0 m0 (ForLoop v d body) = SOME(i,m,g) ⇒
@@ -33,7 +33,7 @@ val simple_executor_equivalence = store_thm(
                                             VarExpr p]))))) =
       SOME(i',m,g)``,
   NO_TAC);
-
+*)
 
 
 

@@ -9,6 +9,7 @@ open pred_setTheory finite_mapTheory
 open intLib
 open pairTheory listTheory rich_listTheory
 open boolSimps
+open indexedListsTheory
 
 val _ = new_theory "PseudoCProps";
 
@@ -213,8 +214,6 @@ val MEM_FOLDR_mlt = store_thm(
       `mlt $< FF (loopbag (f h) ⊎ FF)` by simp[Abbr`FF`] >>
       metis_tac[relationTheory.TC_RULES]) >>
   pop_assum SUBST_ALL_TAC >> simp[]);
-
-val pushG_def = Define`pushG v = imap (λi. i ++ [v])`
 
 val _ = Datatype`actionRW = Array aname int | Variable vname`
 
@@ -691,63 +690,6 @@ val pcg_eval_imap_irrelevance = store_thm(
   simp[pcg_eval_def] >> match_mp_tac gEVAL_imap_irrelevance >>
   simp[commutes_lemma] >> simp[apply_action_def]);
 
-val MAPi_def = Define`
-  (MAPi f [] = []) ∧
-  (MAPi f (h::t) = f 0 h :: MAPi (f o SUC) t)
-`;
-val _ = export_rewrites ["MAPi_def"]
-
-val LT_SUC = prove(
-  ``n < SUC m ⇔ n = 0 ∨ ∃n0. n = SUC n0 ∧ n0 < m``,
-  simp[EQ_IMP_THM] >> Cases_on `n` >> simp[]);
-
-val MEM_MAPi = store_thm(
-  "MEM_MAPi",
-  ``∀x f l. MEM x (MAPi f l) ⇔
-            ∃n. n < LENGTH l ∧ x = f n (EL n l)``,
-  Induct_on `l` >> simp[] >> pop_assum kall_tac >>
-  dsimp[EQ_IMP_THM, LT_SUC] >> metis_tac[]);
-
-val MAPi_CONG = store_thm(
-  "MAPi_CONG",
-  ``∀l1 l2 f1 f2.
-      l1 = l2 ∧ (∀x n. MEM x l2 ∧ n < LENGTH l2 ⇒ f1 n x = f2 n x) ⇒
-      MAPi f1 l1 = MAPi f2 l2``,
-  Induct_on `l1` >> dsimp[LT_SUC]);
-val _ = DefnBase.export_cong "MAPi_CONG"
-
-val MAPi_CONG' = store_thm(
-  "MAPi_CONG'",
-  ``l1 = l2 ⇒ (∀x n. (x = EL n l2) ⇒ n < LENGTH l2 ⇒ f1 n x = f2 n x) ⇒
-    MAPi f1 l1 = MAPi f2 l2``,
-  map_every qid_spec_tac [`f1`, `f2`, `l2`] >> Induct_on `l1` >>
-  dsimp[LT_SUC]);
-
-val LENGTH_MAPi = store_thm(
-  "LENGTH_MAPi[simp]",
-  ``∀f l. LENGTH (MAPi f l) = LENGTH l``,
-  Induct_on `l` >> simp[]);
-
-val MAP_MAPi = store_thm(
-  "MAP_MAPi[simp]",
-  ``∀f g l. MAP f (MAPi g l) = MAPi ((o) f o g) l``,
-  Induct_on `l` >> simp[]);
-
-val EL_MAPi = store_thm(
-  "EL_MAPi[simp]",
-  ``∀f n l. n < LENGTH l ⇒ EL n (MAPi f l) = f n (EL n l)``,
-  Induct_on `l` >> simp[] >> dsimp[LT_SUC]);
-
-val FOLDRi_def = Define`
-  (FOLDRi f a [] = a) ∧
-  (FOLDRi f a (h::t) = f 0 h (FOLDRi (f o SUC) a t))`
-val _ = export_rewrites ["FOLDRi_def"]
-
-val FOLDR_MAPi = store_thm(
-  "FOLDR_MAPi",
-  ``∀f g a l. FOLDR f a (MAPi g l) = FOLDRi ($o f o g) a l``,
-  Induct_on `l` >> simp[MAPi_def]);
-
 val expr_reads_def = tDefine "expr_reads" `
   (expr_reads m (VarExp vnm) = [Variable vnm]) ∧
   (expr_reads m (ISub a i_e) =
@@ -970,12 +912,6 @@ val SNOC_11 = prove(
   ``INJ (λi. i ++ [x]) s UNIV``,
   simp[INJ_THM]);
 
-val idents_pushG = store_thm(
-  "idents_pushG",
-  ``i ∈ idents (pushG n g) ⇔
-    ∃i0. i0 ∈ idents g ∧ i = i0 ++ [n]``,
-  simp[pushG_def, SNOC_11, idents_imap] >> metis_tac[]);
-
 val ilistLE_NIL = store_thm(
   "ilistLE_NIL[simp]",
   ``(x:num list) ≤ [] ⇔ (x = [])``,
@@ -1118,7 +1054,7 @@ val graphOf_idents_apart = store_thm(
   >- ((* Par *)
       map_every qx_gen_tac [`i0`, `m0`, `c`] >> strip_tac >>
       simp[Once graphOf_def, PULL_EXISTS, idents_FOLDR_merge_graph,
-           PULL_EXISTS, idents_pushG, ilistLT_stackInc,
+           PULL_EXISTS, ilistLT_stackInc,
            OPT_SEQUENCE_EQ_SOME, MEM_MAPi, MEM_MAP,
            EXISTS_PROD, combinTheory.o_ABS_R] >>
       qabbrev_tac `GG = λn. graphOf (i0 ++ [n;0]) m0 (EL n c)` >> simp[] >>
@@ -1275,26 +1211,6 @@ val INJ_UNION_DOMAIN = store_thm(
   >- (fs[DISJOINT_DEF, EXTENSION] >> metis_tac[])
   >- (fs[DISJOINT_DEF, EXTENSION] >> metis_tac[]));
 
-val add_postactionID = store_thm(
-  "add_postactionID",
-  ``a.ident ∈ idents g ⇒ add_postaction a g = g``,
-  simp[graph_equality, add_postaction_edges]);
-
-val imap_add_postaction = store_thm(
-  "imap_add_postaction",
-  ``INJ f (a.ident INSERT idents g) UNIV ⇒
-    imap f (add_postaction a g) =
-        add_postaction (a with ident updated_by f) (imap f g)``,
-  map_every qid_spec_tac [`a`, `g`] >> ho_match_mp_tac graph_ind >>
-  simp[imap_add_action] >> map_every qx_gen_tac [`a`, `g`] >>
-  strip_tac >> qx_gen_tac `b` >> strip_tac >>
-  `INJ f (a.ident INSERT idents g) UNIV` by fs[INJ_INSERT] >>
-  `INJ f (b.ident INSERT idents g) UNIV` by fs[INJ_INSERT] >>
-  Cases_on `b.ident = a.ident`
-  >- simp[add_postactionID, idents_imap] >>
-  `f a.ident ≠ f b.ident` by fs[INJ_THM] >>
-  fs[imap_add_action, add_action_add_postaction_ASSOC, INSERT_COMM]);
-
 val imap_merge_graph = store_thm(
   "imap_merge_graph",
   ``INJ f (idents g1 ∪ idents g2) UNIV ∧
@@ -1322,15 +1238,6 @@ val INJ_CONG = store_thm(
   "INJ_CONG",
   ``(∀x. x ∈ s ⇒ f x = g x) ⇒ (INJ f s t ⇔ INJ g s t)``,
   simp[INJ_THM]);
-
-val idents_FOLDRi_merge = store_thm(
-  "idents_FOLDRi_merge",
-  ``∀g.
-      idents (FOLDRi (λn c. merge_graph (g n c)) a l) =
-        BIGUNION (IMAGE (λi. idents (g i (EL i l))) (count (LENGTH l))) ∪
-        idents a``,
-  Induct_on `l` >> simp[combinTheory.o_ABS_L] >>
-  dsimp[Once EXTENSION, LT_SUC] >> metis_tac[]);
 
 val match_imp = let
   fun f th = SUBGOAL_THEN (lhand (concl th)) (mp_tac o MATCH_MP th)
@@ -1367,28 +1274,6 @@ val imap_FOLDRi_merge = store_thm(
         dsimp[Abbr`AG`, idents_FOLDRi_merge] >>
         metis_tac[DISJOINT_SYM]) >>
   simp[combinTheory.o_DEF]);
-
-val FOLDRi_CONG = store_thm(
-  "FOLDRi_CONG",
-  ``l1 = l2 ⇒
-    (∀n e a. n < LENGTH l2 ⇒ MEM e l2 ⇒ f1 n e a = f2 n e a) ⇒
-    a1 = a2 ⇒
-    FOLDRi f1 a1 l1 = FOLDRi f2 a2 l2``,
-  disch_then SUBST_ALL_TAC >> strip_tac >> disch_then SUBST_ALL_TAC >>
-  pop_assum mp_tac >>
-  map_every qid_spec_tac [`f1`, `f2`] >>
-  Induct_on `l2` >> simp[] >> dsimp[LT_SUC] >> rpt strip_tac >>
-  AP_TERM_TAC >> first_x_assum match_mp_tac >> simp[]);
-
-val FOLDRi_CONG' = store_thm(
-  "FOLDRi_CONG'",
-  ``l1 = l2 ∧ (∀n a. n < LENGTH l2 ⇒ f1 n (EL n l2) a = f2 n (EL n l2) a) ∧
-    a1 = a2 ⇒
-    FOLDRi f1 a1 l1 = FOLDRi f2 a2 l2``,
-  strip_tac >> rw[] >> pop_assum mp_tac >>
-  map_every qid_spec_tac [`f1`, `f2`] >> Induct_on `l1` >>
-  dsimp[LT_SUC] >> rpt strip_tac >> AP_TERM_TAC >>
-  first_x_assum match_mp_tac >> simp[]);
 
 val graphOf_starting_id_irrelevant = store_thm(
   "graphOf_starting_id_irrelevant",
@@ -1820,15 +1705,6 @@ val getReads_APPEND = store_thm(
   Cases_on `h` >> simp[getReads_def, lift2_lift2_1, lift2_lift2_2] >>
   map_every Cases_on [`getReads m l1`, `getReads m l2`] >> simp[]);
 
-val FOLDRi_APPEND = store_thm(
-  "FOLDRi_APPEND",
-  ``∀f. FOLDRi f a (l1 ++ l2) = FOLDRi f (FOLDRi (f o $+ (LENGTH l1)) a l2) l1``,
-  Induct_on `l1` >> simp[]
-  >- (gen_tac >> `f o $+ 0 = f` suffices_by simp[] >> simp[FUN_EQ_THM]) >>
-  rpt gen_tac >>
-  `f o SUC o $+ (LENGTH l1) = f o $+ (SUC (LENGTH l1))` suffices_by simp[] >>
-  simp[FUN_EQ_THM, arithmeticTheory.ADD_CLAUSES]);
-
 val pcg_eval_NONE = store_thm(
   "pcg_eval_NONE[simp]",
   ``∀g. pcg_eval g NONE = NONE``,
@@ -1956,25 +1832,6 @@ val pcg_eval_apply_action_diamond = store_thm(
   `∃mm. apply_action a (SOME m0') = SOME mm ∧
         apply_action b (SOME m2) = SOME mm`
     by metis_tac [successful_action_diamond] >> metis_tac[]);
-
-val IN_FOLDRi_merge_graph = store_thm(
-  "IN_FOLDRi_merge_graph",
-  ``(∀i. i < LENGTH list ⇒
-         DISJOINT (idents (f i (EL i list))) (idents acc)) ∧
-    (∀i j. i < j ∧ j < LENGTH list ⇒
-           DISJOINT (idents (f i (EL i list)))
-                    (idents (f j (EL j list)))) ⇒
-    (a ∈ FOLDRi (λn c. merge_graph (f n c)) acc list ⇔
-     a ∈ acc ∨ ∃i. i < LENGTH list ∧ a ∈ f i (EL i list))``,
-  qid_spec_tac `f` >>
-  Induct_on `list` >> dsimp[combinTheory.o_ABS_L, LT_SUC] >>
-  rw[EQ_IMP_THM] >> simp[]
-  >- metis_tac[]
-  >- (`a.ident ∈ idents acc` by simp[idents_thm] >>
-      fs[DISJOINT_DEF, EXTENSION] >> metis_tac[])
-  >- (`a.ident ∉ idents (f 0 h)` suffices_by metis_tac[] >>
-      `a.ident ∈ idents (f (SUC n0) (EL n0 list))` by simp[idents_thm] >>
-      fs[DISJOINT_DEF, EXTENSION] >> metis_tac[]))
 
 val mkWFA_def = Define`
   mkWFA a =
@@ -2238,168 +2095,6 @@ val graphOf_pcg_eval_diamond = store_thm(
     by metis_tac[graphOf_apply_action_diamond, touches_SYM] >>
   metis_tac[]);
 
-val pregraph_def = Define`
-  pregraph a G = ITSET (λb g. g \\ b) { b | b ∈ G ∧ b -<G>/-> a } G
-`;
-
-val pregraph_emptyG = store_thm(
-  "pregraph_emptyG[simp]",
-  ``pregraph a emptyG = emptyG``,
-  simp[pregraph_def, ITSET_EMPTY]);
-
-val ITSET_gDELETE_ALL = store_thm(
-  "ITSET_gDELETE_ALL",
-  ``∀g. ITSET (λb g. g \\ b) (ag_nodes g) g = emptyG``,
-  ho_match_mp_tac graph_ind >> simp[ITSET_EMPTY] >>
-  map_every qx_gen_tac [`a`, `g`] >> strip_tac >>
-  `ag_nodes (a ⊕ g) = a INSERT ag_nodes g` by simp[EXTENSION] >>
-  simp[] >>
-  `(a ⊕ g) \\ a = g`
-    by (simp[graph_equality, add_action_edges] >> metis_tac[IN_edges]) >>
-  `ITSET (λb g. g \\ b) (a INSERT ag_nodes g) (a ⊕ g) =
-   ITSET (λb g. g \\ b) (ag_nodes g DELETE a) ((λb g. g \\ b) a (a ⊕ g))`
-    suffices_by simp[DELETE_NON_ELEMENT_RWT] >>
-  match_mp_tac COMMUTING_ITSET_INSERT >> simp[gDELETE_commutes]);
-
-val pregreph_add_action_id = store_thm(
-  "pregreph_add_action_id[simp]",
-  ``a.ident ∉ idents g ⇒ pregraph a (a ⊕ g) = emptyG``,
-  dsimp[pregraph_def, add_action_edges] >> csimp[] >> strip_tac >>
-  `a ∉ g` by (strip_tac >> fs[idents_thm]) >>
-  simp[] >>
-  qmatch_abbrev_tac `ITSET (λb g. g \\ b) ss (a ⊕ g) = emptyG` >>
-  `ss = ag_nodes (a ⊕ g)`
-    by (simp[Abbr`ss`, EXTENSION] >> qx_gen_tac `e` >> eq_tac >> strip_tac >>
-        simp[] >> `e ≠ a` by metis_tac [] >> simp[] >>
-        metis_tac[IN_edges]) >>
-  simp[ITSET_gDELETE_ALL]);
-
-val pregraph_absent = store_thm(
-  "pregraph_absent",
-  ``b ∉ g ⇒ pregraph b g = emptyG``,
-  simp[pregraph_def] >> strip_tac >>
-  `∀a. a -<g>/-> b` by metis_tac[IN_edges] >>
-  simp[ITSET_gDELETE_ALL]);
-
-val pregraph_subset = store_thm(
-  "pregraph_subset",
-  ``∀g b. b ∈ pregraph a g ⇒ b ∈ g``,
-  simp[pregraph_def] >> rpt gen_tac >>
-  `∀s. FINITE s ⇒ ∀g. b ∈ ITSET (λb g. g \\ b) s g ⇒ b ∈ g`
-    suffices_by (disch_then match_mp_tac >>
-                 match_mp_tac SUBSET_FINITE_I >>
-                 qexists_tac `ag_nodes g` >> simp[SUBSET_DEF]) >>
-  Induct_on `FINITE s` >>
-  simp[ITSET_EMPTY, gDELETE_commutes, COMMUTING_ITSET_INSERT,
-       DELETE_NON_ELEMENT_RWT] >> rpt strip_tac >>
-  res_tac >> fs[]);
-
-val ITSET_DEL = prove(
-  ``∀s. FINITE s ⇒ ∀g a. a ∉ s ∧ a.ident ∉ idents g ⇒
-        ITSET (λb g. g \\ b) s (a ⊕ g) = a ⊕ ITSET (λb g. g \\ b) s g``,
-  Induct_on `FINITE s` >>
-  simp[ITSET_EMPTY, COMMUTING_ITSET_INSERT, gDELETE_commutes,
-       DELETE_NON_ELEMENT_RWT] >>
-  rpt strip_tac >>
-  `a.ident ∉ idents (g \\ e)` by (fs[idents_thm] >> metis_tac[]) >>
-  `(a ⊕ g) \\ e = a ⊕ (g \\ e)` suffices_by simp[] >>
-  simp[graph_equality, add_action_edges, EQ_IMP_THM] >> rpt strip_tac >>
-  simp[] >> metis_tac[]);
-
-val pregraph_add_action_1 = prove(
-  ``a.ident ∉ idents g ∧ a ≠ b ∧ b ∈ g ∧ a ∼ₜ b ⇒
-    pregraph b (a ⊕ g) = a ⊕ pregraph b g``,
-  simp[pregraph_def, add_action_edges] >> dsimp[] >> csimp[] >>
-  strip_tac >>
-  qmatch_abbrev_tac `ITSET del s1 (a ⊕ g) = a ⊕ ITSET del s2 g` >>
-  `a ∉ g` by (strip_tac >> fs[idents_thm]) >>
-  `s1 = s2`
-    by dsimp[EXTENSION, Abbr`s1`, Abbr`s2`, EQ_IMP_THM] >>
-  simp[Abbr`del`] >> `FINITE s2 ∧ a ∉ s2` suffices_by metis_tac[ITSET_DEL] >>
-  rpt strip_tac
-  >- (match_mp_tac SUBSET_FINITE_I >> qexists_tac `ag_nodes g` >>
-      simp[SUBSET_DEF, Abbr`s2`]) >>
-  qunabbrev_tac `s2` >> fs[]);
-
-val pregraph_add_action_2 = prove(
-  ``a.ident ∉ idents g ∧ a ≠ b ∧ b ∈ g ∧ a ≁ₜ b ⇒
-    pregraph b (a ⊕ g) = pregraph b g``,
-  simp[pregraph_def, add_action_edges] >> rpt strip_tac >>
-  `a ∉ g` by (strip_tac >> fs[idents_thm]) >>
-  qmatch_abbrev_tac `ITSET del s1 (a ⊕ g) = ITSET del s2 g` >>
-  `s1 = a INSERT s2`
-    by (dsimp[EXTENSION, Abbr`s1`, Abbr`s2`, EQ_IMP_THM] >> csimp[] >>
-        metis_tac[IN_edges]) >>
-  `FINITE s2`
-    by (match_mp_tac SUBSET_FINITE_I >> qexists_tac `ag_nodes g` >>
-        simp[SUBSET_DEF, Abbr`s2`]) >>
-  `a ∉ s2` by simp[Abbr`s2`] >>
-  simp[Abbr`del`, COMMUTING_ITSET_INSERT, gDELETE_commutes,
-       DELETE_NON_ELEMENT_RWT] >>
-  `(a ⊕ g) \\ a = g` suffices_by simp[] >>
-  simp[graph_equality, add_action_edges] >> metis_tac[IN_edges])
-
-val pregraph_add_action = store_thm(
-  "pregraph_add_action",
-  ``a.ident ∉ idents g ⇒
-    pregraph b (a ⊕ g) =
-      if b ∈ g then
-        (if a ∼ₜ b then add_action a else I)
-        (pregraph b g)
-      else emptyG``,
-  strip_tac >> `a ∉ g` by (strip_tac >> fs[idents_thm]) >>
-  rw[]
-  >- (`a ≠ b` by (strip_tac >> fs[]) >>
-      simp[pregraph_add_action_1])
-  >- (`a ≠ b` by (strip_tac >> fs[]) >>
-      simp[pregraph_add_action_2]) >>
-  Cases_on `a = b` >> rw[] >>
-  simp[pregraph_absent]);
-
-val pregraph_add_postaction = store_thm(
-  "pregraph_add_postaction",
-  ``∀g a. a ∈ g ⇒ pregraph a (add_postaction b g) = pregraph a g``,
-  ho_match_mp_tac graph_ind >> dsimp[] >> conj_tac
-  >- (map_every qx_gen_tac [`a`, `g`] >> strip_tac >>
-      Cases_on `a.ident = b.ident` >- simp[add_postactionID] >>
-      simp[add_action_add_postaction_ASSOC]) >>
-  map_every qx_gen_tac [`a`, `g`, `c`] >> rpt strip_tac >>
-  Cases_on `a.ident = b.ident` >- simp[add_postactionID] >>
-  simp[add_action_add_postaction_ASSOC, pregraph_add_action]);
-
-val pregraph_merge_graph = store_thm(
-  "pregraph_merge_graph",
-  ``∀g2 g1 a. a ∈ g1 ⇒ pregraph a (merge_graph g1 g2) = pregraph a g1``,
-  ho_match_mp_tac graph_ind >> dsimp[merge_graph_thm, pregraph_add_postaction]);
-
-val IN_FOLDRi_merge_graph' =
-    IN_FOLDRi_merge_graph |> Q.INST [`acc` |-> `emptyG`]
-                          |> SIMP_RULE (srw_ss()) []
-
-val pregraph_FOLDRi_merge_graph = store_thm(
-  "pregraph_FOLDRi_merge_graph",
-  ``∀list n f.
-      n < LENGTH list ∧ a ∈ f n (EL n list) ∧
-      (∀i j. i < j ∧ j < LENGTH list ⇒
-             ¬gtouches (f i (EL i list)) (f j (EL j list)) ∧
-             DISJOINT (idents (f i (EL i list)))
-                      (idents (f j (EL j list)))) ⇒
-      pregraph a (FOLDRi (λn c. merge_graph (f n c)) emptyG list) =
-      pregraph a (f n (EL n list))``,
-  Induct >> dsimp[LT_SUC, combinTheory.o_ABS_L] >> conj_tac
-  >- simp[pregraph_merge_graph] >>
-  map_every qx_gen_tac [`h`, `f`, `n`] >> strip_tac >>
-  first_x_assum (qspecl_then [`n`, `f o SUC`] mp_tac) >> simp[] >>
-  strip_tac >>
-  qmatch_abbrev_tac `pregraph a (merge_graph g1 g2) = pregraph a g3` >>
-  `a ∈ g2`
-    by (simp[IN_FOLDRi_merge_graph, Abbr`g2`] >> metis_tac[]) >>
-  `merge_graph g1 g2 = merge_graph g2 g1` suffices_by
-    (disch_then SUBST1_TAC >> simp[pregraph_merge_graph]) >>
-  match_mp_tac nontouching_merge_COMM >>
-  dsimp[idents_FOLDRi_merge, Abbr`g2`] >>
-  simp[gtouches_def, IN_FOLDRi_merge_graph] >>
-  metis_tac[gtouches_def]);
 
 val eval_graphOf_action = store_thm(
   "eval_graphOf_action",
@@ -2480,29 +2175,6 @@ val eval_graphOf_action = store_thm(
         (Q.ISPEC_THEN `LENGTH pfx`
            (Q.ISPEC_THEN `λn c. TOS (GG n m0 c)` mp_tac))
         pregraph_FOLDRi_merge_graph >> simp[]))
-
-val gtouches_SYM = store_thm(
-  "gtouches_SYM",
-  ``gtouches g1 g2 ⇒ gtouches g2 g1``,
-  metis_tac[gtouches_def, touches_SYM]);
-
-val MAPi_APPEND = store_thm(
-  "MAPi_APPEND",
-  ``∀l1 l2 f. MAPi f (l1 ++ l2) = MAPi f l1 ++ MAPi (f o (+) (LENGTH l1)) l2``,
-  Induct >> simp[] >> rpt gen_tac >> rpt (AP_TERM_TAC ORELSE AP_THM_TAC) >>
-  simp[FUN_EQ_THM]);
-
-val MAPi_GENLIST = store_thm(
-  "MAPi_GENLIST",
-  ``∀l f. MAPi f l = GENLIST (S f (combin$C EL l)) (LENGTH l)``,
-  Induct >> simp[GENLIST_CONS] >> rpt gen_tac >>
-  rpt (AP_TERM_TAC ORELSE AP_THM_TAC) >> simp[FUN_EQ_THM]);
-
-val GENLIST_CONG = store_thm(
-  "GENLIST_CONG",
-  ``(∀m. m < n ⇒ f1 m = f2 m) ⇒ GENLIST f1 n = GENLIST f2 n``,
-  map_every qid_spec_tac [`f1`, `f2`] >> Induct_on `n` >>
-  simp[GENLIST_CONS]);
 
 val _ = temp_overload_on ("MergeL", ``FOLDR merge_graph emptyG``)
 

@@ -137,27 +137,21 @@ val LT_MAX_SET = store_thm(
   REWRITE_TAC [GSYM AND_IMP_INTRO] >> qid_spec_tac `s` >>
   Induct_on `FINITE s` >> dsimp[MAX_SET_THM] >> metis_tac[]);
 
-val iterations_emptyG = store_thm(
-  "iterations_emptyG",
-  ``iterations emptyG = ∅``,
-  simp[iterations_thm]);
-val _ = export_rewrites ["iterations_emptyG"]
-
-val action_iter_mkEAction = store_thm(
-  "action_iter_mkEAction",
-  ``action_iter o mkEAction wf rds body = I``,
+val action_ident_mkEAction = store_thm(
+  "action_ident_mkEAction",
+  ``action_ident o mkEAction wf rds body = I``,
   simp[FUN_EQ_THM]);
 
-val iterations_FOLD_add_action = store_thm(
-  "iterations_FOLD_add_action",
-  ``iterations (FOLDR (add_action o mkEAction wf rds body) G l) =
-    iterations G ∪ set l``,
+val idents_FOLD_add_action = store_thm(
+  "idents_FOLD_add_action",
+  ``idents (FOLDR (add_action o mkEAction wf rds body) G l) =
+    idents G ∪ set l``,
   Induct_on `l` >> simp[EXTENSION] >> metis_tac[]);
 
-val IN_iterations_loop_to_graph = store_thm(
-  "IN_iterations_loop_to_graph",
-  ``i ∈ iterations (loop_to_graph (lo,hi) wf rds body) ⇔ lo ≤ i ∧ i < hi``,
-  dsimp[loop_to_graph_FOLDR, iterations_FOLD_add_action])
+val IN_idents_loop_to_graph = store_thm(
+  "IN_idents_loop_to_graph",
+  ``i ∈ idents (loop_to_graph (lo,hi) wf rds body) ⇔ lo ≤ i ∧ i < hi``,
+  dsimp[loop_to_graph_FOLDR, idents_FOLD_add_action])
 
 val FOLD_add_action_fmap = store_thm(
   "FOLD_add_action_fmap",
@@ -166,7 +160,7 @@ val FOLD_add_action_fmap = store_thm(
     mkEAction wf rds body i``,
   Induct_on `l` >> simp[fmap_add_action] >> qx_gen_tac `h` >>
   Cases_on `h = i` >> simp[] >> Cases_on `MEM i l` >> simp[] >>
-  dsimp[iterations_FOLD_add_action]);
+  dsimp[idents_FOLD_add_action]);
 
 val ua = REWRITE_RULE [markerTheory.Abbrev_def]
 
@@ -181,11 +175,11 @@ val ddepR_wave = store_thm(
        IMAGE (λk. wave G k + 1) { k | k -<G>#-> j}`
         by simp[EXTENSION] >> pop_assum SUBST_ALL_TAC >>
       match_mp_tac IMAGE_FINITE >> match_mp_tac SUBSET_FINITE_I >>
-      qexists_tac `iterations G` >>
-      simp[iterations_thm, SUBSET_DEF, ilink_def]) >>
+      qexists_tac `idents G` >>
+      simp[idents_thm, SUBSET_DEF, ilink_def]) >>
   dsimp[] >> qexists_tac `i` >> simp[ilink_def] >>
-  `iterations G = { k | lo ≤ k ∧ k < hi}`
-     by simp[EXTENSION, IN_iterations_loop_to_graph, Abbr`G`] >>
+  `idents G = { k | lo ≤ k ∧ k < hi}`
+     by simp[EXTENSION, IN_idents_loop_to_graph, Abbr`G`] >>
   `i < j` by fs[ddepR_def] >>
   simp[] >> simp[Abbr`G`, loop_to_graph_FOLDR,
                  FOLD_add_action_edges_ALL_DISTINCT] >>
