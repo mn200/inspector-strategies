@@ -489,6 +489,90 @@ val fmap0_inverts_ident = prove(
   rpt strip_tac >> SELECT_ELIM_TAC >> conj_tac >- metis_tac[] >>
   fs[wfG_def, INJ_THM] >> metis_tac[]);
 
+val polydata_upd_def = Define`
+  polydata_upd f a = <|
+    reads := a.reads ;
+    writes := a.writes ;
+    data := f a;
+    ident := a.ident
+  |>`
+
+val dgmap0_def = Define`
+  dgmap0 f g  =
+    <| nodes := IMAGE (polydata_upd f) g.nodes;
+       edges := RIMAGE (polydata_upd f) g.edges
+    |>
+`;
+
+val touches_dataupd = store_thm(
+  "touches_dataupd[simp]",
+  ``(polydata_upd f a ∼ₜ b ⇔ a ∼ₜ b) ∧
+    (b ∼ₜ polydata_upd f a ⇔ b ∼ₜ a)``,
+  simp[touches_def, polydata_upd_def]);
+
+val dataupd_equality = store_thm(
+  "dataupd_equality",
+  ``wfG g ∧ a ∈ g.nodes ∧ b ∈ g.nodes ⇒
+    (polydata_upd f a = polydata_upd f b ⇔ a = b)``,
+  strip_tac >> eq_tac >> simp[polydata_upd_def] >> simp[action_component_equality] >>
+  fs[wfG_def, INJ_THM]);
+
+val TC_RIMAGE_dataupd0 = prove(
+  ``∀a b.
+      (RIMAGE (polydata_upd f) g.edges)⁺ a b ⇒
+      wfG g ⇒
+      ∀a0 b0. a0 ∈ g.nodes ∧ b0 ∈ g.nodes ∧
+              a = polydata_upd f a0 ∧
+              b = polydata_upd f b0  ⇒
+              g.edges⁺ a0 b0``,
+  ho_match_mp_tac relationTheory.TC_STRONG_INDUCT_LEFT1 >> rpt conj_tac
+  >- (simp[PULL_FORALL] >> simp[RIMAGE_DEF, PULL_EXISTS] >> rpt strip_tac >>
+      metis_tac[dataupd_equality, wfG_def, relationTheory.TC_SUBSET]) >>
+  map_every qx_gen_tac [`a`, `a'`, `b`] >> rpt strip_tac >> fs[] >>
+  fs[RIMAGE_DEF] >> rw[] >>
+  `a0 = a''` by metis_tac[dataupd_equality, wfG_def] >> rw[] >>
+  metis_tac[relationTheory.TC_RULES, wfG_def]);
+
+val TC_RIMAGE_dataupd = SIMP_RULE (srw_ss()) [PULL_FORALL] TC_RIMAGE_dataupd0
+
+val wfG_dgmap = store_thm(
+  "wfG_dgmap",
+  ``wfG g ⇒ wfG (dgmap0 f g)``,
+  strip_tac >> `∀x. ¬g.edges x x` by metis_tac[wfG_irrefl] >>
+  `∀a b f. a ∈ g.nodes ∧ b ∈ g.nodes ⇒
+           (polydata_upd f a = polydata_upd f b ⇔ a = b)`
+    by metis_tac[dataupd_equality] >>
+  simp[wfG_def, dgmap0_def, PULL_EXISTS] >> rpt strip_tac
+  >- fs[wfG_def]
+  >- (fs[RIMAGE_DEF, wfG_def] >> metis_tac[])
+  >- (simp[RIMAGE_DEF, GSYM IMP_DISJ_THM] >> eq_tac >> strip_tac >> fs[wfG_def]
+      >- metis_tac[] >>
+      qmatch_assum_rename_tac `g.edges a1 a2` [] >>
+      map_every qx_gen_tac [`a3`, `a4`] >> rpt strip_tac >>
+      `a1 ∈ g.nodes ∧ a2 ∈g.nodes ∧ a3 ∈ g.nodes ∧ a4 ∈ g.nodes` by metis_tac[] >>
+      rpt (first_x_assum (mp_tac o assert (is_eq o concl))) >> simp[] >>
+      rpt strip_tac >> rw[] >> metis_tac[])
+  >- metis_tac[wfG_def, TC_RIMAGE_dataupd] >>
+  fs[wfG_def, INJ_THM, PULL_EXISTS, polydata_upd_def]);
+
+val wfEQ_dgmap0 = prove(
+  ``wfEQ g1 g2 ⇒ wfEQ (dgmap0 f g1) (dgmap0 f g2)``,
+  csimp[wfEQ_def, wfG_dgmap]);
+
+val dgmap0_emptyG = prove(
+  ``dgmap0 f emptyG0 = emptyG0``,
+  simp[emptyG0_def, dgmap0_def]);
+
+val IN_dgmap0 = prove(
+  ``a ∈ (dgmap0 f G).nodes ⇔ ∃a0. a0 ∈ G.nodes ∧ a = polydata_upd f a0``,
+  simp[dgmap0_def] >> metis_tac[]);
+
+val dgmap0_edges = prove(
+  ``(dgmap0 f G).edges a1 a2 ⇔
+    ∃a10 a20. G.edges a10 a20 ∧ a1 = polydata_upd f a10 ∧
+              a2 = polydata_upd f a20``,
+  simp[dgmap0_def, RIMAGE_DEF] >> metis_tac[]);
+
 fun define_quotient {types,defs,thms,poly_preserves,poly_respects,respects} =
     let
       fun mk(s,t) = {def_name = s ^ "_def", fname = s, fixity = NONE, func = t}
@@ -512,7 +596,8 @@ val [emptyG_nodes, emptyG_edges, edges_irrefl, graph_equality,
      IN_edges,
      IN_gDELETE, nodes_gDELETE, gDELETE_edges, gDELETE_commutes,
      imap_emptyG, IN_imap, imap_edges, touching_actions_link, imap_id,
-     ident_INJ, frange_fmap, fmap_inverts_ident] =
+     ident_INJ, frange_fmap, fmap_inverts_ident,
+     dgmap_edges, dgmap_emptyG, IN_dgmap] =
 define_quotient {
   types = [{name = "action_graph", equiv = wfEQ_equiv}],
   defs = [("emptyG",``emptyG0``),
@@ -523,7 +608,8 @@ define_quotient {
           ("add_postaction", ``add_postaction0``),
           ("fmap", ``fmap0``),
           ("gDELETE", ``gDELETE0``),
-          ("imap", ``imap0``)],
+          ("imap", ``imap0``),
+          ("dgmap", ``dgmap0``)],
   thms = [("emptyG_nodes", emptyG0_nodes),
           ("emptyG_edges", emptyG0_edges),
           ("edges_irrefl", mkwfeq wfG_irrefl),
@@ -550,7 +636,11 @@ define_quotient {
           ("imap_id", imap0_id),
           ("ident_INJ", mkwfeq (iter0_11)),
           ("frange_fmap", mkwfeq (frange_fmap0)),
-          ("fmap_inverts_ident", fmap0_inverts_ident)],
+          ("fmap_inverts_ident", fmap0_inverts_ident),
+          ("dgmap_edges", dgmap0_edges),
+          ("dgmap_emptyG", dgmap0_emptyG),
+          ("IN_dgmap", IN_dgmap0)
+         ],
   poly_preserves = [],
   poly_respects = [],
   respects = [wfEQ_emptyG0, simple_rsp ``action_graph0_nodes``,
@@ -558,7 +648,7 @@ define_quotient {
               simple_rsp ``fmap0``, wfEQ_delete,
               simple_rsp ``idents0``, wfEQ_add_action0,
               wfEQ_add_postaction0,
-              wfEQ_imap0]}
+              wfEQ_imap0, wfEQ_dgmap0]}
 
 val _ = overload_on("ag_edge_arrow", ``\x g y. ag_edges g x y``)
 val _ = overload_on("not_ag_edge_arrow", ``\x g y. ¬ag_edges g x y``)
@@ -588,7 +678,7 @@ val _ = overload_on ("NOTIN", ``\a g. ~(a IN ag_nodes g)``)
 val _ = export_rewrites ["edges_WF", "IN_add_action", "IN_add_postaction",
                          "IN_imap", "emptyG_nodes", "imap_emptyG",
                          "emptyG_edges", "nodes_gDELETE", "nodes_FINITE",
-                         "gDELETE_edges", "edges_irrefl"]
+                         "gDELETE_edges", "edges_irrefl", "dgmap_emptyG"]
 
 val gtouches_def = Define`
   gtouches (g1:(α,β,γ)action_graph) (g2:(α,β,γ)action_graph) ⇔
