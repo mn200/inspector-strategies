@@ -489,13 +489,24 @@ val fmap0_inverts_ident = prove(
   rpt strip_tac >> SELECT_ELIM_TAC >> conj_tac >- metis_tac[] >>
   fs[wfG_def, INJ_THM] >> metis_tac[]);
 
+(* redundant if HOL's github issue #173 is fixed *)
 val polydata_upd_def = Define`
   polydata_upd f a = <|
     reads := a.reads ;
     writes := a.writes ;
-    data := f a;
+    data := f a.data;
     ident := a.ident
   |>`
+
+val polydata_upd_ident = store_thm(
+  "polydata_upd_ident[simp]",
+  ``(polydata_upd f a).ident = a.ident``,
+  simp[polydata_upd_def]);
+
+val polydata_upd_reads_writes = store_thm(
+  "polydata_upd_reads_writes[simp]",
+  ``(polydata_upd f a).reads = a.reads ∧ (polydata_upd f a).writes = a.writes``,
+  simp[polydata_upd_def]);
 
 val dgmap0_def = Define`
   dgmap0 f g  =
@@ -819,6 +830,7 @@ val ilink_def = Define`
                   fmap G ' i -<G>-> fmap G ' j
 `;
 
+val _ = overload_on ("'", ``\G i. fmap G ' i``)
 val _ = add_rule {block_style = (AroundEachPhrase, (PP.CONSISTENT, 0)),
                   fixity = Infix(NONASSOC, 450),
                   paren_style = OnlyIfNecessary,
@@ -836,11 +848,12 @@ val _ = add_rule {block_style = (AroundEachPhrase, (PP.CONSISTENT, 0)),
 val _ = overload_on ("not_ilink", ``λi G j. ¬ilink i G j``)
 
 
+
+
 val wave_defn = with_flag(allow_schema_definition,true) (Hol_defn "wave") `
   wave i = MAX_SET (IMAGE (λj. wave j + 1) { j | ilink j G i })
 `
 
-val _ = overload_on ("'", ``\G i. fmap G ' i``)
 
 val (wave_def, wave_ind) = Defn.tprove(
   wave_defn,
@@ -881,6 +894,67 @@ val BIJ_idents_nodes = store_thm(
   simp[BIJ_IFF_INV] >> conj_tac >- simp[idents_thm] >>
   qexists_tac `FAPPLY (fmap g)` >> rpt strip_tac >>
   fs[idents_thm, fmap_inverts_ident]);
+
+val dgmap_add_action = store_thm(
+  "dgmap_add_action[simp]",
+  ``dgmap f (a ⊕ g) = polydata_upd f a ⊕ dgmap f g``,
+  simp[graph_equality, IN_dgmap, dgmap_edges, idents_thm, IN_add_action,
+       add_action_edges, GSYM IMP_DISJ_THM, PULL_FORALL] >>
+  rpt strip_tac >> eq_tac >> strip_tac >> simp[] >> TRY (metis_tac[]) >>
+  dsimp[] >> fs[FORALL_AND_THM] >> simp[polydata_upd_def] >> rw[] >>
+  fs[]>> metis_tac[]);
+
+val idents_dgmap = store_thm(
+  "idents_dgmap[simp]",
+  ``∀g. idents (dgmap f g) = idents g``,
+  ho_match_mp_tac graph_ind >> simp[]);
+
+val fmap_dgmap = store_thm(
+  "fmap_dgmap[simp]",
+  ``∀g i. i ∈ idents g ⇒ (dgmap f g ' i) = polydata_upd f (g ' i)``,
+  ho_match_mp_tac graph_ind >> simp[fmap_add_action] >> rw[] >> simp[]);
+
+val ilink_emptyG = store_thm(
+  "ilink_emptyG[simp]",
+  ``i -<emptyG>#-> j ⇔ F``,
+  simp[ilink_def]);
+
+val ident_IN_idents = prove(
+  ``a ∈ g ⇒ a.ident ∈ idents g``,
+  simp[idents_thm]);
+
+val ilink_add_action = store_thm(
+  "ilink_add_action",
+  ``i -<a ⊕ g>#-> j ⇔
+      j ∈ idents g ∧ a.ident = i ∧ i ∉ idents g ∧ a ∼ₜ g ' j ∨ i -<g>#-> j``,
+  dsimp[ilink_def, fmap_add_action, add_action_edges] >> csimp[] >>
+  Cases_on `i = a.ident` >> simp[] >> csimp[ident_IN_idents] >>
+  Cases_on `j ∈ idents g` >> simp[] >> Cases_on `a.ident ∈ idents g` >> simp[] >| [
+    fs[idents_thm] >> metis_tac[IN_edges, fmap_inverts_ident],
+    Cases_on `i ∈ idents g` >> simp[] >> eq_tac >> strip_tac >> simp[],
+    Cases_on `i ∈ idents g` >> simp[] >> eq_tac >> strip_tac >> simp[]
+      >- metis_tac[fmap_inverts_ident, fmap_ONTO] >>
+    fs[idents_thm] >> rw[] >> metis_tac[fmap_inverts_ident],
+    metis_tac[],
+    fs[idents_thm] >> metis_tac[IN_edges]
+  ]);
+
+val dgmap_ilink = store_thm(
+  "dgmap_ilink[simp]",
+  ``∀g. i -<dgmap f g>#-> j ⇔ i -<g>#-> j``,
+  ho_match_mp_tac graph_ind >> simp[ilink_add_action] >> rpt strip_tac >>
+  csimp[]);
+
+val dgmap_dgmap = store_thm(
+  "dgmap_dgmap[simp]",
+  ``∀G. dgmap f (dgmap g G) = dgmap (f o g) G``,
+  ho_match_mp_tac graph_ind >> simp[polydata_upd_def]);
+
+val dgmap_I = store_thm(
+  "dgmap_I[simp]",
+  ``∀g. dgmap (λx. x) g = g ∧ dgmap I g = g``,
+  ho_match_mp_tac graph_ind >> simp[polydata_upd_def] >>
+  simp[theorem "FORALL_action"]);
 
 (* ----------------------------------------------------------------------
     Properties of imap
@@ -1466,5 +1540,39 @@ val pregraph_FOLDRi_merge_graph = store_thm(
   dsimp[idents_FOLDRi_merge, Abbr`g2`] >>
   simp[gtouches_def, IN_FOLDRi_merge_graph] >>
   metis_tac[gtouches_def]);
+
+val _ = type_abbrev("G", ``:('a,'b,'c) action_graph``)
+
+val dgSIGMA_def = Define`
+  dgSIGMA f g = gEVAL (λa tot. tot + f a.data) 0 g
+`
+
+val add_t = ``λa tot. tot + f a.data``
+
+val lemma = gEVAL_thm
+              |> Q.GEN `ap`
+              |> ISPEC add_t
+              |> SIMP_RULE (srw_ss() ++ ARITH_ss) []
+              |> CONJUNCTS
+
+val add_folds_right = prove(
+  ``∀g a acc.
+      a.ident ∉ idents g ⇒
+      gEVAL ^add_t acc (a ⊕ g) = ^add_t a (gEVAL ^add_t acc g)``,
+  ho_match_mp_tac graph_ind >> simp lemma);
+
+val dgSIGMA_thm = store_thm(
+  "dgSIGMA_thm[simp]",
+  ``dgSIGMA f (emptyG : (α,β,γ)G) = 0 ∧
+    (a.ident ∉ idents (g:(α,β,γ)G) ⇒ dgSIGMA f (a ⊕ g) = f a.data + dgSIGMA f g)``,
+  simp[add_folds_right, dgSIGMA_def] >> simp[gEVAL_thm]);
+
+val dgSIGMA_CONG = store_thm(
+  "dgSIGMA_CONG",
+  ``∀f1 f2 g1 g2.
+      (∀d. d ∈ IMAGE action_data (ag_nodes g1) ⇒ f1 d = f2 d) ∧
+      g1 = g2 ⇒ dgSIGMA f1 g1 = dgSIGMA f2 g2``,
+  simp[PULL_EXISTS] >> map_every qx_gen_tac [`f1`, `f2`] >>
+  ho_match_mp_tac graph_ind >> simp[]);
 
 val _ = export_theory();

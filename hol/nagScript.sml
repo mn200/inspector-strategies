@@ -1,5 +1,7 @@
 open HolKernel Parse boolLib bossLib;
+
 open lcsymtacs
+open boolSimps
 
 open pred_setTheory
 open listTheory
@@ -152,9 +154,11 @@ val mkdest_def = new_specification ("mkdest_def",
   ["cmk", "cdest"],
   equivalence |> SIMP_RULE (srw_ss()) [cardeq_def, BIJ_IFF_INV])
 
+val _ = overload_on("adata", ``action_data``)
+
 val (cwf_rules, cwf_ind, cwf_cases) = Hol_reln`
   (∀d. cwf (cmk (INR d))) ∧
-  (∀g. (∀a. a ∈ g ⇒ cwf a.data) ⇒ cwf (cmk (INL g)))
+  (∀g. (∀d. d ∈ IMAGE adata (ag_nodes g) ⇒ cwf d) ⇒ cwf (cmk (INL g)))
 `;
 
 val cwf_nonempty = prove(
@@ -172,70 +176,11 @@ val (cwfdmapR_rules, cwfdmapR_ind, cwfdmapR_cases) = Hol_reln`
           (g ' i).reads = (rg ' i).reads ∧
           (g ' i).writes = (rg ' i).writes)
     ⇒
-     cwfdmapR df gf (cmk (INL g)) (gf rg))
+     cwfdmapR df gf (cmk (INL g)) (gf g rg))
 `;
 
 val dR_rules = SIMP_RULE (srw_ss()) [FORALL_AND_THM] cwfdmapR_rules
 
-val polydata_upd_ident = store_thm(
-  "polydata_upd_ident[simp]",
-  ``(polydata_upd f a).ident = a.ident``,
-  simp[polydata_upd_def]);
-
-val polydata_upd_reads_writes = store_thm(
-  "polydata_upd_reads_writes[simp]",
-  ``(polydata_upd f a).reads = a.reads ∧ (polydata_upd f a).writes = a.writes``,
-  simp[polydata_upd_def]);
-
-val dgmap_add_action = store_thm(
-  "dgmap_add_action[simp]",
-  ``dgmap f (a ⊕ g) = polydata_upd f a ⊕ dgmap f g``,
-  simp[graph_equality, IN_dgmap, dgmap_edges, idents_thm, IN_add_action,
-       add_action_edges, GSYM IMP_DISJ_THM, PULL_FORALL] >>
-  rpt strip_tac >> eq_tac >> strip_tac >> simp[] >> TRY (metis_tac[]) >>
-  dsimp[] >> fs[FORALL_AND_THM] >> simp[polydata_upd_def] >> rw[] >>
-  fs[]>> metis_tac[]);
-
-val idents_dgmap = store_thm(
-  "idents_dgmap[simp]",
-  ``∀g. idents (dgmap f g) = idents g``,
-  ho_match_mp_tac graph_ind >> simp[]);
-
-val fmap_dgmap = store_thm(
-  "fmap_dgmap[simp]",
-  ``∀g i. i ∈ idents g ⇒ (dgmap f g ' i) = polydata_upd f (g ' i)``,
-  ho_match_mp_tac graph_ind >> simp[fmap_add_action] >> rw[] >> simp[]);
-
-val ilink_emptyG = store_thm(
-  "ilink_emptyG[simp]",
-  ``i -<emptyG>#-> j ⇔ F``,
-  simp[ilink_def]);
-
-val ident_IN_idents = prove(
-  ``a ∈ g ⇒ a.ident ∈ idents g``,
-  simp[idents_thm]);
-
-val ilink_add_action = store_thm(
-  "ilink_add_action",
-  ``i -<a ⊕ g>#-> j ⇔
-      j ∈ idents g ∧ a.ident = i ∧ i ∉ idents g ∧ a ∼ₜ g ' j ∨ i -<g>#-> j``,
-  dsimp[ilink_def, fmap_add_action, add_action_edges] >> csimp[] >>
-  Cases_on `i = a.ident` >> simp[] >> csimp[ident_IN_idents] >>
-  Cases_on `j ∈ idents g` >> simp[] >> Cases_on `a.ident ∈ idents g` >> simp[] >| [
-    fs[idents_thm] >> metis_tac[IN_edges, fmap_inverts_ident],
-    Cases_on `i ∈ idents g` >> simp[] >> eq_tac >> strip_tac >> simp[],
-    Cases_on `i ∈ idents g` >> simp[] >> eq_tac >> strip_tac >> simp[]
-      >- metis_tac[fmap_inverts_ident, fmap_ONTO] >>
-    fs[idents_thm] >> rw[] >> metis_tac[fmap_inverts_ident],
-    metis_tac[],
-    fs[idents_thm] >> metis_tac[IN_edges]
-  ]);
-
-val dgmap_ilink = store_thm(
-  "dgmap_ilink[simp]",
-  ``∀g. i -<dgmap f g>#-> j ⇔ i -<g>#-> j``,
-  ho_match_mp_tac graph_ind >> simp[ilink_add_action] >> rpt strip_tac >>
-  csimp[]);
 
 val cwfdmapR_total = store_thm(
   "cwfdmapR_total",
@@ -243,10 +188,10 @@ val cwfdmapR_total = store_thm(
   ho_match_mp_tac cwf_ind >> conj_tac
   >- metis_tac[cwfdmapR_rules] >>
   qx_gen_tac `g` >> strip_tac >> fs[GSYM RIGHT_EXISTS_IMP_THM, SKOLEM_THM] >>
-  qexists_tac `gf (dgmap f g)` >>
+  qexists_tac `gf g (dgmap f g)` >>
   match_mp_tac (CONJUNCT2 dR_rules) >> simp[] >> rpt strip_tac >>
   simp[polydata_upd_def] >> first_x_assum match_mp_tac >>
-  fs[idents_thm,fmap_inverts_ident]);
+  fs[idents_thm,fmap_inverts_ident] >> metis_tac[]);
 
 val cmk_11 = prove(
   ``(cmk x = cmk y) ⇔ x = y``,
@@ -291,11 +236,9 @@ val cwfdmapf_INR = prove(
   ``cwfdmapf df dg (cmk (INR d)) = df d``,
   simp[cwfdmapf_def, Once cwfdmapR_cases, cmk_11]);
 
-val _ = overload_on("adata", ``action_data``)
-
 val cwfdmapf_INL = prove(
   ``cwf (cmk (INL g)) ⇒
-    cwfdmapf df dg (cmk (INL g)) = dg (dgmap (cwfdmapf df dg o adata) g)``,
+    cwfdmapf df dg (cmk (INL g)) = dg g (dgmap (cwfdmapf df dg) g)``,
   simp[cwfdmapf_def] >> strip_tac >> SELECT_ELIM_TAC >> conj_tac
   >- metis_tac[cwfdmapR_total] >> qx_gen_tac `r` >>
   simp[Once cwfdmapR_cases, SimpL ``$==>``] >> simp[cmk_11] >>
@@ -310,7 +253,7 @@ val nnode as {term_ABS_t,term_REP_t,...} =
     newtypeTools.rich_new_type ("nnode", cwf_nonempty)
 
 val nnodeREC_def = Define`
-  nnodeREC df dg n = cwfdmapf df dg (^term_REP_t n)
+  nnodeREC df dg n = cwfdmapf df (\g. dg (dgmap ^term_ABS_t g)) (^term_REP_t n)
 `;
 
 val DN_def = Define`
@@ -324,24 +267,92 @@ val nnodeREC_DN = store_thm(
 
 val DG_def = Define`
   DG (g : ((α,β,γ)nnode, β, α) action_graph) =
-   ^term_ABS_t (cmk (INL (dgmap (^term_REP_t o adata) g)))
+   ^term_ABS_t (cmk (INL (dgmap ^term_REP_t g)))
 `;
-
-val dgmap_dgmap = store_thm(
-  "dgmap_dgmap[simp]",
-  ``∀G. dgmap (f o adata) (dgmap (g o adata) G) = dgmap ((f o g) o adata) G``,
-  ho_match_mp_tac graph_ind >> simp[polydata_upd_def]);
 
 val nnodeREC_DG = store_thm(
   "nnodeREC_DG",
-  ``nnodeREC df dg (DG g) = dg (dgmap (nnodeREC df dg o adata) g)``,
+  ``nnodeREC df dg (DG g) = dg g (dgmap (nnodeREC df dg) g)``,
   simp[nnodeREC_def, DG_def] >>
-  `cwf (cmk (INL (dgmap (nnode_REP o adata) g)))`
+  `cwf (cmk (INL (dgmap nnode_REP g)))`
     by (match_mp_tac (CONJUNCT2 cwf_rules) >> simp[IN_dgmap, PULL_EXISTS] >>
         simp[polydata_upd_def, #termP_term_REP nnode]) >>
   simp[#repabs_pseudo_id nnode] >>
-  simp[cwfdmapf_INL, cmk_11] >> simp[nnodeREC_def, combinTheory.o_DEF]);
+  simp[cwfdmapf_INL, cmk_11] >>
+  asm_simp_tac (srw_ss() ++ ETA_ss) [GSYM nnodeREC_def, combinTheory.o_DEF,
+                                     #absrep_id nnode]);
 
 val _ = type_abbrev("nag0", ``:(('ids, 'rws, 'd)nnode, 'rws, 'ids) action_graph``)
+
+val nnodeSize_def = Define `
+  nnodeSize = nnodeREC (K 1) (K (dgSIGMA SUC))
+`;
+
+val nagSize_def = Define`
+  nagSize (g:(α,β,γ)nag0) = dgSIGMA nnodeSize g
+`;
+
+val nnode_CASE_def = Define`
+  nnode_CASE n df dg = nnodeREC df (λg r. dg g) n
+`;
+
+val nnode_CASE_thm = store_thm(
+  "nnode_CASE_thm[simp]",
+  ``nnode_CASE (DN d) df dg = df d ∧
+    nnode_CASE (DG g) df dg = dg g``,
+  simp[nnode_CASE_def, nnodeREC_DG, nnodeREC_DN]);
+
+val nnode_Axiom = store_thm(
+  "nnode_Axiom",
+  ``∀df dg. ∃f.
+      (∀d. f (DN d) = df d) ∧
+      (∀g. f (DG g) = dg g (dgmap f g))``,
+  rpt gen_tac >> qexists_tac `nnodeREC df dg` >>
+  simp[nnodeREC_DN, nnodeREC_DG]);
+
+val forall_nnode = prove(
+  ``(!n. P n) ⇔ (∀a. cwf a ⇒ P (nnode_ABS a))``,
+  eq_tac >> simp[] >> rpt strip_tac >>
+  ONCE_REWRITE_TAC [GSYM (#absrep_id nnode)] >>
+  first_x_assum match_mp_tac >> simp[#termP_term_REP nnode]);
+
+val dgmap_CONG = store_thm(
+  "dgmap_CONG",
+  ``∀g1 g2 f1 f2.
+      (∀d. d ∈ IMAGE adata (ag_nodes g1) ⇒ f1 d = f2 d) ∧ g1 = g2 ⇒
+      dgmap f1 g1 = dgmap f2 g2``,
+  simp[PULL_EXISTS] >> rpt gen_tac >> qid_spec_tac `g2` >>
+  ho_match_mp_tac graph_ind >> dsimp[polydata_upd_def]);
+
+val nnode_ind = store_thm(
+  "nnode_ind",
+  ``∀P. (∀d. P (DN d)) ∧
+        (∀g. (∀d. d ∈ IMAGE adata (ag_nodes g) ⇒ P d) ⇒
+             P (DG g)) ⇒
+        ∀n. P n``,
+  simp[DN_def, DG_def, PULL_EXISTS, forall_nnode] >>
+  ntac 2 strip_tac >> Induct_on `cwf` >>
+  simp[PULL_EXISTS] >> qx_gen_tac `g` >>
+  first_x_assum (qspec_then `dgmap nnode_ABS g` mp_tac) >>
+  simp[IN_dgmap, PULL_EXISTS, polydata_upd_def]  >>
+  rpt strip_tac >>
+  `dgmap (nnode_REP o nnode_ABS) g = dgmap I g`
+    by (match_mp_tac dgmap_CONG >>
+        simp[PULL_EXISTS, #repabs_pseudo_id nnode]) >>
+  fs[]);
+
+val _ = TypeBase.write
+  (TypeBasePure.gen_datatype_info {ax = nnode_Axiom, ind = nnode_ind,
+                                  case_defs = [nnode_CASE_thm]})
+
+(*
+val nagSize_thm = store_thm(
+  "nagSize_thm[simp]",
+  ``nagSize emptyG = 0 ∧
+    (a.ident ∉ idents g ⇒
+     nagSize (a ⊕ g) =
+       1 + (case a.data of DN _ => 0 | DG g => nagSize g) + nagSize g)``,
+
+*)
 
 val _ = export_theory();
