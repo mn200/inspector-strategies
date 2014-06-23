@@ -94,7 +94,8 @@ findWavesFast = SeqStmt [
                 (Assign "wavestart" (ARead "wave" (VarExpr "p"))
                     (Plus (ARead "wavestart" (ARead "wave" (VarExpr "p")))
                           (Value(IntVal 1)))),
-            ForLoop "p" (D1D (Value(IntVal 0)) (VarExpr "nnz"))
+            ForLoop "w" (D1D (Value(IntVal 1)) (Plus (VarExpr "max_wave")
+                                                     (Value(IntVal 1))))
                 (Assign "wavestart" (VarExpr "w")
                     (Plus (ARead "wavestart" 
                               (Minus (VarExpr "w") (Value(IntVal 1))))
@@ -113,31 +114,7 @@ findWavesFast = SeqStmt [
                         (VarExpr "p")
                 ])    
     ]
-{-|        
 
-          
-          ForLoop("w",D1D(Value(Int(1)),Plus(VarExp("max_wave"),Value(Int(2)))),
-                   Assign("wavestart",VarExp("w"),
-                          Plus(ARead("wavestart",
-                                     Minus(VarExp("w"),Value(Int(1)))),
-                               ARead("wavestart",VarExp("w"))))),
-                               
-          Malloc("wavefronts",  VarExp("nnz"), Int(0)),
-          ForLoop("prev",D1D(Value(Int(1)),Plus(VarExp("nnz"),Value(Int(1)))),
-                  SeqStmt([
-                             AssignVar("p",Minus(VarExp("nnz"),VarExp("prev"))),
-                             AssignVar("w",ARead("wave",VarExp("p"))),
-                             Assign("wavestart",VarExp("w"),
-                                    Minus(ARead("wavestart",VarExp("w")),
-                                          Value(Int(1)))),
-                             Assign("wavefronts",
-                                    ARead("wavestart",VarExp("w")),
-                                    VarExp("p"))
-                         ]))
-
-        ]
- )
--}
 
 
 
