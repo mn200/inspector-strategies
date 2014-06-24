@@ -131,6 +131,20 @@ val gtouches_lemma2 = prove(
   rpt (qpat_assum `BIGUNION xx = y` (SUBST1_TAC o SYM)) >>
   dsimp[] >> metis_tac[]);
 
+val gtouches_lemma3 = prove(
+  ``gwrites g01 = set a1.writes ∧ greads g01 = set a1.reads ∧
+    gwrites g02 = set a2.writes ∧ greads g02 = set a2.reads ∧
+    a1 ≁ₜ a2 ⇒ ¬gtouches g01 g02``,
+  simp[gtouches_def, touches_def, GSYM IMP_DISJ_THM] >> strip_tac >>
+  map_every qx_gen_tac [`b`, `c`] >> ntac 2 strip_tac >>
+  `(∀w. MEM w b.writes ⇒ MEM w a1.writes) ∧
+   (∀w. MEM w b.reads ⇒ MEM w a1.reads) ∧
+   (∀w. MEM w c.writes ⇒ MEM w a2.writes) ∧
+   (∀w. MEM w c.reads ⇒ MEM w a2.reads)` suffices_by metis_tac[] >>
+  fs[gwrites_def, greads_def] >>
+  rpt (qpat_assum `BIGUNION xx = y` (SUBST1_TAC o SYM)) >>
+  dsimp[] >> metis_tac[]);
+
 val apply_action_nagER_commutes = store_thm(
   "apply_action_nagER_commutes",
   ``∀ma g:(value list -> value,α,actionRW)nag0 m.
@@ -301,7 +315,6 @@ val action_graph_case = prove(
   `wfnag (a2 ⊕ g00)` by fs[wfnag_add_action] >>
   metis_tac[])
 
-(*
 val nagER_unique = store_thm(
   "nagER_unique",
   ``∀g m0 m1 m2. wfnag g ∧ nagER m0 g m1 ∧ nagER m0 g m2 ⇒ (m1 = m2)``,
@@ -402,6 +415,43 @@ val nagER_unique = store_thm(
            a2.ident ∉ idents g00`
         by metis_tac[double_graph_decomposition] >>
       rw[] >>
+      `∃m00. nagER m01 g02 m00` by metis_tac[nagER_total] >>
+      fs[wfnag_add_action] >>
+      `¬gtouches g01 g02` by metis_tac[gtouches_lemma3] >>
+      `∃m02'. nagER m0 g02 m02' ∧ nagER m02' g01 m00`
+        by metis_tac[nagER_commutes] >>
+      `nagSize g02 < 1 + nagSize g01 + (1 + nagSize g02 + nagSize g00)`
+        by simp[] >>
+      `m02' = m02` by metis_tac[] >> pop_assum SUBST_ALL_TAC >>
+      `∃mm. nagER m00 g00 mm` by metis_tac[nagER_total] >>
+      `nagER m02 (a1 ⊕ g00) mm` by metis_tac[nagER_rules] >>
+      `wfnag (a1 ⊕ g00)` by simp[wfnag_add_action] >>
+      first_assum (qspecl_then [`a1 ⊕ g00`, `m02`, `mm`, `m2`] mp_tac) >>
+      simp[] >> disch_then SUBST_ALL_TAC >>
+      `nagER m01 (a2 ⊕ g00) m2` by metis_tac[nagER_rules] >>
+      `wfnag (a2 ⊕ g00)` by simp[wfnag_add_action] >>
+      first_x_assum (qspecl_then [`a2 ⊕ g00`, `m01`, `m1`, `m2`] mp_tac) >>
+      simp[]))
+
+val nagEval_def = Define`nagEval g m0 = @m. nagER m0 g m`
+
+val nagEval_empty = store_thm(
+  "nagEval_empty[simp]",
+  ``nagEval emptyG m = m``,
+  simp[nagEval_def, Once nagER_cases])
+
+(*
+val nagEval_thm = store_thm(
+  "nagEval_thm",
+  ``(nagEval emptyG m = m) ∧
+    (wfnag (a ⊕ g) ⇒
+     nagEval (a ⊕ g) m =
+       case a.data of
+           DN d => nagEval g (apply_action (polydata_upd (K d) a) m)
+         | DG g0 => nagEval g (nagEval g0 m))``,
+  simp[] >> strip_tac >> simp[nagEval_def] >>
+  Cases_on `a.data` >> simp[]
+  >- (`∃
 *)
 
 val _ = export_theory();
