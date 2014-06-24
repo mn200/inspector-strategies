@@ -197,24 +197,6 @@ val cmk_11 = prove(
   ``(cmk x = cmk y) ⇔ x = y``,
   metis_tac[mkdest_def]);
 
-val graph_ident_equality = store_thm(
-  "graph_ident_equality",
-  ``(g1 = g2) ⇔ idents g1 = idents g2 ∧ (∀i. i ∈ idents g1 ⇒ g1 ' i = g2 ' i) ∧
-                 (∀i j. i -<g1>#-> j ⇔ i -<g2>#-> j)``,
-  simp[graph_equality, ilink_def, idents_thm] >> eq_tac >> rpt strip_tac
-  >- (AP_TERM_TAC >> simp[EXTENSION])
-  >- metis_tac[fmap_inverts_ident]
-  >- (simp[] >> metis_tac[fmap_inverts_ident])
-  >- (`ag_nodes g1 = ag_nodes g2` suffices_by simp[] >>
-      qpat_assum `IMAGE ff ss = tt` mp_tac >>
-      simp[EXTENSION] >> metis_tac[fmap_inverts_ident])
-  >- (eq_tac >> strip_tac >> metis_tac[IN_edges, fmap_inverts_ident]))
-
-val fmapped_ident = store_thm(
-  "fmapped_ident[simp]",
-  ``i ∈ idents g ⇒ (g ' i).ident = i``,
-  simp[idents_thm] >> metis_tac[fmap_inverts_ident]);
-
 val cwfdmapR_unique = store_thm(
   "cwfdmapR_unique",
   ``∀d r1. cwfdmapR df dg d r1 ⇒ ∀r2. cwfdmapR df dg d r2 ⇒ (r2 = r1)``,
@@ -261,7 +243,7 @@ val DN_def = Define`
 `;
 
 val nnodeREC_DN = store_thm(
-  "nnodeREC_DN",
+  "nnodeREC_DN[simp]",
   ``nnodeREC df dg (DN d) = df d``,
   simp[nnodeREC_def, DN_def, #repabs_pseudo_id nnode, cwf_rules, cwfdmapf_INR]);
 
@@ -271,7 +253,7 @@ val DG_def = Define`
 `;
 
 val nnodeREC_DG = store_thm(
-  "nnodeREC_DG",
+  "nnodeREC_DG[simp]",
   ``nnodeREC df dg (DG g) = dg g (dgmap (nnodeREC df dg) g)``,
   simp[nnodeREC_def, DG_def] >>
   `cwf (cmk (INL (dgmap nnode_REP g)))`
@@ -285,8 +267,14 @@ val nnodeREC_DG = store_thm(
 val _ = type_abbrev("nag0", ``:(('ids, 'rws, 'd)nnode, 'rws, 'ids) action_graph``)
 
 val nnodeSize_def = Define `
-  nnodeSize = nnodeREC (K 1) (K (dgSIGMA SUC))
+  nnodeSize = nnodeREC (K 1) (λg r. 1 + dgSIGMA I r)
 `;
+
+val nnodeSize_thm = store_thm(
+  "nnodeSize_thm[simp]",
+  ``nnodeSize (DN d) = 1 ∧
+    nnodeSize (DG g) = 1 + dgSIGMA I (dgmap nnodeSize g)``,
+  simp[nnodeSize_def, nnodeREC_DN, nnodeREC_DG]);
 
 val nagSize_def = Define`
   nagSize (g:(α,β,γ)nag0) = dgSIGMA nnodeSize g
@@ -316,14 +304,6 @@ val forall_nnode = prove(
   ONCE_REWRITE_TAC [GSYM (#absrep_id nnode)] >>
   first_x_assum match_mp_tac >> simp[#termP_term_REP nnode]);
 
-val dgmap_CONG = store_thm(
-  "dgmap_CONG",
-  ``∀g1 g2 f1 f2.
-      (∀d. d ∈ IMAGE adata (ag_nodes g1) ⇒ f1 d = f2 d) ∧ g1 = g2 ⇒
-      dgmap f1 g1 = dgmap f2 g2``,
-  simp[PULL_EXISTS] >> rpt gen_tac >> qid_spec_tac `g2` >>
-  ho_match_mp_tac graph_ind >> dsimp[polydata_upd_def]);
-
 val nnode_ind = store_thm(
   "nnode_ind",
   ``∀P. (∀d. P (DN d)) ∧
@@ -345,14 +325,18 @@ val _ = TypeBase.write
   (TypeBasePure.gen_datatype_info {ax = nnode_Axiom, ind = nnode_ind,
                                   case_defs = [nnode_CASE_thm]})
 
-(*
+val _ = adjoin_to_theory {
+  sig_ps = NONE,
+  struct_ps = SOME(fn pps => PP.add_string pps "val _ = TypeBase.write \
+  \(TypeBasePure.gen_datatype_info {ax = nnode_Axiom, ind = nnode_ind, \
+  \case_defs = [nnode_CASE_thm]})")}
+
 val nagSize_thm = store_thm(
   "nagSize_thm[simp]",
   ``nagSize emptyG = 0 ∧
     (a.ident ∉ idents g ⇒
      nagSize (a ⊕ g) =
-       1 + (case a.data of DN _ => 0 | DG g => nagSize g) + nagSize g)``,
-
-*)
+       1 + (case a.data of DN _ => 0 | DG g0 => nagSize g0) + nagSize g)``,
+  simp[nagSize_def] >> Cases_on `adata a` >> simp[]);
 
 val _ = export_theory();

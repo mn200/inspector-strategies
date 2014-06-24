@@ -939,6 +939,24 @@ val ilink_add_action = store_thm(
     fs[idents_thm] >> metis_tac[IN_edges]
   ]);
 
+val graph_ident_equality = store_thm(
+  "graph_ident_equality",
+  ``(g1 = g2) ⇔ idents g1 = idents g2 ∧ (∀i. i ∈ idents g1 ⇒ g1 ' i = g2 ' i) ∧
+                 (∀i j. i -<g1>#-> j ⇔ i -<g2>#-> j)``,
+  simp[graph_equality, ilink_def, idents_thm] >> eq_tac >> rpt strip_tac
+  >- (AP_TERM_TAC >> simp[EXTENSION])
+  >- metis_tac[fmap_inverts_ident]
+  >- (simp[] >> metis_tac[fmap_inverts_ident])
+  >- (`ag_nodes g1 = ag_nodes g2` suffices_by simp[] >>
+      qpat_assum `IMAGE ff ss = tt` mp_tac >>
+      simp[EXTENSION] >> metis_tac[fmap_inverts_ident])
+  >- (eq_tac >> strip_tac >> metis_tac[IN_edges, fmap_inverts_ident]))
+
+val fmapped_ident = store_thm(
+  "fmapped_ident[simp]",
+  ``i ∈ idents g ⇒ (g ' i).ident = i``,
+  simp[idents_thm] >> metis_tac[fmap_inverts_ident]);
+
 val dgmap_ilink = store_thm(
   "dgmap_ilink[simp]",
   ``∀g. i -<dgmap f g>#-> j ⇔ i -<g>#-> j``,
@@ -955,6 +973,14 @@ val dgmap_I = store_thm(
   ``∀g. dgmap (λx. x) g = g ∧ dgmap I g = g``,
   ho_match_mp_tac graph_ind >> simp[polydata_upd_def] >>
   simp[theorem "FORALL_action"]);
+
+val dgmap_CONG = store_thm(
+  "dgmap_CONG",
+  ``∀g1 g2 f1 f2.
+      (∀d. d ∈ IMAGE action_data (ag_nodes g1) ⇒ f1 d = f2 d) ∧ g1 = g2 ⇒
+      dgmap f1 g1 = dgmap f2 g2``,
+  simp[PULL_EXISTS] >> rpt gen_tac >> qid_spec_tac `g2` >>
+  ho_match_mp_tac graph_ind >> dsimp[polydata_upd_def]);
 
 (* ----------------------------------------------------------------------
     Properties of imap
@@ -1215,6 +1241,12 @@ val gEVAL_def = new_specification(
   genEvalG_total |> SPEC_ALL |> Q.GENL [`g`, `s0`, `ap`]
                  |> SIMP_RULE bool_ss[SKOLEM_THM]);
 
+val gEVAL_empty = store_thm(
+  "gEVAL_empty[simp]",
+  ``gEVAL f x emptyG = x``,
+  Q.ISPEC_THEN `f` (qspecl_then [`x`, `emptyG`] assume_tac) gEVAL_def >>
+  fs[]);
+
 val gEVAL_thm = store_thm(
   "gEVAL_thm",
   ``(∀a1 a2 s. ¬touches a1 a2 ∧ a1.ident ≠ a2.ident ⇒
@@ -1222,9 +1254,7 @@ val gEVAL_thm = store_thm(
     (∀s0. gEVAL ap s0 emptyG = s0) ∧
     (∀a s0. a.ident ∉ idents g ⇒
             gEVAL ap s0 (a ⊕ g) = gEVAL ap (ap a s0) g)``,
-  rpt strip_tac
-  >- (`genEvalG ap s0 emptyG s0` by simp[genEvalG_rules] >>
-      metis_tac[gEVAL_def, genEvalG_det]) >>
+  rpt strip_tac >> simp[] >>
   `a ∈ a ⊕ g` by simp[] >>
   `a ∉ g` by (strip_tac >> fs[idents_thm]) >>
   `∀a'. a' ∈ a ⊕ g ⇒ a' -<a ⊕ g>/-> a`
@@ -1574,5 +1604,10 @@ val dgSIGMA_CONG = store_thm(
       g1 = g2 ⇒ dgSIGMA f1 g1 = dgSIGMA f2 g2``,
   simp[PULL_EXISTS] >> map_every qx_gen_tac [`f1`, `f2`] >>
   ho_match_mp_tac graph_ind >> simp[]);
+
+val dgSIGMA_dgmap = store_thm(
+  "dgSIGMA_dgmap[simp]",
+  ``∀G. dgSIGMA f (dgmap g G) = dgSIGMA (f o g) G``,
+  ho_match_mp_tac graph_ind >> simp[polydata_upd_def]);
 
 val _ = export_theory();
