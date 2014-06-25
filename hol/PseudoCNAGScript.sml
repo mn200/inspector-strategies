@@ -7,6 +7,7 @@ open monadsyntax
 open nagTheory
 open PseudoCPropsTheory
 open actionGraphTheory
+open indexedListsTheory
 
 val _ = new_theory "PseudoCNAG";
 
@@ -493,21 +494,23 @@ val ngraphOf_def = tDefine "ngraphOf" `
   (ngraphOf i0 m0 (ForLoop vnm d body) =
      do
        dvs <- dvalues m0 d;
-       (m,g) <-
+       (m,g,c) <-
          FOLDL (λacc v.
-                 case acc of
-                     NONE => NONE
-                   | SOME(m,g) =>
-                     case ngraphOf i0 m (ssubst vnm v body) of
-                         NONE => NONE
-                       | SOME(_, m', g0) =>
-                         SOME(m', <| reads := SET_TO_LIST (greads g0);
-                                     writes := SET_TO_LIST (gwrites g0);
-                                     ident := ap1 (CONS v) i0;
-                                     data := DG g0 |> ⊕ g))
-               (SOME (m0,emptyG))
+                 do
+                   (m,g,c) <- acc ;
+                   (i,m',g0) <- ngraphOf i0 m (ssubst vnm v body);
+                   SOME (m',
+                         add_postaction
+                               <| reads := SET_TO_LIST (greads g0);
+                                  writes := SET_TO_LIST (gwrites g0);
+                                  ident := (CONS v ## (+) c) i0;
+                                  data := DG g0 |>
+                               g,
+                         c + 1)
+                 od)
+               (SOME(m0,emptyG,0))
                dvs;
-       SOME(ap2 SUC i0, m, g)
+       SOME(ap2 ((+) (LENGTH dvs)) i0, m, g)
      od) ∧
 
   (ngraphOf i0 m0 (Seq cmds) =
@@ -523,18 +526,18 @@ val ngraphOf_def = tDefine "ngraphOf" `
   (ngraphOf i0 m0 (ParLoop vnm d body) =
      do
        dvs <- dvalues m0 d;
-       ns <- OPT_SEQUENCE (MAP (λv.
+       ns <- OPT_SEQUENCE (MAPi (λn v.
                do
                  (i,m,g) <- ngraphOf i0 m0 (ssubst vnm v body);
                  SOME(<| reads := SET_TO_LIST (greads g);
                          writes := SET_TO_LIST (gwrites g);
                          data := DG g;
-                         ident := ap1 (CONS v) i0 |>)
+                         ident := (CONS v ## (+) n) i0 |>)
                od) dvs);
        assert(∀i j. i < j ∧ j < LENGTH ns ⇒ EL i ns ≁ₜ EL j ns);
        g <- SOME (FOLDR add_action emptyG ns);
        m <- nagEval g (SOME m0);
-       SOME(ap2 SUC i0, m, g)
+       SOME(ap2 ((+) (LENGTH dvs)) i0, m, g)
      od) ∧
 
   (ngraphOf i0 m0 (Par cmds) =
@@ -591,4 +594,228 @@ val ngraphOf_def = tDefine "ngraphOf" `
     rpt strip_tac >> qpat_assum `n < LENGTH cs` kall_tac >> Induct_on `cmds` >>
     dsimp[] >> rpt strip_tac >> res_tac >> simp[]);
 
+val ngraphOf_ind = theorem "ngraphOf_ind"
+
+val idents_FOLDR_add_action = store_thm(
+  "idents_FOLDR_add_action",
+  ``i ∈ idents (FOLDR add_action emptyG l) ⇔ ∃a. MEM a l ∧ i = a.ident``,
+  Induct_on `l` >> simp[] >> dsimp[]);
+
+val SND_ap1 = store_thm(
+  "SND_ap1[simp]",
+  ``SND (ap1 f p) = SND p``,
+  Cases_on `p` >> simp[]);
+
+val SND_ap2 = store_thm(
+  "SND_ap2[simp]",
+  ``SND (ap2 f p) = f (SND p)``,
+  Cases_on `p` >> simp[]);
+
+val iftac =
+    simp[ngraphOf_def] >>
+    map_every qx_gen_tac [`i0`, `m0`, `gd`, `th`, `el`] >>
+    strip_tac >> Cases_on `evalexpr m0 gd` >> simp[] >>
+    COND_CASES_TAC >> fs[PULL_EXISTS, FORALL_PROD]
+
+
+val ngraphOf_idents = store_thm(
+  "ngraphOf_idents",
+  ``∀i0 m0 c0 i m g.
+      ngraphOf i0 m0 c0 = SOME(i,m,g) ⇒
+      SND i0 ≤ SND i ∧
+      ∀it. it ∈ idents g ⇒ SND i0 ≤ SND it``,
+  ho_match_mp_tac ngraphOf_ind >> rpt conj_tac
+  >- ((* if *) iftac >> rpt strip_tac >> res_tac >> rw[] >> simp[])
+  >- ((* forloop *)
+      simp[ngraphOf_def, PULL_EXISTS, FORALL_PROD] >>
+      map_every qx_gen_tac [`vs`, `n`, `m0`, `vnm`, `d`, `body`] >>
+      disch_then kall_tac >> rpt strip_tac >>
+      qpat_assum `dvalues xx yy = zz` kall_tac >>
+      rpt (pop_assum mp_tac) >>
+      qmatch_abbrev_tac `FOLDL ff (SOME(m0,g0,c0)) dvs = SOME(m,g,c) ⇒
+                         (us,p) ∈ idents g ⇒ n ≤ p` >>
+      `∀ts q. (ts,q) ∈ idents g0 ⇒ n ≤ q` by simp[Abbr`g0`] >>
+      map_every markerLib.RM_ABBREV_TAC ["g0", "us", "p", "c", "c0"] >>
+      pop_assum mp_tac >>
+      map_every qid_spec_tac [`g0`, `g`, `m0`, `m`, `us`, `p`, `c`, `c0`,
+                              `dvs`] >>
+      Induct >> simp[] >- metis_tac[] >>
+      `∀l. FOLDL ff NONE l = NONE` by (Induct_on `l` >> simp[Abbr`ff`]) >>
+      rpt strip_tac >>
+      `ff (SOME (m0,g0,c0)) h ≠ NONE`
+        by (strip_tac >> fs[] >> metis_tac[optionTheory.NOT_NONE_SOME]) >>
+      pop_assum (fn th =>
+      `∃m' g' c'. ff (SOME (m0,g0,c0)) h = SOME(m',g',c')`
+        by metis_tac[optionTheory.option_CASES, pair_CASES, th]) >>
+      `∀ts q. (ts,q) ∈ idents g' ⇒ n ≤ q` suffices_by metis_tac[] >>
+      pop_assum mp_tac >> ntac 2 (pop_assum kall_tac) >>
+      simp[Abbr`ff`, PULL_EXISTS, FORALL_PROD] >> rpt gen_tac >> strip_tac >>
+      rpt BasicProvers.VAR_EQ_TAC >> simp[] >> dsimp[] >> metis_tac[])
+  >- ((* seq *)
+      map_every qx_gen_tac [`i0`, `m0`, `cs`] >> strip_tac >>
+      simp[Once ngraphOf_def] >>
+      Cases_on `cs` >> simp[PULL_EXISTS, FORALL_PROD] >> fs[] >>
+      fs[FORALL_PROD] >>
+      metis_tac[DECIDE ``x:num ≤ y ∧ y ≤ z ⇒ x ≤ z``])
+  >- ((* parloop *)
+      map_every qx_gen_tac [`i0`, `m0`, `vnm`, `d`, `body`] >>
+      strip_tac >>
+      simp[ngraphOf_def, PULL_EXISTS, OPT_SEQUENCE_EQ_SOME,
+           MAP_MAP_o, combinTheory.o_ABS_R, MEM_MAPi,
+           EL_MAP, EXISTS_PROD] >> rpt gen_tac >> strip_tac >>
+      rpt (first_x_assum (kall_tac o
+                          assert (equal 2 o length o #1 o strip_forall o
+                                  concl))) >>
+      simp[idents_FOLDR_add_action, MEM_MAPi, PULL_EXISTS] >>
+      rpt strip_tac >> res_tac >> simp[])
+  >- ((* par *)
+      map_every qx_gen_tac [`i0`, `m0`, `cmds`] >> strip_tac >>
+      simp[ngraphOf_def, PULL_EXISTS, OPT_SEQUENCE_EQ_SOME,
+           combinTheory.o_ABS_R, idents_FOLDR_add_action,
+           MEM_MAPi, EXISTS_PROD] >> rpt strip_tac >> res_tac >>
+      simp[])
+  >- ((* assign *)
+      simp[ngraphOf_def, FORALL_PROD, PULL_EXISTS] >> rw[] >> simp[])
+  >- ((* assignvar *)
+      simp[ngraphOf_def, FORALL_PROD, PULL_EXISTS])
+  >- ((* abort *) simp[ngraphOf_def])
+  >- ((* Done *) simp[ngraphOf_def])
+  >- ((* malloc *) simp[ngraphOf_def]))
+
+val FINITE_greadswrites = store_thm(
+  "FINITE_greadswrites[simp]",
+  ``∀g. FINITE (greads g) ∧ FINITE (gwrites g)``,
+  ho_match_mp_tac graph_ind >> simp[]);
+
+val wfnag_add_postaction = store_thm(
+  "wfnag_add_postaction",
+  ``a.ident ∉ idents g ⇒
+    (wfnag (add_postaction a g) ⇔
+      wfnag g ∧
+      case a.data of
+          DN d => T
+        | DG g0 => wfnag g0 ∧ gwrites g0 = set a.writes ∧
+                   greads g0 = set a.reads)``,
+  simp[Once wfnag_cases, SimpLHS] >> dsimp[] >>
+  simp[Once wfnag_cases, SimpRHS, SimpL ``$/\``] >>
+  Cases_on `a.data` >> dsimp[] >> metis_tac[]);
+
+val wfnag_FOLDR_add_action_I = store_thm(
+  "wfnag_FOLDR_add_action_I",
+  ``(∀a. MEM a l ⇒ wfnag (a ⊕ emptyG)) ⇒
+    wfnag (FOLDR add_action emptyG l)``,
+  Induct_on `l` >> dsimp[] >> qx_gen_tac `h` >>
+  Cases_on `h.ident ∈ idents (FOLDR add_action emptyG l)`
+  >- simp[add_action_id |> EQ_IMP_RULE |> #2] >>
+  simp[wfnag_add_action]);
+
+val nagEval_COND = store_thm(
+  "nagEval_COND",
+  ``wfnag (a ⊕ g) ⇒
+    nagEval (a ⊕ g) m = if a.ident ∈ idents g then nagEval g m
+                        else
+                          case a.data of
+                              DN d => nagEval g (apply_action (polydata_upd (K d) a) m)
+                            | DG g0 => nagEval g (nagEval g0 m)``,
+  strip_tac >> rw[] >- simp[add_action_id |> EQ_IMP_RULE |> #2] >>
+  simp[nagEval_thm]);
+
+
+(*val wfnag_COND = store_thm(
+  "wfnag_COND",
+  ``wfnag (a ⊕ g) ⇔
+      wfnag g ∧
+      (a.ident ∈ idents g ∨
+       case a.data of
+           DN d => T
+         | DG g0 =>
+
+val wfnag_merge_graph = store_thm(
+  "wfnag_merge_graph",
+  ``∀g2 g1. wfnag g1 ∧ wfnag g2 ⇒ wfnag (merge_graph g1 g2)``,
+  ho_match_mp_tac graph_ind >> simp[merge_graph_thm] >>
+  simp[wfnag_add_action] >> rpt strip_tac >>
+  first_x_assum match_mp_tac >> simp[] >>
+  Cases_on `a.ident ∈ idents g1` >>
+  simp[add_postactionID, wfnag_add_postaction]);
+
+val ngraphOf_wfnag = store_thm(
+  "ngraphOf_wfnag",
+  ``∀i0 m0 c0 i m g. ngraphOf i0 m0 c0 = SOME(i,m,g) ⇒ wfnag g``,
+  ho_match_mp_tac ngraphOf_ind >> rpt conj_tac
+  >- ((* if *) iftac >> rpt strip_tac >> res_tac >>
+      qmatch_assum_rename_tac `wfnag g` [] >>
+      `∀i. i ∈ idents g ⇒ SUC (SND i0) ≤ SND i`
+        by metis_tac[SND_ap2, ngraphOf_idents] >>
+      `i0 ∉ idents g` by (strip_tac >> res_tac >> lfs[]) >>
+      simp[wfnag_add_action] >>
+      simp[polydata_upd_def])
+  >- ((* forloop *)
+      simp[ngraphOf_def, PULL_EXISTS, FORALL_PROD] >>
+      map_every qx_gen_tac [`vs`, `i`, `m0`, `vnm`, `d`, `body`] >>
+      rpt gen_tac >> strip_tac >>
+      map_every qx_gen_tac [`m`, `g`, `dvs`, `c`] >>
+      strip_tac >> fs[] >>
+      qpat_assum `dvalues xx yy = zz` kall_tac >>
+      pop_assum mp_tac >>
+      qmatch_abbrev_tac `FOLDL ff (SOME(m0,g0,c0)) dvs = SOME(m,g,c) ⇒ wfnag g` >>
+      `wfnag g0 ∧ ∀it. it ∈ idents g0 ⇒ SND it < c0 + i`
+        by simp[Abbr`g0`] >>
+      map_every markerLib.RM_ABBREV_TAC ["g0", "c0"] >>
+      ntac 2 (pop_assum mp_tac) >> map_every qid_spec_tac [`g0`, `m0`, `c0`] >>
+      Induct_on `dvs` >> simp[] >>
+      qx_gen_tac `h` >> simp[DISJ_IMP_THM, FORALL_AND_THM] >>
+      strip_tac >> map_every qx_gen_tac [`c0`, `m0`, `g0`] >> ntac 3 strip_tac>>
+      `∀l. FOLDL ff NONE l = NONE` by (Induct_on `l` >> simp[Abbr`ff`])  >>
+      `∃m' g' c'. ff (SOME (m0,g0,c0)) h = SOME(m',g',c')`
+        by (spose_not_then assume_tac >>
+            `ff (SOME (m0,g0,c0)) h = NONE`
+              by metis_tac[optionTheory.option_CASES, pair_CASES] >>
+            fs[]) >>
+      `wfnag g' ∧ ∀it. it ∈ idents g' ⇒ SND it < c' + i` suffices_by metis_tac[] >>
+      pop_assum mp_tac >> simp[Abbr`ff`, PULL_EXISTS, FORALL_PROD] >> rpt gen_tac >>
+      strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+      dsimp[idents_add_postaction] >> reverse conj_tac
+      >- (fs[FORALL_PROD] >> metis_tac[DECIDE ``x:num < y + z ⇒ x < y + (z + 1)``]) >>
+      `(h::vs,c0+i) ∉ idents g0` by (strip_tac >> res_tac >> fs[]) >>
+      simp[wfnag_add_postaction, SET_TO_LIST_INV] >> metis_tac[])
+  >- ((* seq *)
+      map_every qx_gen_tac [`i0`, `m0`, `cs`] >> strip_tac >>
+      simp[Once ngraphOf_def] >> Cases_on `cs` >> fs[] >>
+      simp[PULL_EXISTS, FORALL_PROD] >>
+      metis_tac[wfnag_merge_graph])
+  >- ((* parloop *)
+      map_every qx_gen_tac [`i0`, `m0`, `vnm`, `d`, `body`] >> strip_tac >>
+      simp[ngraphOf_def, PULL_EXISTS, OPT_SEQUENCE_EQ_SOME, combinTheory.o_ABS_R,
+           MEM_MAPi, EXISTS_PROD] >>
+      rpt strip_tac >> match_mp_tac wfnag_FOLDR_add_action_I >>
+      simp[MEM_MAPi, PULL_EXISTS] >> rpt strip_tac >> res_tac >> simp[] >>
+      simp[wfnag_add_action, SET_TO_LIST_INV] >> metis_tac[rich_listTheory.EL_MEM])
+  >- ((* par *)
+      simp[ngraphOf_def, PULL_EXISTS, FORALL_PROD, OPT_SEQUENCE_EQ_SOME,
+           combinTheory.o_ABS_R, MEM_MAPi, EXISTS_PROD] >>
+      rpt strip_tac >> match_mp_tac wfnag_FOLDR_add_action_I >>
+      simp[MEM_MAPi, PULL_EXISTS] >> rpt strip_tac >> res_tac >>
+      simp[SET_TO_LIST_INV, wfnag_add_action] >> metis_tac[rich_listTheory.EL_MEM])
+  >- ((* assign *)
+      simp[ngraphOf_def, FORALL_PROD, PULL_EXISTS, wfnag_add_action, polydata_upd_def])
+  >- ((* assignvar *)
+      simp[ngraphOf_def, FORALL_PROD, PULL_EXISTS, wfnag_add_action, polydata_upd_def])
+  >- ((* abort *) simp[ngraphOf_def])
+  >- ((* done *) simp[ngraphOf_def])
+  >- ((* malloc *) simp[ngraphOf_def]))
+
+val nagEval_ngraphOf = store_thm(
+  "nagEval_ngraphOf",
+  ``∀i0 m0 c0 i m g.
+      ngraphOf i0 m0 c0 = SOME(i,m,g) ⇒
+      nagEval g (SOME m0) = SOME m``,
+  ho_match_mp_tac ngraphOf_ind >> rpt conj_tac
+  >- ((* if *)
+      iftac >> map_every qx_gen_tac [`us`, `i`, `m`, `g`] >>
+      strip_tac >> res_tac >> `wfnag g` by metis_tac[ngraphOf_wfnag] >>
+      simp[nagEval_COND,wfnag_add_action]
+
+
+*)
 val _ = export_theory();
