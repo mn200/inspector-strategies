@@ -64,6 +64,13 @@ val (wfnag_rules, wfnag_ind, wfnag_cases) = Hol_reln`
        wfnag g)
 `;
 
+val wfnnode_def = Define`
+  wfnnode a =
+    case a.data of DN _ => T
+                 | DG g => wfnag g ∧ set a.writes = gwrites g ∧
+                           set a.reads = greads g
+`
+
 val graph_CASES = store_thm(
   "graph_CASES",
   ``∀g. g = emptyG ∨ ∃a g0. a.ident ∉ idents g0 ∧ g = a ⊕ g0``,
@@ -94,14 +101,8 @@ val wfnag_empty = store_thm(
 
 val wfnag_add_action = store_thm(
   "wfnag_add_action",
-  ``a.ident ∉ idents g ⇒
-    (wfnag (a ⊕ g) ⇔
-       wfnag g ∧
-       case a.data of
-           DN d => T
-         | DG g0 => wfnag g0 ∧ gwrites g0 = set a.writes ∧
-                    greads g0 = set a.reads)``,
-  simp[Once wfnag_cases, SimpLHS] >> dsimp[] >>
+  ``a.ident ∉ idents g ⇒ (wfnag (a ⊕ g) ⇔ wfnag g ∧ wfnnode a)``,
+  simp[wfnnode_def] >> simp[Once wfnag_cases, SimpLHS] >> dsimp[] >>
   simp[Once wfnag_cases, SimpRHS, SimpL ``$/\``] >>
   Cases_on `a.data` >> dsimp[] >> metis_tac[]);
 
@@ -157,7 +158,7 @@ val apply_action_nagER_commutes = store_thm(
               ∃m'. nagER m0 g m' ∧ m = apply_action a m'``,
   Induct_on `nagER` >> simp[] >> rpt conj_tac
   >- (map_every qx_gen_tac [`a`, `g`, `d`, `ma`, `m`] >>
-      csimp[wfnag_add_action] >> ntac 2 strip_tac >> fs[] >>
+      csimp[wfnag_add_action,wfnnode_def] >> ntac 2 strip_tac >> fs[] >>
       map_every qx_gen_tac [`b`, `m0`] >> dsimp[] >> strip_tac >>
       qabbrev_tac `a' = polydata_upd (K d) a` >> rw[] >>
       `a' ≁ₜ b` by simp[Abbr`a'`, polydata_upd_def] >>
@@ -168,7 +169,7 @@ val apply_action_nagER_commutes = store_thm(
       match_mp_tac (List.nth(CONJUNCTS nagER_rules, 1)) >>
       simp[]) >>
   map_every qx_gen_tac [`a`, `g`, `g0`, `ma`, `m1`, `m`] >>
-  simp[wfnag_add_action] >> ntac 2 strip_tac >>
+  simp[wfnag_add_action,wfnnode_def] >> ntac 2 strip_tac >>
   map_every qx_gen_tac [`b`, `m0`] >> dsimp[] >> strip_tac >> rw[] >>
   `∀b'. b' ∈ g0 ⇒ b' ≁ₜ b` by metis_tac[gtouches_lemma] >> fs[] >>
   `∃m'. nagER m0 g0 m' ∧ m1 = apply_action b m'` by metis_tac[] >> rw[] >>
@@ -194,7 +195,7 @@ val nagER_commutes = store_thm(
       rw[] >> qexists_tac `m0'` >> simp[] >>
       match_mp_tac (List.nth(CONJUNCTS nagER_rules, 1)) >> simp[]) >>
   map_every qx_gen_tac [`a`, `g1`, `g10`, `m0`, `m0'`, `m1`] >>
-  simp[wfnag_add_action] >> ntac 2 strip_tac >> fs[GSYM IMP_DISJ_THM] >>
+  simp[wfnag_add_action,wfnnode_def] >> ntac 2 strip_tac >> fs[GSYM IMP_DISJ_THM] >>
   map_every qx_gen_tac [`g2`, `m2`] >> strip_tac >>
   `∃m1'. nagER m0' g2 m1' ∧ nagER m1' g1 m2` by metis_tac[] >>
   `¬gtouches g10 g2` by metis_tac[gtouches_lemma2] >>
@@ -298,13 +299,13 @@ val action_graph_case = prove(
     by (match_mp_tac (last (CONJUNCTS nagER_rules)) >>
         simp[] >> metis_tac[]) >>
   `nagSize (a1 ⊕ g00) < nagSize (a1 ⊕ (a2 ⊕ g00))` by simp[] >>
-  `wfnag (a1 ⊕ g00)` by fs[wfnag_add_action] >>
+  `wfnag (a1 ⊕ g00)` by fs[wfnag_add_action,wfnnode_def] >>
   `m2 = mm` by metis_tac[] >>
   pop_assum SUBST_ALL_TAC >>
   `∀b. b ∈ g0 ⇒ b ≁ₜ a2'`
-    by (simp[Abbr`a2'`] >> fs[wfnag_add_action] >>
+    by (simp[Abbr`a2'`] >> fs[wfnag_add_action,wfnnode_def] >>
         metis_tac[gtouches_lemma, touches_SYM]) >>
-  `wfnag g0` by fs[wfnag_add_action] >>
+  `wfnag g0` by fs[wfnag_add_action,wfnnode_def] >>
   `∃mm02. nagER m0 g0 mm02 ∧ mm01 = apply_action a2' mm02`
     by metis_tac[apply_action_nagER_commutes] >>
   pop_assum SUBST_ALL_TAC >>
@@ -325,7 +326,7 @@ val nagER_unique = store_thm(
   Q.UNDISCH_THEN `nagER m0 g m1` mp_tac >>
   simp[Once nagER_cases] >> rpt strip_tac
   >- (rw[] >> fs[Once nagER_cases])
-  >- (rw[] >> fs[wfnag_add_action] >>
+  >- (rw[] >> fs[wfnag_add_action,wfnnode_def] >>
       qmatch_assum_rename_tac `adata a1 = DN d1` [] >>
       qabbrev_tac `a1' = polydata_upd (K d1) a1` >>
       qmatch_assum_rename_tac `wfnag g1` [] >>
@@ -355,10 +356,11 @@ val nagER_unique = store_thm(
                 simp[Abbr`a1'`, Abbr`a2'`]) >>
           pop_assum SUBST_ALL_TAC >>
           `nagSize g00 < 1 + nagSize (a2 ⊕ g00)` by simp[] >>
-          `wfnag g00` by fs[wfnag_add_action] >> `m2' = m1'` by metis_tac[] >>
+          `wfnag g00` by fs[wfnag_add_action,wfnnode_def] >>
+          `m2' = m1'` by metis_tac[] >>
           `nagSize (a2 ⊕ g00) < 1 + nagSize (a2 ⊕ g00) ∧
            nagSize (a1 ⊕ g00) < 1 + nagSize (a2 ⊕ g00)` by simp[] >>
-          `wfnag (a1 ⊕ g00)` by simp[wfnag_add_action] >>
+          `wfnag (a1 ⊕ g00)` by simp[wfnag_add_action,wfnnode_def] >>
           metis_tac[]) >>
       qmatch_assum_rename_tac `adata a2 = DG g0` [] >>
       `a1 ≠ a2` by (strip_tac >> fs[]) >>
@@ -378,9 +380,9 @@ val nagER_unique = store_thm(
       `m1 = mm` by metis_tac[DECIDE ``x < 1n + x``] >>
       pop_assum SUBST_ALL_TAC >>
       `∀b. b ∈ g0 ⇒ b ≁ₜ a1'`
-        by (simp[Abbr`a1'`] >> fs[wfnag_add_action] >>
+        by (simp[Abbr`a1'`] >> fs[wfnag_add_action,wfnnode_def] >>
             metis_tac[gtouches_lemma, touches_SYM]) >>
-      `wfnag g0` by fs[wfnag_add_action] >>
+      `wfnag g0` by fs[wfnag_add_action,wfnnode_def] >>
       `∃mm02. nagER m0 g0 mm02 ∧ mm01 = apply_action a1' mm02`
         by metis_tac[apply_action_nagER_commutes] >>
       pop_assum SUBST_ALL_TAC >>
@@ -390,7 +392,7 @@ val nagER_unique = store_thm(
         by (match_mp_tac (List.nth(CONJUNCTS nagER_rules, 1)) >>
             simp[]) >>
       `nagSize (a1 ⊕ g00) < 1 + nagSize (a2 ⊕ g00)` by simp[] >>
-      `wfnag (a1 ⊕ g00)` by fs[wfnag_add_action] >>
+      `wfnag (a1 ⊕ g00)` by fs[wfnag_add_action,wfnnode_def] >>
       metis_tac[])
   >- (qmatch_assum_rename_tac `adata a1 = DG g0` [] >>
       qmatch_assum_rename_tac `nagER m0 g0 m00` [] >>
@@ -402,7 +404,7 @@ val nagER_unique = store_thm(
       qmatch_assum_rename_tac `nagER m0 g02 m02` [] >>
       qmatch_assum_rename_tac `nagER m01 g1 m1` [] >>
       qmatch_assum_rename_tac `nagER m0 g01 m01` [] >>
-      rw[] >> fs[wfnag_add_action] >>
+      rw[] >> fs[wfnag_add_action,wfnnode_def] >>
       qmatch_assum_rename_tac `a2.ident ∉ idents g2` [] >>
       Cases_on `a1 = a2`
       >- (Q.UNDISCH_THEN `a1 ⊕ g1 = a2 ⊕ g2` mp_tac >>
@@ -418,7 +420,7 @@ val nagER_unique = store_thm(
         by metis_tac[double_graph_decomposition] >>
       rw[] >>
       `∃m00. nagER m01 g02 m00` by metis_tac[nagER_total] >>
-      fs[wfnag_add_action] >>
+      fs[wfnag_add_action,wfnnode_def] >>
       `¬gtouches g01 g02` by metis_tac[gtouches_lemma3] >>
       `∃m02'. nagER m0 g02 m02' ∧ nagER m02' g01 m00`
         by metis_tac[nagER_commutes] >>
@@ -427,11 +429,11 @@ val nagER_unique = store_thm(
       `m02' = m02` by metis_tac[] >> pop_assum SUBST_ALL_TAC >>
       `∃mm. nagER m00 g00 mm` by metis_tac[nagER_total] >>
       `nagER m02 (a1 ⊕ g00) mm` by metis_tac[nagER_rules] >>
-      `wfnag (a1 ⊕ g00)` by simp[wfnag_add_action] >>
+      `wfnag (a1 ⊕ g00)` by simp[wfnag_add_action,wfnnode_def] >>
       first_assum (qspecl_then [`a1 ⊕ g00`, `m02`, `mm`, `m2`] mp_tac) >>
       simp[] >> disch_then SUBST_ALL_TAC >>
       `nagER m01 (a2 ⊕ g00) m2` by metis_tac[nagER_rules] >>
-      `wfnag (a2 ⊕ g00)` by simp[wfnag_add_action] >>
+      `wfnag (a2 ⊕ g00)` by simp[wfnag_add_action,wfnnode_def] >>
       first_x_assum (qspecl_then [`a2 ⊕ g00`, `m01`, `m1`, `m2`] mp_tac) >>
       simp[]))
 
@@ -463,7 +465,7 @@ val nagEval_thm = store_thm(
   qmatch_assum_rename_tac `adata a = DG g0` [] >>
   `∃m00 mm. nagER m g0 m00 ∧ nagER m00 g mm` by metis_tac [nagER_total] >>
   `nagER m (a ⊕ g) mm` by metis_tac[nagER_rules] >>
-  `wfnag g ∧ wfnag g0` by fs[wfnag_add_action] >>
+  `wfnag g ∧ wfnag g0` by fs[wfnag_add_action,wfnnode_def] >>
   `(∀m'. nagER m g0 m' ⇔ m' = m00) ∧ (∀m'. nagER m00 g m' ⇔ m' = mm) ∧
    (∀m'. nagER m (a ⊕ g) m' ⇔ m' = mm)`
     by metis_tac[nagER_unique] >> simp[])
@@ -690,20 +692,14 @@ val FINITE_greadswrites = store_thm(
 val wfnag_add_postaction = store_thm(
   "wfnag_add_postaction",
   ``a.ident ∉ idents g ⇒
-    (wfnag (add_postaction a g) ⇔
-      wfnag g ∧
-      case a.data of
-          DN d => T
-        | DG g0 => wfnag g0 ∧ gwrites g0 = set a.writes ∧
-                   greads g0 = set a.reads)``,
-  simp[Once wfnag_cases, SimpLHS] >> dsimp[] >>
+    (wfnag (add_postaction a g) ⇔ wfnag g ∧ wfnnode a)``,
+  simp[wfnnode_def] >> simp[Once wfnag_cases, SimpLHS] >> dsimp[] >>
   simp[Once wfnag_cases, SimpRHS, SimpL ``$/\``] >>
   Cases_on `a.data` >> dsimp[] >> metis_tac[]);
 
 val wfnag_FOLDR_add_action_I = store_thm(
   "wfnag_FOLDR_add_action_I",
-  ``(∀a. MEM a l ⇒ wfnag (a ⊕ emptyG)) ⇒
-    wfnag (FOLDR add_action emptyG l)``,
+  ``(∀a. MEM a l ⇒ wfnnode a) ⇒ wfnag (FOLDR add_action emptyG l)``,
   Induct_on `l` >> dsimp[] >> qx_gen_tac `h` >>
   Cases_on `h.ident ∈ idents (FOLDR add_action emptyG l)`
   >- simp[add_action_id |> EQ_IMP_RULE |> #2] >>
@@ -720,15 +716,11 @@ val nagEval_COND = store_thm(
   strip_tac >> rw[] >- simp[add_action_id |> EQ_IMP_RULE |> #2] >>
   simp[nagEval_thm]);
 
-
-(*val wfnag_COND = store_thm(
+val wfnag_COND = store_thm(
   "wfnag_COND",
-  ``wfnag (a ⊕ g) ⇔
-      wfnag g ∧
-      (a.ident ∈ idents g ∨
-       case a.data of
-           DN d => T
-         | DG g0 =>
+  ``wfnag (a ⊕ g) ⇔ wfnag g ∧ (a.ident ∈ idents g ∨ wfnnode a)``,
+  Cases_on `a.ident ∈ idents g` >- simp[add_action_id |> EQ_IMP_RULE |> #2] >>
+  simp[wfnag_add_action]);
 
 val wfnag_merge_graph = store_thm(
   "wfnag_merge_graph",
@@ -739,6 +731,11 @@ val wfnag_merge_graph = store_thm(
   Cases_on `a.ident ∈ idents g1` >>
   simp[add_postactionID, wfnag_add_postaction]);
 
+val wfnnode_mkNN = store_thm(
+  "wfnnode_mkNN[simp]",
+  ``wfnnode (mkNN a)``,
+  simp[wfnnode_def, polydata_upd_def]);
+
 val ngraphOf_wfnag = store_thm(
   "ngraphOf_wfnag",
   ``∀i0 m0 c0 i m g. ngraphOf i0 m0 c0 = SOME(i,m,g) ⇒ wfnag g``,
@@ -748,8 +745,7 @@ val ngraphOf_wfnag = store_thm(
       `∀i. i ∈ idents g ⇒ SUC (SND i0) ≤ SND i`
         by metis_tac[SND_ap2, ngraphOf_idents] >>
       `i0 ∉ idents g` by (strip_tac >> res_tac >> lfs[]) >>
-      simp[wfnag_add_action] >>
-      simp[polydata_upd_def])
+      simp[wfnag_add_action])
   >- ((* forloop *)
       simp[ngraphOf_def, PULL_EXISTS, FORALL_PROD] >>
       map_every qx_gen_tac [`vs`, `i`, `m0`, `vnm`, `d`, `body`] >>
@@ -778,7 +774,7 @@ val ngraphOf_wfnag = store_thm(
       dsimp[idents_add_postaction] >> reverse conj_tac
       >- (fs[FORALL_PROD] >> metis_tac[DECIDE ``x:num < y + z ⇒ x < y + (z + 1)``]) >>
       `(h::vs,c0+i) ∉ idents g0` by (strip_tac >> res_tac >> fs[]) >>
-      simp[wfnag_add_postaction, SET_TO_LIST_INV] >> metis_tac[])
+      simp[wfnag_add_postaction, SET_TO_LIST_INV, wfnnode_def] >> metis_tac[])
   >- ((* seq *)
       map_every qx_gen_tac [`i0`, `m0`, `cs`] >> strip_tac >>
       simp[Once ngraphOf_def] >> Cases_on `cs` >> fs[] >>
@@ -790,21 +786,57 @@ val ngraphOf_wfnag = store_thm(
            MEM_MAPi, EXISTS_PROD] >>
       rpt strip_tac >> match_mp_tac wfnag_FOLDR_add_action_I >>
       simp[MEM_MAPi, PULL_EXISTS] >> rpt strip_tac >> res_tac >> simp[] >>
-      simp[wfnag_add_action, SET_TO_LIST_INV] >> metis_tac[rich_listTheory.EL_MEM])
+      simp[wfnag_add_action, SET_TO_LIST_INV, wfnnode_def] >>
+      metis_tac[rich_listTheory.EL_MEM])
   >- ((* par *)
       simp[ngraphOf_def, PULL_EXISTS, FORALL_PROD, OPT_SEQUENCE_EQ_SOME,
            combinTheory.o_ABS_R, MEM_MAPi, EXISTS_PROD] >>
       rpt strip_tac >> match_mp_tac wfnag_FOLDR_add_action_I >>
       simp[MEM_MAPi, PULL_EXISTS] >> rpt strip_tac >> res_tac >>
-      simp[SET_TO_LIST_INV, wfnag_add_action] >> metis_tac[rich_listTheory.EL_MEM])
+      simp[SET_TO_LIST_INV, wfnag_add_action, wfnnode_def] >>
+      metis_tac[rich_listTheory.EL_MEM])
   >- ((* assign *)
-      simp[ngraphOf_def, FORALL_PROD, PULL_EXISTS, wfnag_add_action, polydata_upd_def])
+      simp[ngraphOf_def, FORALL_PROD, PULL_EXISTS, wfnag_add_action, wfnnode_def])
   >- ((* assignvar *)
-      simp[ngraphOf_def, FORALL_PROD, PULL_EXISTS, wfnag_add_action, polydata_upd_def])
+      simp[ngraphOf_def, FORALL_PROD, PULL_EXISTS, wfnag_add_action,
+           polydata_upd_def, wfnnode_def])
   >- ((* abort *) simp[ngraphOf_def])
   >- ((* done *) simp[ngraphOf_def])
   >- ((* malloc *) simp[ngraphOf_def]))
 
+val mkNN_data = store_thm(
+  "mkNN_data[simp]",
+  ``adata (mkNN a) = DN a.data``,
+  simp[polydata_upd_def]);
+
+val polydata_updK = store_thm(
+  "polydata_updK[simp]",
+  ``polydata_upd (K (adata a)) (mkNN a) = a``,
+  simp[polydata_upd_def, action_component_equality]);
+
+val apply_action_readAction = store_thm(
+  "apply_action_readAction[simp]",
+  ``apply_action (readAction i m e) mem = mem``,
+  simp[apply_action_def, readAction_def]);
+
+val nagEval_postaction = store_thm(
+  "nagEval_postaction",
+  ``wfnnode a ∧ wfnag g ⇒
+    nagEval (add_postaction a g) m =
+      if a.ident ∈ idents g then nagEval g m
+      else (case a.data of
+                DN d => apply_action (polydata_upd (K d) a)
+              | DG g0 => nagEval g0) (nagEval g m)``,
+  Cases_on `a.ident ∈ idents g` >- simp[add_postactionID] >> pop_assum mp_tac >>
+  map_every qid_spec_tac [`m`, `a`, `g`] >> ho_match_mp_tac graph_ind >>
+  simp[] >> conj_tac >- (simp[nagEval_COND, wfnag_add_action] >> rpt gen_tac >>
+                         Cases_on `a.data` >> simp[]) >>
+  simp[wfnag_add_action] >>
+  rpt strip_tac >> simp[actionGraphTheory.add_action_add_postaction_ASSOC,
+                        nagEval_COND, idents_add_postaction, wfnag_add_action,
+                        wfnag_add_postaction] >>
+  Cases_on `adata a` >> simp[]);
+(*
 val nagEval_ngraphOf = store_thm(
   "nagEval_ngraphOf",
   ``∀i0 m0 c0 i m g.
@@ -814,7 +846,44 @@ val nagEval_ngraphOf = store_thm(
   >- ((* if *)
       iftac >> map_every qx_gen_tac [`us`, `i`, `m`, `g`] >>
       strip_tac >> res_tac >> `wfnag g` by metis_tac[ngraphOf_wfnag] >>
-      simp[nagEval_COND,wfnag_add_action]
+      simp[nagEval_COND,wfnag_COND])
+  >- ((* forloop *)
+      simp[ngraphOf_def, PULL_EXISTS, FORALL_PROD] >>
+      map_every qx_gen_tac [`us`, `i0`, `m0`, `vnm`, `d`, `body`] >> strip_tac >>
+      map_every qx_gen_tac [`m`, `g`, `dvs`, `c`] >> strip_tac >> fs[] >>
+      qpat_assum `dvalues xx yy = zz` kall_tac >>
+      qpat_assum `FOLDL ff aa ll = xx` mp_tac >>
+      qmatch_abbrev_tac `
+        FOLDL ff (SOME (m0,g0,c0)) dvs = SOME (m,g,c) ⇒
+        nagEval g (SOME m0) = SOME m` >>
+      `∀m0 m' m g0 c0 g c.
+         (∀it. it ∈ idents g0 ⇒ SND it < c0 + i0) ∧
+         wfnag g0 ∧ nagEval g0 (SOME m0) = SOME m' ∧
+         FOLDL ff (SOME (m',g0,c0)) dvs = SOME(m,g,c) ⇒
+         nagEval g (SOME m0) = SOME m`
+        suffices_by (rpt strip_tac >> first_x_assum match_mp_tac >>
+                     map_every qexists_tac [`m0`, `emptyG`, `0`, `c`] >>
+                     simp[]) >>
+      map_every markerLib.RM_ABBREV_TAC ["g0", "c0"] >>
+      Induct_on `dvs` >> simp[] >> qx_gen_tac `h` >>
+      simp[DISJ_IMP_THM, FORALL_AND_THM] >> strip_tac >>
+      pop_assum (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >> assume_tac th) >>
+      map_every qx_gen_tac [`m0`, `m'`, `m`, `g0`, `c0`, `g`, `c`] >>
+      `∀l. FOLDL ff NONE l = NONE` by (Induct >> simp[Abbr`ff`]) >>
+      strip_tac >>
+      `∃m2 g2 c2. ff (SOME (m',g0,c0)) h = SOME(m2,g2,c2)`
+        by metis_tac[optionTheory.option_CASES, optionTheory.NOT_NONE_SOME,
+                     pair_CASES] >>
+      first_x_assum (qspecl_then [`m0`, `m2`, `m`, `g2`, `c2`, `g`, `c`]
+                                 match_mp_tac) >> fs[] >>
+      pop_assum mp_tac >> simp[Abbr`ff`, PULL_EXISTS, FORALL_PROD] >>
+      rpt gen_tac >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+      first_assum (assume_tac o MATCH_MP ngraphOf_wfnag) >>
+      rpt (first_x_assum (kall_tac o
+                          assert (can (find_term (same_const ``FOLDL``)) o concl))) >>
+      simp[wfnag_add_postaction]
+
+
 
 
 *)
