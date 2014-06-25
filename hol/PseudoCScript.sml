@@ -199,20 +199,18 @@ val ssubst_def = tDefine "ssubst" `
    res_tac >> simp[])
 
 val (eval_rules, eval_ind, eval_cases) = Hol_reln`
-  (∀m0 s1 m s1' rest.
-    eval (m0, s1) (m, s1')
-   ⇒
-    eval (m0, Seq (s1::rest)) (m, Seq (s1'::rest)))
+  (∀c c0 pfx sfx m0 m.
+     eval (m0, c0) (m, c) ∧ EVERY ((=) Done) pfx
+    ⇒
+     eval (m0, Seq (pfx ++ [c0] ++ sfx))
+          (m, Seq (pfx ++ [c] ++ sfx)))
 
      ∧
 
-  (∀m rest.
-     eval (m, Seq (Done :: rest)) (m, Seq rest))
-
-     ∧
-
-  (∀m.
-     eval (m, Seq []) (m, Done))
+  (∀m cs.
+     EVERY ((=) Done) cs
+    ⇒
+     eval (m, Seq cs) (m, Done))
 
      ∧
 

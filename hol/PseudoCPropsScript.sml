@@ -166,6 +166,10 @@ val eval_terminates = store_thm(
   ``∀a b. eval a b ⇒ evalR b a``,
   Induct_on `eval a b` >> rpt strip_tac >>
   lfs[LEX_DEF, MAX_SET_THM, SUM_APPEND]
+  >- (Induct_on `pfx` >> simp[])
+  >- (Induct_on `pfx` >> simp[])
+  >- (simp[mltLT_SING0] >> Induct_on `cs` >> simp[] >>
+      metis_tac[BAG_UNION_LEFT_CANCEL, BAG_UNION_EMPTY])
   >- (Cases_on `b` >> simp[])
   >- (simp[mltLT_SING0] >> metis_tac[])
   >- (Cases_on `expr` >> fs[isValue_def])
@@ -2095,7 +2099,6 @@ val graphOf_pcg_eval_diamond = store_thm(
     by metis_tac[graphOf_apply_action_diamond, touches_SYM] >>
   metis_tac[]);
 
-
 val eval_graphOf_action = store_thm(
   "eval_graphOf_action",
   ``∀m0 c0 m c.
@@ -2106,13 +2109,14 @@ val eval_graphOf_action = store_thm(
         ∃a. a ∈ g0 ∧ (∀b. b ∈ pregraph a g0 ⇒ b.writes = []) ∧
             apply_action a (SOME m0) = SOME m``,
   ho_match_mp_tac eval_ind' >> rpt conj_tac >> REWRITE_TAC []
-  >- ((* head of Seq steps *)
-      rpt gen_tac >> strip_tac >> strip_tac >> fs[] >>
-      rpt gen_tac >> simp[Once graphOf_def] >>
-      simp[EXISTS_PROD, PULL_EXISTS] >>
-      map_every qx_gen_tac [`ci`, `cm`, `cg`, `rg`] >>
-      strip_tac >> rw[] >>
-      `∃a. a ∈ cg ∧ (∀b. b ∈ pregraph a cg ⇒ b.writes = []) ∧
+  >- ((* member of Seq steps *)
+      map_every qx_gen_tac [`c`, `c0`, `pfx`, `sfx`, `m0`, `m`] >>
+      ntac 2 strip_tac >> fs[] >> simp[Once graphOf_def] >>
+      reverse (Induct_on `pfx`) >> simp[PULL_EXISTS, EXISTS_PROD]
+      >- (strip_tac >> fs[] >> simp[Once graphOf_def] >> metis_tac[]) >>
+      map_every qx_gen_tac [`i0`, `i`, `mm`, `i'`, `m'`, `g'`, `gg`] >>
+      strip_tac >>
+      `∃a. a ∈ g' ∧ (∀b. b ∈ pregraph a g' ⇒ b.writes = []) ∧
            apply_action a (SOME m0) = SOME m`
         by metis_tac[] >>
       qexists_tac `a` >> simp[pregraph_merge_graph])
@@ -2269,6 +2273,10 @@ val graphOf_correct_lemma = store_thm(
           ∀g'. gtouches g g' ⇒ gtouches g0 g'``,
   ho_match_mp_tac eval_ind' >> rpt conj_tac
   >- ((* seq head takes one step *)
+      map_every qx_gen_tac [`c`, `c0`] >> reverse Induct >> simp[]
+      >- (ONCE_REWRITE_TAC [graphOf_def] >>
+          simp[PULL_EXISTS, FORALL_PROD, EXISTS_PROD] >>
+          first_assum MATCH_ACCEPT_TAC) >>
       ONCE_REWRITE_TAC [graphOf_def] >>
       simp[PULL_EXISTS, FORALL_PROD, EXISTS_PROD] >>
       rpt strip_tac >>
@@ -2292,11 +2300,10 @@ val graphOf_correct_lemma = store_thm(
       qx_gen_tac `a` >> strip_tac >>
       `a.ident ∈ idents rg` by simp[idents_thm] >>
       metis_tac[ilistLTE_trans, ilistLE_REFL])
-  >- ((* seq head is Done *)
-      simp[Once graphOf_def, SimpL ``$==>``] >>
-      simp[EXISTS_PROD])
-  >- ((* seq of empty list moves to Done *)
-      simp[graphOf_def])
+  >- ((* seq is all Dones *)
+      qx_gen_tac `m0` >> Induct_on `cs` >> simp[] >>
+      ONCE_REWRITE_TAC [graphOf_def] >>
+      simp[PULL_EXISTS, FORALL_PROD] >> fs[])
   >- ((* guard of if evaluates to boolean and next statement selected *)
       map_every qx_gen_tac [`m0`, `gd`, `t`, `e`, `b`] >>
       rpt gen_tac >> strip_tac >> simp[Once graphOf_def, SimpL ``$==>``] >>
