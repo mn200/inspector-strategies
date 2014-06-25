@@ -2,6 +2,7 @@ open HolKernel Parse boolLib bossLib;
 
 open lcsymtacs boolSimps
 open pred_setTheory listTheory pairTheory
+open monadsyntax
 
 open nagTheory
 open PseudoCPropsTheory
@@ -440,18 +441,154 @@ val nagEval_empty = store_thm(
   ``nagEval emptyG m = m``,
   simp[nagEval_def, Once nagER_cases])
 
-(*
 val nagEval_thm = store_thm(
   "nagEval_thm",
   ``(nagEval emptyG m = m) ∧
-    (wfnag (a ⊕ g) ⇒
+    (wfnag (a ⊕ g) ∧ a.ident ∉ idents g ⇒
      nagEval (a ⊕ g) m =
        case a.data of
            DN d => nagEval g (apply_action (polydata_upd (K d) a) m)
          | DG g0 => nagEval g (nagEval g0 m))``,
   simp[] >> strip_tac >> simp[nagEval_def] >>
   Cases_on `a.data` >> simp[]
-  >- (`∃
-*)
+  >- (`∃m1. nagER (apply_action (polydata_upd (K d) a) m) g m1`
+         by metis_tac[nagER_total] >>
+      `nagER m (a ⊕ g) m1` by simp[nagER_rules] >>
+      `wfnag g` by fs[wfnag_add_action] >>
+      `(∀m'. nagER m (a ⊕ g) m' ⇔ m' = m1) ∧
+       (∀m'. nagER (apply_action (polydata_upd (K d) a) m) g m' ⇔ m' = m1)`
+         by metis_tac[nagER_unique] >>
+      simp[]) >>
+  qmatch_assum_rename_tac `adata a = DG g0` [] >>
+  `∃m00 mm. nagER m g0 m00 ∧ nagER m00 g mm` by metis_tac [nagER_total] >>
+  `nagER m (a ⊕ g) mm` by metis_tac[nagER_rules] >>
+  `wfnag g ∧ wfnag g0` by fs[wfnag_add_action] >>
+  `(∀m'. nagER m g0 m' ⇔ m' = m00) ∧ (∀m'. nagER m00 g m' ⇔ m' = mm) ∧
+   (∀m'. nagER m (a ⊕ g) m' ⇔ m' = mm)`
+    by metis_tac[nagER_unique] >> simp[])
+
+val _ = overload_on ("mkNN", ``polydata_upd DN``)
+
+val stmt_weight_ssubst = store_thm(
+  "stmt_weight_ssubst[simp]",
+  ``stmt_weight (K 0) (K 0) (ssubst vnm v s) = stmt_weight (K 0) (K 0) s``,
+  qid_spec_tac `s` >> ho_match_mp_tac PseudoCTheory.stmt_induction >>
+  simp[PseudoCTheory.ssubst_def, MAP_MAP_o, combinTheory.o_DEF,
+       Cong (REWRITE_RULE [GSYM AND_IMP_INTRO] MAP_CONG)] >> rpt strip_tac >>
+  Cases_on `d` >> rw[PseudoCTheory.ssubst_def]);
+
+val ngraphOf_def = tDefine "ngraphOf" `
+  (ngraphOf i0 m0 (IfStmt gd t e) =
+     case evalexpr m0 gd of
+         Bool T => do
+                     (i,m,g) <- ngraphOf (ap2 SUC i0) m0 t;
+                     SOME(i,m, mkNN (readAction i0 m0 gd) ⊕ g)
+                   od
+       | Bool F => do
+                     (i,m,g) <- ngraphOf (ap2 SUC i0) m0 e;
+                     SOME(i,m, mkNN (readAction i0 m0 gd) ⊕ g)
+                   od
+       | _ => NONE) ∧
+
+  (ngraphOf i0 m0 (ForLoop vnm d body) =
+     do
+       dvs <- dvalues m0 d;
+       (m,g) <-
+         FOLDL (λacc v.
+                 case acc of
+                     NONE => NONE
+                   | SOME(m,g) =>
+                     case ngraphOf i0 m (ssubst vnm v body) of
+                         NONE => NONE
+                       | SOME(_, m', g0) =>
+                         SOME(m', <| reads := SET_TO_LIST (greads g0);
+                                     writes := SET_TO_LIST (gwrites g0);
+                                     ident := ap1 (CONS v) i0;
+                                     data := DG g0 |> ⊕ g))
+               (SOME (m0,emptyG))
+               dvs;
+       SOME(ap2 SUC i0, m, g)
+     od) ∧
+
+  (ngraphOf i0 m0 (Seq cmds) =
+     case cmds of
+         [] => SOME(i0, m0, emptyG)
+       | c :: rest =>
+         do
+           (i1,m1,G1) <- ngraphOf i0 m0 c;
+           (i2,m2,G2) <- ngraphOf i1 m1 (Seq rest);
+           SOME(i2,m2,merge_graph G1 G2)
+         od) ∧
+
+  (ngraphOf i0 m0 (ParLoop vnm d body) =
+     do
+       dvs <- dvalues m0 d;
+       ns <- OPT_SEQUENCE (MAP (λv.
+               do
+                 (i,m,g) <- ngraphOf i0 m0 (ssubst vnm v body);
+                 SOME(<| reads := SET_TO_LIST (greads g);
+                         writes := SET_TO_LIST (gwrites g);
+                         data := DG g;
+                         ident := ap1 (CONS v) i0 |>)
+               od) dvs);
+       assert(∀i j. i < j ∧ j < LENGTH ns ⇒ EL i ns ≁ₜ EL j ns);
+       g <- SOME (FOLDR add_action emptyG ns);
+       m <- nagEval g (SOME m0);
+       SOME(ap2 SUC i0, m, g)
+     od) ∧
+
+  (ngraphOf i0 m0 (Par cmds) =
+     do
+       ns <- OPT_SEQUENCE
+         (MAPi (λn c.
+                 do
+                   (i,m,g) <- ngraphOf i0 m0 c;
+                   SOME <| reads := SET_TO_LIST (greads g);
+                           writes := SET_TO_LIST (gwrites g);
+                           data := DG g;
+                           ident := ap2 ((+) n) i0 |>
+                  od)
+               cmds);
+       assert(∀i j. i < j ∧ j < LENGTH ns ⇒ EL i ns ≁ₜ EL j ns);
+       g <- SOME(FOLDR add_action emptyG ns);
+       m <- nagEval g (SOME m0);
+       SOME(ap2 ((+) (LENGTH ns)) i0, m, g)
+     od) ∧
+
+  (ngraphOf i0 m0 (Assign w ds opn) =
+     do
+       (aname,i_e) <- SOME w;
+       i <- (some i. evalexpr m0 i_e = Int i);
+       rds <- getReads m0 ds;
+       a0 <- SOME(mkNN (readAction i0 m0 i_e));
+       a1 <- SOME(mkNN (dvreadAction (ap2 SUC i0) m0 ds));
+       a <- SOME <| writes := [Array aname i];
+                    reads := rds;
+                    data := DN (mergeReads ds opn);
+                    ident := ap2 ((+) 2) i0 |>;
+       rvs <- OPT_SEQUENCE (MAP (evalDexpr m0) ds);
+       m' <- upd_array m0 aname i (opn rvs);
+       SOME(ap2 ((+) 3) i0, m', a0 ⊕ (a1 ⊕ (a ⊕ emptyG)))
+     od) ∧
+
+  (ngraphOf i0 m0 (AssignVar vnm e) =
+     do
+       m' <- updf (Variable vnm) (evalexpr m0 e) m0;
+       SOME(ap2 SUC i0, m',
+            <| writes := [Variable vnm];
+               reads := expr_reads m0 e;
+               data := DN (K (evalexpr m0 e));
+               ident := i0 |> ⊕ emptyG)
+     od) ∧
+
+  (ngraphOf i0 m0 Abort = NONE) ∧
+
+  (ngraphOf i0 m0 Done = SOME(i0,m0,emptyG)) ∧
+
+  (ngraphOf i0 m0 (Malloc vnm sz value) = NONE)
+
+`  (WF_REL_TAC `measure (λ(i,m,c). stmt_weight (K 0) (K 0) c)` >> simp[MAX_PLUS] >>
+    rpt strip_tac >> qpat_assum `n < LENGTH cs` kall_tac >> Induct_on `cmds` >>
+    dsimp[] >> rpt strip_tac >> res_tac >> simp[]);
 
 val _ = export_theory();

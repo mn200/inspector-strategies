@@ -30,7 +30,7 @@ val stmt_weight_def = tDefine "stmt_weight" `
   (stmt_weight Abort = 0) ∧
   (stmt_weight Done = 0) ∧
   (stmt_weight (Assign w ds v) =
-     1 + expr_weight (SND w) + SUM (MAP dexpr_weight ds)) ∧
+     1 + ew (SND w) + SUM (MAP dw ds)) ∧
   (stmt_weight (AssignVar v e) = 1) ∧
   (stmt_weight (Malloc v d value) = 1) ∧
   (stmt_weight (IfStmt g t e) = MAX (stmt_weight t) (stmt_weight e) + 1) ∧
@@ -143,7 +143,7 @@ val loopbag_ssubst = store_thm(
 
 val _ = overload_on (
   "evalR",
-  ``inv_image (mlt (<) LEX (<)) (λ(m:memory,s). (loopbag s, stmt_weight s))``
+  ``inv_image (mlt (<) LEX (<)) (λ(m:memory,s). (loopbag s, stmt_weight dexpr_weight expr_weight s))``
 )
 
 val WF_evalR = store_thm(
@@ -834,7 +834,7 @@ val graphOf_def = tDefine "graphOf" `
   (graphOf i0 m0 (Malloc vnm sz value) = NONE)
 
 ` (WF_REL_TAC
-     `inv_image (mlt (<) LEX (<)) (λ(i,m,s). (loopbag s, stmt_weight s))` >>
+     `inv_image (mlt (<) LEX (<)) (λ(i,m,s). (loopbag s, stmt_weight (K 0) (K 0) s))` >>
    simp[WF_mlt1, FOLDR_MAP, mlt_loopbag_lemma] >>
    rpt strip_tac
    >- (imp_res_tac MEM_FOLDR_mlt >> pop_assum (qspec_then `I` mp_tac) >>
