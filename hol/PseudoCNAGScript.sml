@@ -625,40 +625,60 @@ val ngraphOf_idents = store_thm(
   ``∀i0 m0 c0 i m g.
       ngraphOf i0 m0 c0 = SOME(i,m,g) ⇒
       SND i0 ≤ SND i ∧
-      ∀it. it ∈ idents g ⇒ SND i0 ≤ SND it``,
+      ∀it. it ∈ idents g ⇒ SND i0 ≤ SND it ∧ SND it < SND i``,
   ho_match_mp_tac ngraphOf_ind >> rpt conj_tac
   >- ((* if *) iftac >> rpt strip_tac >> res_tac >> rw[] >> simp[])
   >- ((* forloop *)
       simp[ngraphOf_def, PULL_EXISTS, FORALL_PROD] >>
       map_every qx_gen_tac [`vs`, `n`, `m0`, `vnm`, `d`, `body`] >>
-      disch_then kall_tac >> rpt strip_tac >>
+      disch_then kall_tac >> rpt gen_tac >> strip_tac >> rpt gen_tac >>
       qpat_assum `dvalues xx yy = zz` kall_tac >>
-      rpt (pop_assum mp_tac) >>
-      qmatch_abbrev_tac `FOLDL ff (SOME(m0,g0,c0)) dvs = SOME(m,g,c) ⇒
-                         (us,p) ∈ idents g ⇒ n ≤ p` >>
-      `∀ts q. (ts,q) ∈ idents g0 ⇒ n ≤ q` by simp[Abbr`g0`] >>
-      map_every markerLib.RM_ABBREV_TAC ["g0", "us", "p", "c", "c0"] >>
       pop_assum mp_tac >>
-      map_every qid_spec_tac [`g0`, `g`, `m0`, `m`, `us`, `p`, `c`, `c0`,
-                              `dvs`] >>
-      Induct >> simp[] >- metis_tac[] >>
+      qmatch_abbrev_tac `FOLDL ff (SOME(m0,g0,c0)) dvs = SOME(m,g,c) ⇒
+                         (us,p) ∈ idents g ⇒ n ≤ p ∧ p < n + LENGTH dvs` >>
+      `∀ts q. (ts,q) ∈ idents g0 ⇒ n ≤ q ∧ q < n + c0` by simp[Abbr`g0`] >>
+      strip_tac >>
       `∀l. FOLDL ff NONE l = NONE` by (Induct_on `l` >> simp[Abbr`ff`]) >>
-      rpt strip_tac >>
+      pop_assum (fn th => ntac 2 (pop_assum mp_tac) >> assume_tac th) >>
+      `∀dvs g0 g m0 m us p c0 c.
+         (∀ts q. (ts,q) ∈ idents g0 ⇒ n ≤ q ∧ q < n + c0) ∧
+         FOLDL ff (SOME (m0,g0,c0)) dvs = SOME(m,g,c) ∧
+         (us,p) ∈ idents g ⇒
+         c0 ≤ c ∧ LENGTH dvs = c - c0 ∧ n ≤ p ∧ p < n + c`
+        suffices_by
+          (rpt strip_tac >>
+           first_x_assum (qspecl_then [`dvs`, `g0`, `g`, `m0`,
+                                       `m`, `us`, `p`, `c0`, `c`]
+                                      mp_tac) >>
+           lfs[] >> metis_tac[DECIDE ``x - 0n = x ∧ x + y = y + x``]) >>
+      map_every markerLib.RM_ABBREV_TAC ["g0", "c0", "c", "us", "p"] >>
+      Induct >> simp[] >- metis_tac[] >>
+      rpt gen_tac >> strip_tac >>
       `ff (SOME (m0,g0,c0)) h ≠ NONE`
         by (strip_tac >> fs[] >> metis_tac[optionTheory.NOT_NONE_SOME]) >>
       pop_assum (fn th =>
       `∃m' g' c'. ff (SOME (m0,g0,c0)) h = SOME(m',g',c')`
         by metis_tac[optionTheory.option_CASES, pair_CASES, th]) >>
-      `∀ts q. (ts,q) ∈ idents g' ⇒ n ≤ q` suffices_by metis_tac[] >>
-      pop_assum mp_tac >> ntac 2 (pop_assum kall_tac) >>
+      fs[] >>
+      first_x_assum (qspecl_then [`g'`, `g`, `m'`, `m`, `us`, `p`, `c'`, `c`]
+                                 mp_tac) >> ASM_REWRITE_TAC[] >>
+      `c' = c0 + 1 ∧ (∀ts q. (ts,q) ∈ idents g' ⇒ n ≤ q ∧ q < n + c')`
+        suffices_by (strip_tac >> BasicProvers.VAR_EQ_TAC >>
+                     ASM_REWRITE_TAC[] >> simp[]) >>
+      pop_assum mp_tac >>
+      rpt (first_x_assum (kall_tac o
+                          assert(can(find_term (same_const ``FOLDL``)) o
+                                 concl))) >>
       simp[Abbr`ff`, PULL_EXISTS, FORALL_PROD] >> rpt gen_tac >> strip_tac >>
-      rpt BasicProvers.VAR_EQ_TAC >> simp[] >> dsimp[] >> metis_tac[])
+      rpt BasicProvers.VAR_EQ_TAC >> simp[] >> dsimp[] >> rpt strip_tac >>
+      res_tac >> simp[])
   >- ((* seq *)
       map_every qx_gen_tac [`i0`, `m0`, `cs`] >> strip_tac >>
       simp[Once ngraphOf_def] >>
       Cases_on `cs` >> simp[PULL_EXISTS, FORALL_PROD] >> fs[] >>
       fs[FORALL_PROD] >>
-      metis_tac[DECIDE ``x:num ≤ y ∧ y ≤ z ⇒ x ≤ z``])
+      metis_tac[DECIDE ``(x:num ≤ y ∧ y ≤ z ⇒ x ≤ z) ∧
+                         (x < y ∧ y ≤ z ⇒ x < z)``])
   >- ((* parloop *)
       map_every qx_gen_tac [`i0`, `m0`, `vnm`, `d`, `body`] >>
       strip_tac >>
@@ -836,7 +856,15 @@ val nagEval_postaction = store_thm(
                         nagEval_COND, idents_add_postaction, wfnag_add_action,
                         wfnag_add_postaction] >>
   Cases_on `adata a` >> simp[]);
-(*
+
+val nagEval_merge_graph = store_thm(
+  "nagEval_merge_graph",
+  ``∀g2 g1. wfnag g1 ∧ wfnag g2 ∧ DISJOINT (idents g1) (idents g2) ⇒
+            nagEval (merge_graph g1 g2) m = nagEval g2 (nagEval g1 m)``,
+  ho_match_mp_tac graph_ind >>
+  simp[merge_graph_thm, wfnag_add_action, nagEval_COND] >> rpt strip_tac >>
+  simp[wfnag_add_postaction, nagEval_postaction] >> Cases_on `adata a` >> simp[]);
+
 val nagEval_ngraphOf = store_thm(
   "nagEval_ngraphOf",
   ``∀i0 m0 c0 i m g.
@@ -881,10 +909,38 @@ val nagEval_ngraphOf = store_thm(
       first_assum (assume_tac o MATCH_MP ngraphOf_wfnag) >>
       rpt (first_x_assum (kall_tac o
                           assert (can (find_term (same_const ``FOLDL``)) o concl))) >>
-      simp[wfnag_add_postaction]
+      `(h::us,c0+i0) ∉ idents g0` by (strip_tac >> res_tac >> lfs[]) >>
+      dsimp[wfnag_add_postaction,wfnnode_def,SET_TO_LIST_INV] >> conj_tac
+      >- (rpt strip_tac >> res_tac >> simp[])
+      >- (simp[nagEval_postaction,wfnnode_def,SET_TO_LIST_INV]))
+  >- ((* seq *)
+      map_every qx_gen_tac [`i0`, `m0`, `cmds`] >> strip_tac >>
+      simp[Once ngraphOf_def] >> Cases_on `cmds` >>
+      simp[PULL_EXISTS,FORALL_PROD] >> fs[] >> rpt strip_tac >>
+      qmatch_assum_rename_tac `ngraphOf i0 m0 c = SOME((us,i), cm, cg)` [] >>
+      qmatch_assum_rename_tac
+        `ngraphOf (us,i) cm (Seq cs) = SOME((vs,j), csm, csg)` [] >>
+      `DISJOINT (idents cg) (idents csg)` suffices_by
+        (`wfnag cg ∧ wfnag csg` by metis_tac[ngraphOf_wfnag] >>
+         simp[nagEval_merge_graph] >> metis_tac[]) >>
+      `(∀it. it ∈ idents cg ⇒ SND it < i) ∧ (∀it. it ∈ idents csg ⇒ i ≤ SND it)`
+        by metis_tac[ngraphOf_idents,SND] >>
+      simp[DISJOINT_DEF, EXTENSION] >> spose_not_then strip_assume_tac >>
+      res_tac >> lfs[])
+  >- ((* parloop *)
+      rpt gen_tac >> strip_tac >> simp[ngraphOf_def, PULL_EXISTS])
+  >- ((* par *) simp[ngraphOf_def, PULL_EXISTS])
+  >- ((* assign *)
+      simp[ngraphOf_def, FORALL_PROD, PULL_EXISTS, nagEval_thm,
+           wfnag_add_action, wfnnode_def] >>
+      simp[polydata_upd_def, apply_action_def, updf_def,
+           mergeReads_def] >>
+      metis_tac[assign_lemma, listTheory.REVERSE_DEF, APPEND])
+  >- ((* assign var *)
+      simp[ngraphOf_def, nagEval_thm, wfnag_add_action, wfnnode_def,
+           polydata_upd_def, apply_action_def])
+  >- ((* abort *) simp[ngraphOf_def])
+  >- ((* done *) simp[ngraphOf_def])
+  >- ((* malloc *) simp[ngraphOf_def]));
 
-
-
-
-*)
 val _ = export_theory();

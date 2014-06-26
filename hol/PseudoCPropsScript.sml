@@ -1125,7 +1125,8 @@ val some_EQ_NONE = store_thm(
   SIMP_TAC bool_ss [optionTheory.NOT_SOME_NONE] THEN
   METIS_TAC[]);
 
-val assign_lemma = prove(
+val assign_lemma = store_thm(
+  "assign_lemma",
   ``OPT_SEQUENCE (MAP (evalDexpr m) ds) = SOME rvs ∧
     getReads m ds = SOME rds ⇒
     mergeReads0 ds acc opn (MAP (lookupRW m) rds) =
