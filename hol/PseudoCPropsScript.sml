@@ -847,10 +847,12 @@ val graphOf_def = tDefine "graphOf" `
        qid_spec_tac `c` >> Induct_on `cmds` >> dsimp[] >>
        rpt strip_tac >> res_tac >> decide_tac))
 
-val eval_ind' =
-    eval_strongind |> SIMP_RULE (srw_ss()) [FORALL_PROD]
-                   |> Q.SPEC `\a1 a2. P (FST a1) (SND a1) (FST a2) (SND a2)`
-                   |> SIMP_RULE (srw_ss()) []
+val eval_ind' = save_thm(
+  "eval_ind'",
+  PseudoCTheory.eval_strongind
+    |> SIMP_RULE (srw_ss()) [FORALL_PROD]
+    |> Q.SPEC `\a1 a2. P (FST a1) (SND a1) (FST a2) (SND a2)`
+    |> SIMP_RULE (srw_ss()) []);
 
 val _ = overload_on ("<", ``\il1:num list il2. LLEX $< il1 il2``)
 val _ = overload_on ("<=", ``\il1:num list il2. ¬LLEX $< il2 il1``)

@@ -943,4 +943,49 @@ val nagEval_ngraphOf = store_thm(
   >- ((* done *) simp[ngraphOf_def])
   >- ((* malloc *) simp[ngraphOf_def]));
 
+val ngraphOf_Done = save_thm(
+  "ngraphOf_Done[simp]",
+  last (#1 (front_last (CONJUNCTS ngraphOf_def))))
+
+(*
+val ngraph_starting_id_irrelevant = store_thm(
+  "ngraph_starting_id_irrelevant",
+  ``∀i0 m0 c i m g.
+       ngraphOf i0 m0 c = SOME(i,m,g) ⇒
+       ∀i0'. ∃f.
+         INJ f (idents g) UNIV ∧ i0' = f i0 ∧
+         ngraphOf i0' m0 c = SOME(i',m,imap f g)``,
+  ho_match_mp_tac ngraphOf_ind >> rpt conj_tac
+  >- ((* if * ) iftac >> simp[EXISTS_PROD] >>
+      `∃vs0 it0. i0 = (vs0,it0)` by metis_tac[pair_CASES] >>
+      rpt BasicProvers.VAR_EQ_TAC >>
+      map_every qx_gen_tac [`vs'`, `it'`, `m`, `g'`] >> strip_tac >>
+      fs[] >> map_every qx_gen_tac [`vs0'`, `i0'`] >>
+
+val eval_ngraph = prove(
+  ``∀m0 c0 m c.
+      (m0,c0) ---> (m,c) ⇒
+      ∀i0 i1 m1 g1.
+        ngraphOf i0 m0 c0 = SOME(i1,m1,g1) ⇒
+        ∃i2 g2.
+          ngraphOf i0 m c = SOME(i2,m1,g2) (* ∧
+          ∀g'. gtouches g2 g' ⇒ gtouches g1 g' *)``,
+  ho_match_mp_tac eval_ind' >> rpt conj_tac
+  >- ((* seq takes a step *)
+      map_every qx_gen_tac [`c`, `c0`] >> reverse Induct >> simp[]
+      >- (ONCE_REWRITE_TAC [ngraphOf_def] >>
+          simp[PULL_EXISTS, FORALL_PROD, EXISTS_PROD] >>
+          fs[FORALL_PROD, EXISTS_PROD] >> first_assum MATCH_ACCEPT_TAC) >>
+      ONCE_REWRITE_TAC [ngraphOf_def] >>
+      simp[PULL_EXISTS, FORALL_PROD, EXISTS_PROD] >> rpt strip_tac >>
+      qmatch_assum_rename_tac `
+        ngraphOf (vs0,i0) m0 c0 = SOME((vs00,i00),m00,g00)` [] >>
+      `∃vs' i' g'.
+          ngraphOf (vs0,i0) m c = SOME((vs',i'),m00,g') (* ∧
+               ∀g''. gtouches g' g'' ⇒ gtouches g00 g'' *)`
+         by metis_tac[] >> simp[] >>
+      qmatch_assum_rename_tac `
+        graphOf i00 m00 (Seq rest) = SOME(i0',m0',rg)` []>>
+
+*)
 val _ = export_theory();
