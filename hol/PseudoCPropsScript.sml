@@ -1687,7 +1687,8 @@ val isDValue_getReads = prove(
   Induct_on `rdes` >> simp[getReads_def] >> Cases_on `h` >>
   simp[isDValue_def, getReads_def]);
 
-val isDValue_destDValue = prove(
+val isDValue_destDValue = store_thm(
+  "isDValue_destDValue",
   ``EVERY isDValue rdes ⇒
     MAP THE (MAP (evalDexpr m0) rdes) = MAP destDValue rdes``,
   Induct_on `rdes` >> simp[] >> Cases_on `h` >>

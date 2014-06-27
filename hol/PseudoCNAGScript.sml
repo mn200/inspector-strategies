@@ -1,10 +1,11 @@
 open HolKernel Parse boolLib bossLib;
 
 open lcsymtacs boolSimps
-open pred_setTheory listTheory pairTheory
+open pred_setTheory listTheory pairTheory optionTheory
 open monadsyntax
 
 open nagTheory
+open PseudoCTheory
 open PseudoCPropsTheory
 open actionGraphTheory
 open indexedListsTheory
@@ -1020,33 +1021,172 @@ val ngraph_starting_id_irrelevant = store_thm(
       simp[] >> disch_then (qx_choosel_then [`f`, `cc`] strip_assume_tac) >>
       first_x_assum (qspec_then `m` mp_tac) >> simp[] >> strip_tac >>
       csimp[imap_add_postaction] >> simp[INJ_INSERT]
+*)
 
+val CI = prove(``(\a b. f b a) = combin$C f``, simp[FUN_EQ_THM])
 
+val gtouches_ALT = store_thm(
+  "gtouches_ALT",
+  ``gtouches g1 g2 ⇔
+      ¬DISJOINT (gwrites g1) (gwrites g2) ∨
+      ¬DISJOINT (gwrites g1) (greads g2) ∨
+      ¬DISJOINT (gwrites g2) (greads g1)``,
+  simp[gtouches_def, EQ_IMP_THM, PULL_EXISTS, touches_def] >> conj_tac
+  >- (map_every qx_gen_tac [`a`, `b`] >> strip_tac
+      >- (disj1_tac >> simp[DISJOINT_DEF, Once EXTENSION, gwrites_def,
+                            PULL_EXISTS] >> metis_tac[])
+      >- (disj2_tac >> disj1_tac >>
+          simp[DISJOINT_DEF, Once EXTENSION, gwrites_def,
+               greads_def, PULL_EXISTS] >> metis_tac[]) >>
+      rpt disj2_tac >>
+      simp[DISJOINT_DEF, Once EXTENSION, gwrites_def,
+           greads_def, PULL_EXISTS] >> metis_tac[]) >>
+  strip_tac >> fs[DISJOINT_DEF, Once EXTENSION, PULL_EXISTS,
+                  gwrites_def, greads_def] >> metis_tac[]);
 
+val gtle_def = Define`
+  gtle g1 g2 ⇔ greads g1 ⊆ greads g2 ∧ gwrites g1 ⊆ gwrites g2
+`;
 
+val _ = set_mapped_fixity { fixity = Infix(NONASSOC, 450),
+                            term_name = "gtle",
+                            tok = "≤ₜ"}
+
+val gtle_REFL = store_thm(
+  "gtle_REFL[simp]",
+  ``g ≤ₜ g``,
+  simp[gtle_def]);
+
+val gtle_TRANS = store_thm(
+  "gtle_TRANS",
+  ``g1 ≤ₜ g2 ∧ g2 ≤ₜ g3 ⇒ g1 ≤ₜ g3``,
+  simp[gtle_def] >> metis_tac[SUBSET_TRANS]);
+
+val gtle_touches = store_thm(
+  "gtle_touches",
+  ``g1 ≤ₜ g2 ⇒ ∀g. gtouches g g1 ⇒ gtouches g g2``,
+  simp[gtouches_def] >> spose_not_then strip_assume_tac >>
+  Q.UNDISCH_THEN `a1 ∼ₜ a2` mp_tac >> simp[touches_def] >>
+  rpt strip_tac >> spose_not_then strip_assume_tac
+  >- (`∃b. b ∈ g2 ∧ MEM w b.writes` suffices_by metis_tac[touches_def] >>
+      `w ∈ gwrites g1` by (dsimp[gwrites_def] >> metis_tac[]) >>
+      `w ∈ gwrites g2` by metis_tac[gtle_def, SUBSET_DEF] >>
+      pop_assum mp_tac >> dsimp[gwrites_def] >> metis_tac[])
+  >- (`∃b. b ∈ g2 ∧ MEM w b.reads` suffices_by metis_tac [touches_def] >>
+      `w ∈ greads g1` by (dsimp[greads_def] >> metis_tac[]) >>
+      `w ∈ greads g2` by metis_tac[gtle_def, SUBSET_DEF] >>
+      pop_assum mp_tac >> dsimp[greads_def] >> metis_tac[])
+  >- (`∃b. b ∈ g2 ∧ MEM w b.writes` suffices_by metis_tac[touches_def] >>
+     `w ∈ gwrites g1` by (dsimp[gwrites_def] >> metis_tac[]) >>
+     `w ∈ gwrites g2` by metis_tac[gtle_def, SUBSET_DEF] >>
+     pop_assum mp_tac >> dsimp[gwrites_def] >> metis_tac[]))
+
+(*
 val eval_ngraph = prove(
   ``∀m0 c0 m c.
       (m0,c0) ---> (m,c) ⇒
       ∀i0 i1 m1 g1.
         ngraphOf i0 m0 c0 = SOME(i1,m1,g1) ⇒
         ∃i2 g2.
-          ngraphOf i0 m c = SOME(i2,m1,g2) (* ∧
-          ∀g'. gtouches g2 g' ⇒ gtouches g1 g' *)``,
+          ngraphOf i0 m c = SOME(i2,m1,g2) ∧
+          g2 ≤ₜ g1 ∧ SND i2 = SND i1``,
   ho_match_mp_tac eval_ind' >> rpt conj_tac
   >- ((* seq takes a step *)
       map_every qx_gen_tac [`c`, `c0`] >> reverse Induct >> simp[]
       >- (ONCE_REWRITE_TAC [ngraphOf_def] >>
           simp[PULL_EXISTS, FORALL_PROD, EXISTS_PROD] >>
-          fs[FORALL_PROD, EXISTS_PROD] >> first_assum MATCH_ACCEPT_TAC) >>
+          fs[FORALL_PROD, EXISTS_PROD] >>
+          simp[touches_def] >> metis_tac[]) >>
       ONCE_REWRITE_TAC [ngraphOf_def] >>
-      simp[PULL_EXISTS, FORALL_PROD, EXISTS_PROD] >> rpt strip_tac >>
-      qmatch_assum_rename_tac `
-        ngraphOf (vs0,i0) m0 c0 = SOME((vs00,i00),m00,g00)` [] >>
-      `∃vs' i' g'.
-          ngraphOf (vs0,i0) m c = SOME((vs',i'),m00,g') (* ∧
-               ∀g''. gtouches g' g'' ⇒ gtouches g00 g'' *)`
-         by metis_tac[] >> simp[] >>
-      qmatch_assum_rename_tac `
-        graphOf i00 m00 (Seq rest) = SOME(i0',m0',rg)` []>>
+      simp[PULL_EXISTS, FORALL_PROD, EXISTS_PROD] >>
+      rpt strip_tac >> res_tac >> simp[] >>
+      qx_gen_tac `g'` >>
+      reverse strip_tac >- simp[] >>
+      `gtouches g2 (b ⊕ emptyG)`
+        by (fs[touches_def, gwrites_def, greads_def]
+      simp[touches_def] >> fs[gtouches_def, touches_def] >>
+      metis_tac[]
+
+metis_tac[])
+  >- ((* seq is all done *)
+      qx_gen_tac `m0` >> Induct >>
+      ONCE_REWRITE_TAC[ngraphOf_def] >>
+      simp[PULL_EXISTS, FORALL_PROD] >> fs[] >> metis_tac[])
+  >- ((* if guard evaluates to bool *)
+      simp[ngraphOf_def] >>
+      map_every qx_gen_tac [`m0`, `gd`, `th`, `el`, `b`] >>
+      Cases_on `b` >> simp[PULL_EXISTS, FORALL_PROD] ...)
+  >- ((* if guard doesn't evaluate to bool *)
+      rw[ngraphOf_def] >> Cases_on `evalexpr m0 g` >> simp[] >>
+      fs[])
+  >- ((* assign var succeeds *) simp[ngraphOf_def, updf_def])
+  >- ((* assign var fails *) simp[ngraphOf_def, updf_def])
+  >- ((* assign succeeds *)
+      simp[ngraphOf_def, PULL_EXISTS, evalexpr_def,
+          OPT_SEQUENCE_EQ_SOME, MEM_MAP, isDValue_destDValue])
+  >- ((* assign fails *)
+      simp[ngraphOf_def, evalexpr_def, OPT_SEQUENCE_EQ_SOME,
+           isDValue_destDValue])
+  >- ((* index of array assignment is evaluated *)
+      simp[ngraphOf_def, PULL_EXISTS, evalexpr_def, readAction_def,
+           expr_reads_def] >> rpt strip_tac (* >- fs[touches_def] >>
+      metis_tac[] *))
+  >- ((* array-read inside array assignment has index evaluated *)
+      simp[ngraphOf_def, PULL_EXISTS, evalDexpr_def, evalexpr_def,
+           OPT_SEQUENCE_EQ_SOME, MEM_MAP, getReads_APPEND,
+           getReads_def] >> rpt gen_tac >>
+      simp[MAP_MAP_o, DISJ_IMP_THM, FORALL_AND_THM, PULL_EXISTS] >>
+      csimp[] >> rpt strip_tac (*
+      >- metis_tac[]
+      >- (fs[dvreadAction_def, touches_def, dvread_def,
+             expr_reads_def] >> metis_tac[])
+      >- (fs[touches_def] >> metis_tac[])) *))
+  >- ((* array-read inside array assignment actually reads memory *)
+      dsimp[ngraphOf_def, OPT_SEQUENCE_EQ_SOME, MEM_MAP, evalDexpr_def,
+            evalexpr_def] >>
+      dsimp[getReads_APPEND, getReads_def] >>
+      simp[touches_def, dvreadAction_def, dvread_def] >>
+      metis_tac[])
+  >- ((* variable read inside array assignment *)
+      dsimp[ngraphOf_def, OPT_SEQUENCE_EQ_SOME, evalDexpr_def, MEM_MAP] >>
+      dsimp[getReads_def, getReads_APPEND] >>
+      simp[touches_def, dvreadAction_def, dvread_def] >> metis_tac[])
+  >- ((* forloop turns into seq *)
+      map_every qx_gen_tac [`b`, `d`, `m0`, `vnm`, `iters`] >> strip_tac >>
+      simp [Once ngraphOf_def, SimpL ``$==>``] >>
+      simp[GSYM forloopf_def, FORALL_PROD, EXISTS_PROD,
+           PULL_EXISTS, Once CI] >>
+      simp_tac (bool_ss ++ ETA_ss) [] >>
+      pop_assum kall_tac >>
+      map_every qx_gen_tac [`us`, `it0`, `m1`, `g1`, `c1`] >>
+      qho_match_abbrev_tac `XX ⇒ P iters us it0 m0 m1 g1 c1` >>
+      qunabbrev_tac `XX` >>
+      `∃c0:num g0. c0 = 0 ∧
+                   g0 = emptyG : (value list -> value, value list # num, actionRW) nag0`
+        by simp[] >>
+      rpt (pop_assum (SUBST1_TAC o SYM)) >>
+      map_every qid_spec_tac [`m0`, `g0`, `c0`, `m1`, `g1`, `c1`, `us`, `it0`]>>
+      `∀l us it0. FOLDL (combin$C (forloopf vnm b us it0)) NONE l = NONE`
+        by (Induct >> simp[forloopf_def]) >>
+      Induct_on `iters` >> simp[] >- (simp[Abbr`P`] >> simp[Once ngraphOf_def]) >>
+      map_every qx_gen_tac
+       [`h`, `it0`, `us`, `c1`, `g1`, `m1`, `c0`, `g0`, `m0`] >>
+      strip_tac >>
+      `∃m' g' c'. forloopf vnm b us it0 h (SOME(m0,g0,c0)) = SOME(m',g',c')`
+        by metis_tac[NOT_NONE_SOME, option_CASES, pair_CASES] >> fs[] >>
+      pop_assum mp_tac >> simp[forloopf_def, PULL_EXISTS, FORALL_PROD] >>
+      res_tac >> map_every qx_gen_tac [`svs`, `si`, `sg`] >>
+      pop_assum mp_tac >> ntac 3 (pop_assum kall_tac) >> simp[Abbr`P`] >>
+      simp[Once ngraphOf_def, SimpR ``$==>``] >>
+      simp[EXISTS_PROD] >> Cases_on `iters`
+      >- (simp[] >> simp[Once ngraphOf_def]) >>
+      simp[PULL_EXISTS, FORALL_PROD] >> rpt strip_tac >>
+      simp[Once ngraphOf_def, EXISTS_PROD]
+
+rpt (pop_assum kall_tac)
+
+
+
+assign_lemma
 *)
 val _ = export_theory();
