@@ -31,7 +31,7 @@ val stmt_weight_def = tDefine "stmt_weight" `
   (stmt_weight Done = 0) ∧
   (stmt_weight (Assign w ds v) =
      1 + ew (SND w) + SUM (MAP dw ds)) ∧
-  (stmt_weight (AssignVar v e) = 1) ∧
+  (stmt_weight (AssignVar v ds vf) = 1 + SUM (MAP dw ds)) ∧
   (stmt_weight (Malloc v d value) = 1) ∧
   (stmt_weight (IfStmt g t e) = MAX (stmt_weight t) (stmt_weight e) + 1) ∧
   (stmt_weight (ForLoop v d s) = stmt_weight s + 1) ∧
@@ -49,7 +49,7 @@ val loopbag_def = tDefine "loopbag" `
   (loopbag Abort = {| 0 |}) ∧
   (loopbag Done = {| 0 |}) ∧
   (loopbag (Assign w ds v) = {| 0 |}) ∧
-  (loopbag (AssignVar v e) = {| 0 |}) ∧
+  (loopbag (AssignVar v ds vf) = {| 0 |}) ∧
   (loopbag (Malloc v d value) = {| 0 |}) ∧
   (loopbag (IfStmt g t e) = BAG_UNION (loopbag t) (loopbag e)) ∧
   (loopbag (ForLoop v d s) = BAG_IMAGE SUC (loopbag s)) ∧
@@ -172,11 +172,12 @@ val eval_terminates = store_thm(
       metis_tac[BAG_UNION_LEFT_CANCEL, BAG_UNION_EMPTY])
   >- (Cases_on `b` >> simp[])
   >- (simp[mltLT_SING0] >> metis_tac[])
+  >- (Cases_on `e` >> fs[isValue_def])
   >- (Cases_on `expr` >> fs[isValue_def])
   >- (Cases_on `expr` >> fs[isValue_def])
   >- simp[FOLDR_MAP, mlt_loopbag_lemma]
   >- (simp[mltLT_SING0] >> metis_tac[])
-  >- simp[FOLDR_MAP, mlt_loopbag_lemma]
+  >- (simp[FOLDR_MAP, mlt_loopbag_lemma])
   >- (simp[mltLT_SING0] >> metis_tac[])
   >- (disj1_tac >> rw[] >> Induct_on `pfx` >> simp[] >>
       Induct_on `sfx` >> simp[])
@@ -821,14 +822,17 @@ val graphOf_def = tDefine "graphOf" `
         SOME(stackInc (stackInc (stackInc i0)), m', a0 ⊕ (a1 ⊕ (a ⊕ emptyG)))
      od) ∧
 
-  (graphOf i0 m0 (AssignVar vnm e) =
+  (graphOf i0 m0 (AssignVar vnm ds opn) =
      do
-       m' <- updf (Variable vnm) (evalexpr m0 e) m0;
-       SOME(stackInc i0, m',
-            <| writes := [Variable vnm];
-               reads := expr_reads m0 e;
-               data := K (evalexpr m0 e);
-               ident := i0 |> ⊕ emptyG)
+       rds <- getReads m0 ds;
+       a0 <- SOME(dvreadAction i0 m0 ds);
+       a <- SOME <| writes := [Variable vnm];
+                    reads := rds;
+                    data := mergeReads ds opn;
+                    ident := stackInc i0 |> ;
+       rvs <- OPT_SEQUENCE (MAP (evalDexpr m0) ds);
+       m' <- updf (Variable vnm) (opn rvs) m0;
+       SOME(stackInc (stackInc i0), m', a0 ⊕ (a ⊕ emptyG))
      od) ∧
 
   (graphOf i0 m0 Abort = NONE) ∧
@@ -1098,7 +1102,12 @@ val graphOf_idents_apart = store_thm(
       metis_tac[FRONT_TAKE, LENGTH_stackInc, FRONT_stackInc,
                 stackInc_EQ_NIL, ilistLT_trans, ilistLE_LTEQ])
   >- ((* AssignVar *)
-      simp[Once graphOf_def, FRONT_TAKE])
+      simp[Once graphOf_def, FRONT_TAKE, PULL_EXISTS] >> rpt gen_tac >> strip_tac >>
+      `∀x. x ≠ [] ⇒ x < isuc x ∧ x < isuc (isuc x)`
+        by metis_tac[ilistLT_stackInc, ilistLT_trans, stackInc_EQ_NIL] >>
+      dsimp[] >> conj_tac >- metis_tac[ilistLE_LTEQ] >>
+      metis_tac[FRONT_stackInc, FRONT_TAKE, LENGTH_stackInc,
+                stackInc_EQ_NIL])
   >- ((* Abort *) simp[Once graphOf_def])
   >- ((* Done *) simp[Once graphOf_def])
   >- ((* Malloc *) simp[graphOf_def])
@@ -1198,7 +1207,8 @@ val graphOf_pcg_eval = store_thm(
       `mergeReads ds opn (MAP (lookupRW m0) rds) = opn rvs` suffices_by simp[] >>
       imp_res_tac (GEN_ALL assign_lemma) >> simp[mergeReads_def])
   >- ((* assignvar *)
-      simp[graphOf_def, pcg_eval_thm, updf_def, apply_action_def])
+      simp[graphOf_def, pcg_eval_thm, updf_def, apply_action_def, PULL_EXISTS,
+           mergeReads_def] >> metis_tac[assign_lemma, REVERSE_DEF, APPEND])
   >- ((* Abort *) simp[graphOf_def])
   >- ((* Done *) simp[graphOf_def, pcg_eval_thm])
   >- ((* Malloc *) simp[graphOf_def]));
@@ -1664,11 +1674,14 @@ val graphOf_starting_id_irrelevant = store_thm(
       csimp[RIGHT_AND_OVER_OR, imap_add_action, INJ_INSERT, dvreadAction_def])
   >- ((* assign var *)
       csimp[graphOf_def, FORALL_PROD, PULL_EXISTS, INJ_INSERT,
-            imap_add_action] >> rpt gen_tac >> strip_tac >> qx_gen_tac `j0` >>
-      strip_tac >>
+            imap_add_action] >>
+      rpt gen_tac >> strip_tac >> qx_gen_tac `j0` >> strip_tac >>
       qexists_tac `
         λi. if i = i0 then j0 else if i = stackInc i0 then stackInc j0
-            else ARB` >> simp[])
+            else isuc (isuc j0)` >> simp[] >> conj_tac
+      >- simp[dvreadAction_def] >>
+      qx_gen_tac `k` >> rpt strip_tac >> rw[] >>
+      pop_assum mp_tac >> simp[])
   >- ((* Abort *) simp[graphOf_def])
   >- ((* Done *) csimp[graphOf_def, INJ_INSERT] >> strip_tac >>
       qx_gen_tac `j0` >> strip_tac >> qexists_tac `K j0` >> simp[])
@@ -2065,22 +2078,20 @@ val graphOf_apply_action_diamond = store_thm(
                   Cases_on `a.writes` >> fs[]) >>
       metis_tac[successful_action_diamond])
   >- ((* assignvar *)
-      simp[graphOf_def] >>
-      map_every qx_gen_tac [`vnm`, `e`, `m1`, `m2`, `a`] >>
+      csimp[graphOf_def, PULL_EXISTS, DISJ_IMP_THM, FORALL_AND_THM] >>
+      map_every qx_gen_tac [`vnm`, `ds`, `opn`, `m1`, `m2`, `a`, `rds`, `rvs`] >>
       strip_tac >>
-      `readAction jj m0 e ≁ₜ a`
-        by (fs[readAction_def, touches_def] >> metis_tac[]) >>
-      `evalexpr m2 e = evalexpr m0 e ∧
-       readAction jj m2 e = readAction jj m0 e`
-        by metis_tac[apply_action_expr_eval_commutes] >>
-      fs[readAction_def] >>
-      qabbrev_tac `b = <|
-        reads := []; writes := [Variable vnm];
-        data := K (evalexpr m0 e) : value list -> value;
-        ident := jj |>` >>
-      `∀m. updf (Variable vnm) (evalexpr m0 e) m = apply_action b (SOME m)`
-        by simp[apply_action_def, Abbr`b`] >> fs[] >>
-      `a ≁ₜ b` by (fs[Abbr`b`, touches_def] >> metis_tac[]) >>
+      `a.writes ≠ [] ⇒ ¬MEM (HD a.writes) rds`
+        by (Cases_on `a.writes` >> fs[touches_def] >> metis_tac[]) >>
+      `dvreadAction i0 m2 ds = dvreadAction i0 m0 ds ∧
+       getReads m2 ds = getReads m0 ds ∧
+       MAP (evalDexpr m2) ds = MAP (evalDexpr m0) ds`
+        by metis_tac[apply_action_dvreadAction_commutes] >> simp[] >>
+      qabbrev_tac `b = <| reads := []; writes := [Variable vnm]; ident := ARB;
+                          data := K(opn rvs):value list -> value |>` >>
+      `∀m. updf (Variable vnm) (opn rvs) m = apply_action b (SOME m)`
+        by simp[apply_action_def, Abbr`b`, updf_def] >>
+      `a ≁ₜ b` by (simp[touches_def, Abbr`b`] >> fs[touches_def]) >>
       metis_tac[successful_action_diamond])
   >- ((* abort *) simp[graphOf_def])
   >- ((* Done *) simp[graphOf_def])
@@ -2125,7 +2136,15 @@ val eval_graphOf_action = store_thm(
         by metis_tac[] >>
       qexists_tac `a` >> simp[pregraph_merge_graph])
   >- ((* assignvar *)
-      simp[graphOf_def] >> simp[apply_action_def, updf_def])
+      simp[graphOf_def, PULL_EXISTS] >> rpt gen_tac >>
+      rpt strip_tac >> dsimp[] >>
+      conj_tac
+      >- (rw[pregraph_add_action] >> simp[dvreadAction_def]) >>
+      simp[apply_action_def, updf_def, mergeReads_def] >>
+      fs[updf_def] >>
+      imp_res_tac assign_lemma >> simp[] >>
+      fs[OPT_SEQUENCE_EQ_SOME, MEM_MAP, PULL_EXISTS] >> rw[] >>
+      imp_res_tac isDValue_destDValue >> fs[])
   >- ((* assign *)
       simp[graphOf_def, PULL_EXISTS] >> rpt gen_tac >> strip_tac >>
       rpt strip_tac >> dsimp[] >> disj2_tac >>
@@ -2327,7 +2346,27 @@ val graphOf_correct_lemma = store_thm(
       simp[graphOf_def, PULL_EXISTS, evalexpr_def, OPT_SEQUENCE_EQ_SOME,
            MEM_MAP, isDValue_destDValue, updf_def])
   >- ((* assignment to var fails *)
-      simp[graphOf_def, PULL_EXISTS, updf_def])
+      simp[graphOf_def, PULL_EXISTS, updf_def, OPT_SEQUENCE_EQ_SOME,
+           MEM_MAP, isDValue_destDValue])
+  >- ((* index of array-read in assign var is evaluated *)
+      simp[graphOf_def, PULL_EXISTS, evalDexpr_def, evalexpr_def,
+           OPT_SEQUENCE_EQ_SOME, MEM_MAP, getReads_APPEND,
+           getReads_def] >> rpt gen_tac >>
+      simp[MAP_MAP_o, DISJ_IMP_THM, FORALL_AND_THM, PULL_EXISTS] >>
+      csimp[] >> rpt strip_tac
+      >- (fs[dvreadAction_def, touches_def, dvread_def,
+             expr_reads_def] >> metis_tac[])
+      >- (fs[touches_def] >> metis_tac[]))
+  >- ((* array read in assign-var reads memory *)
+      dsimp[graphOf_def, OPT_SEQUENCE_EQ_SOME, MEM_MAP, evalDexpr_def,
+            evalexpr_def] >>
+      dsimp[getReads_APPEND, getReads_def] >>
+      simp[touches_def, dvreadAction_def, dvread_def] >>
+      metis_tac[])
+  >- ((* var-read inside assign-var reads memory *)
+      dsimp[graphOf_def, OPT_SEQUENCE_EQ_SOME, evalDexpr_def, MEM_MAP] >>
+      dsimp[getReads_def, getReads_APPEND] >>
+      simp[touches_def, dvreadAction_def, dvread_def] >> metis_tac[])
   >- ((* assignment to array completes *)
       simp[graphOf_def, PULL_EXISTS, evalexpr_def, OPT_SEQUENCE_EQ_SOME,
            MEM_MAP, isDValue_destDValue])
