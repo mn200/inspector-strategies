@@ -61,7 +61,7 @@ val _ = type_abbrev ("memory", ``:vname |-> value``)
 
 val _ = Datatype`
   stmt = Assign write (dexpr list) (value list -> value)
-       | AssignVar vname  expr      (* for assignments to scalars, global or local *)
+       | AssignVar vname (dexpr list) (value list -> value)
        | IfStmt expr stmt stmt
        | Malloc aname num value
        | ForLoop vname domain stmt
@@ -76,7 +76,7 @@ val stmt_induction = store_thm(
   "stmt_induction",
   ``∀P.
      (∀w ds vf. P (Assign w ds vf)) ∧
-     (∀v e. P (AssignVar v e)) ∧
+     (∀v ds vf. P (AssignVar v ds vf)) ∧
      (∀g t e. P t ∧ P e ⇒ P (IfStmt g t e)) ∧
      (∀nm n value. P (Malloc nm n value)) ∧
      (∀s d stmt. P stmt ⇒ P (ForLoop s d stmt)) ∧
@@ -179,7 +179,8 @@ val dsubst_def = Define`
 val ssubst_def = tDefine "ssubst" `
   (ssubst vnm value (Assign w ds opf) =
      Assign (ap2 (esubst vnm value) w) (MAP (dsubst vnm value) ds) opf) ∧
-  (ssubst vnm value (AssignVar vnm' e) = AssignVar vnm' (esubst vnm value e)) ∧ (* maybe abort if vnm = vnm' ? *)
+  (ssubst vnm value (AssignVar vnm' ds opf) =
+     AssignVar vnm' (MAP (dsubst vnm value) ds) opf) ∧ (* maybe abort if vnm = vnm' ? *)
   (ssubst vnm value (IfStmt g t e) =
      IfStmt (esubst vnm value g) (ssubst vnm value t) (ssubst vnm value e)) ∧
   (ssubst vnm value (Malloc vnm' n value') = Malloc vnm' n value') ∧
@@ -228,17 +229,46 @@ val (eval_rules, eval_ind, eval_cases) = Hol_reln`
 
      ∧
 
-  (∀vnm e m0 m.
-     upd_var m0 vnm (evalexpr m0 e) = SOME m
+  (* assignvar completes successfully, having performed all reads *)
+  (∀m0 m vnm rdes vf.
+     EVERY isDValue rdes ∧
+     upd_var m0 vnm (vf (MAP destDValue rdes)) = SOME m
     ⇒
-     eval (m0, AssignVar vnm e) (m, Done))
+     eval (m0, AssignVar vnm rdes vf) (m, Done))
+
+    ∧
+
+  (* assignvar fails on attempting to write to memory *)
+  (∀m0 vnm rdes vf.
+     EVERY isDValue rdes ∧
+     upd_var m0 vnm (vf (MAP destDValue rdes)) = NONE
+    ⇒
+     eval (m0, AssignVar vnm rdes vf) (m0, Abort))
 
      ∧
 
-  (∀vnm e m.
-     upd_var m vnm (evalexpr m e) = NONE
+  (* assignvar calculates index for an array read *)
+  (∀m vnm pfx sfx anm e vf.
+     ¬isValue e
     ⇒
-     eval (m, AssignVar vnm e) (m, Abort))
+     eval (m, AssignVar vnm (pfx ++ [ARead anm e] ++ sfx) vf)
+          (m, AssignVar vnm (pfx ++
+                             [ARead anm (Value (evalexpr m e))] ++
+                             sfx) vf))
+
+     ∧
+
+  (* assignvar completes an array read *)
+  (∀m vnm pfx sfx anm i vf.
+     eval (m, AssignVar vnm (pfx ++ [ARead anm (Value (Int i))] ++ sfx) vf)
+          (m, AssignVar vnm (pfx ++ [DValue (lookup_array m anm i)] ++ sfx) vf))
+
+     ∧
+
+  (* assignvar completes a VRead *)
+  (∀m vnm pfx sfx vr vf.
+     eval (m, AssignVar vnm (pfx ++ [VRead vr] ++ sfx) vf)
+          (m, AssignVar vnm (pfx ++ [DValue (lookup_v m vr)] ++ sfx) vf))
 
      ∧
 
@@ -277,7 +307,8 @@ val (eval_rules, eval_ind, eval_cases) = Hol_reln`
      ∧
 
   (∀rds pfx aname i sfx w vf m.
-      rds = pfx ++ [ARead aname (Value (Int i))] ++ sfx ⇒
+      rds = pfx ++ [ARead aname (Value (Int i))] ++ sfx
+     ⇒
       eval (m, Assign w rds vf)
            (m,
             Assign w (pfx ++ [DValue (lookup_array m aname i)] ++ sfx) vf))
