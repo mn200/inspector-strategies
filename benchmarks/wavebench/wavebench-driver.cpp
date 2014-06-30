@@ -18,7 +18,7 @@
  *          data[ j ] += 1.0 + sum
  *
  * Let nnz[v] be the number of non-zeros A_{vw} or A{wv}.  Essentially the
- * number of nonzeros were v is the column or the row.  The value of each 
+ * number of nonzeros where v is the column or the row.  The value of each 
  * data[v] will be less than (nnz[v] + nnz[v]*1.58).
  * Here is why:
  *  Ratio test: lim_{n->inf} abs(a_{n+1}/a_n) < 1
