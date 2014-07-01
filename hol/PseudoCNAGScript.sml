@@ -485,11 +485,11 @@ val ngraphOf_def = tDefine "ngraphOf" `
   (ngraphOf i0 m0 (IfStmt gd t e) =
      case evalexpr m0 gd of
          Bool T => do
-                     (i,m,g) <- ngraphOf (ap2 SUC i0) m0 t;
+                     (i,m,g) <- ngraphOf (ap2 SUC i0) m0 (Seq [t]);
                      SOME(i,m, mkNN (readAction i0 m0 gd) ⊕ g)
                    od
        | Bool F => do
-                     (i,m,g) <- ngraphOf (ap2 SUC i0) m0 e;
+                     (i,m,g) <- ngraphOf (ap2 SUC i0) m0 (Seq [e]);
                      SOME(i,m, mkNN (readAction i0 m0 gd) ⊕ g)
                    od
        | _ => NONE) ∧
@@ -779,11 +779,7 @@ val ngraphOf_wfnag = store_thm(
   ``∀i0 m0 c0 i m g. ngraphOf i0 m0 c0 = SOME(i,m,g) ⇒ wfnag g``,
   ho_match_mp_tac ngraphOf_ind >> rpt conj_tac
   >- ((* if *) iftac >> rpt strip_tac >> res_tac >>
-      qmatch_assum_rename_tac `wfnag g` [] >>
-      `∀i. i ∈ idents g ⇒ SUC (SND i0) ≤ SND i`
-        by metis_tac[SND_ap2, ngraphOf_idents] >>
-      `i0 ∉ idents g` by (strip_tac >> res_tac >> lfs[]) >>
-      simp[wfnag_add_action])
+      simp[wfnag_COND])
   >- ((* forloop *)
       simp[ngraphOf_def, PULL_EXISTS, FORALL_PROD, FOLDL_FOLDR,
            GSYM forloopf_def, C1] >>
@@ -879,9 +875,8 @@ val nagEval_ngraphOf = store_thm(
       nagEval g (SOME m0) = SOME m``,
   ho_match_mp_tac ngraphOf_ind >> rpt conj_tac
   >- ((* if *)
-      iftac >> map_every qx_gen_tac [`us`, `i`, `m`, `g`] >>
-      strip_tac >> res_tac >> `wfnag g` by metis_tac[ngraphOf_wfnag] >>
-      simp[nagEval_COND,wfnag_COND])
+      iftac >> rpt strip_tac >> res_tac >> imp_res_tac ngraphOf_wfnag >>
+      fs[nagEval_COND,wfnag_COND,wfnnode_def,SET_TO_LIST_INV])
   >- ((* forloop *)
       simp[ngraphOf_def, PULL_EXISTS, FORALL_PROD, GSYM forloopf_def,
            FOLDL_FOLDR, C1] >>
