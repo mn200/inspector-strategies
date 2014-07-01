@@ -579,14 +579,17 @@ val ngraphOf_def = tDefine "ngraphOf" `
        SOME(ap2 ((+) 3) i0, m', a0 ⊕ (a1 ⊕ (a ⊕ emptyG)))
      od) ∧
 
-  (ngraphOf i0 m0 (AssignVar vnm e) =
+  (ngraphOf i0 m0 (AssignVar vnm ds opn) =
      do
-       m' <- updf (Variable vnm) (evalexpr m0 e) m0;
-       SOME(ap2 SUC i0, m',
-            <| writes := [Variable vnm];
-               reads := expr_reads m0 e;
-               data := DN (K (evalexpr m0 e));
-               ident := i0 |> ⊕ emptyG)
+       rds <- getReads m0 ds;
+       a0 <- SOME(mkNN (dvreadAction i0 m0 ds));
+       a <- SOME<| writes := [Variable vnm];
+                   reads := rds;
+                   data := DN (mergeReads ds opn);
+                   ident := ap2 SUC i0 |>;
+       rvs <- OPT_SEQUENCE (MAP (evalDexpr m0) ds);
+       m <- updf (Variable vnm) (opn rvs) m0;
+       SOME(ap2 ((+) 2) i0, m, a0 ⊕ (a ⊕ emptyG))
      od) ∧
 
   (ngraphOf i0 m0 Abort = NONE) ∧
@@ -679,21 +682,8 @@ val ngraphOf_idents = store_thm(
       qpat_assum `dvalues xx yy = zz` kall_tac >>
       pop_assum mp_tac >> simp[FOLDL_FOLDR, GSYM forloopf_def, C1] >>
       simp_tac (srw_ss() ++ ETA_ss) [] >>
-      qabbrev_tac `dvs' = REVERSE dvs` >>
-      `LENGTH dvs = LENGTH dvs'` by simp[Abbr`dvs'`] >>
-      pop_assum (fn th=> simp[th]) >>
-      qmatch_abbrev_tac `FOLDR ff (SOME(m0,emptyG,0n)) dvs' = SOME(m,g,c) ⇒
-                         (us,p) ∈ idents g ⇒ n ≤ p ∧ p < n + LENGTH dvs'` >>
-      qunabbrev_tac `ff` >> markerLib.RM_ALL_ABBREVS_TAC >>
-      `∀m g c.
-         FOLDR (forloopf vnm body vs n) (SOME (m0,emptyG,0)) dvs' =
-         SOME(m,g,c) ⇒
-         ((us,p) ∈ idents g ⇒ n ≤ p ∧ p < n + LENGTH dvs') ∧
-         LENGTH dvs' = c`
-        suffices_by metis_tac[] >>
-      Induct_on `dvs'` >>
-      simp[forloopf_def, PULL_EXISTS, FORALL_PROD] >> csimp[] >>
-      rpt strip_tac >> rw[] >> simp[] >> lfs[])
+      metis_tac[FOLDR_forloopf_idents, FOLDR_forloopf_c,
+                DECIDE ``x + y :num = y + x``, LENGTH_REVERSE])
   >- ((* seq *)
       map_every qx_gen_tac [`i0`, `m0`, `cs`] >> strip_tac >>
       simp[Once ngraphOf_def] >>
@@ -721,7 +711,7 @@ val ngraphOf_idents = store_thm(
   >- ((* assign *)
       simp[ngraphOf_def, FORALL_PROD, PULL_EXISTS] >> rw[] >> simp[])
   >- ((* assignvar *)
-      simp[ngraphOf_def, FORALL_PROD, PULL_EXISTS])
+      simp[ngraphOf_def, FORALL_PROD, PULL_EXISTS] >> rw[] >> simp[])
   >- ((* abort *) simp[ngraphOf_def])
   >- ((* Done *) simp[ngraphOf_def])
   >- ((* malloc *) simp[ngraphOf_def]))
@@ -947,7 +937,9 @@ val nagEval_ngraphOf = store_thm(
       metis_tac[assign_lemma, listTheory.REVERSE_DEF, APPEND])
   >- ((* assign var *)
       simp[ngraphOf_def, nagEval_thm, wfnag_add_action, wfnnode_def,
-           polydata_upd_def, apply_action_def])
+           polydata_upd_def, apply_action_def, PULL_EXISTS, updf_def,
+           PAIR_FST_SND_EQ, dvreadAction_def, mergeReads_def] >>
+          metis_tac[assign_lemma, listTheory.REVERSE_DEF, APPEND])
   >- ((* abort *) simp[ngraphOf_def])
   >- ((* done *) simp[ngraphOf_def])
   >- ((* malloc *) simp[ngraphOf_def]));
