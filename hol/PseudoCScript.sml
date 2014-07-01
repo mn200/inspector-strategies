@@ -218,7 +218,7 @@ val (eval_rules, eval_ind, eval_cases) = Hol_reln`
   (∀m g t e b.
      evalexpr m g = Bool b
    ⇒
-     eval (m,IfStmt g t e) (m, if b then t else e))
+     eval (m,IfStmt g t e) (m, Seq [Done; if b then t else e]))
 
      ∧
 

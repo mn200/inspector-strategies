@@ -33,11 +33,10 @@ val stmt_weight_def = tDefine "stmt_weight" `
      1 + ew (SND w) + SUM (MAP dw ds)) ∧
   (stmt_weight (AssignVar v ds vf) = 1 + SUM (MAP dw ds)) ∧
   (stmt_weight (Malloc v d value) = 1) ∧
-  (stmt_weight (IfStmt g t e) = MAX (stmt_weight t) (stmt_weight e) + 1) ∧
+  (stmt_weight (IfStmt g t e) = MAX (stmt_weight t) (stmt_weight e) + 3) ∧
   (stmt_weight (ForLoop v d s) = stmt_weight s + 1) ∧
   (stmt_weight (ParLoop v d s) = stmt_weight s + 1) ∧
-  (stmt_weight (Seq stmts) =
-    SUM (MAP stmt_weight stmts) + 1 + LENGTH stmts) ∧
+  (stmt_weight (Seq stmts) = SUM (MAP stmt_weight stmts) + LENGTH stmts) ∧
   (stmt_weight (Par stmts) =
     SUM (MAP stmt_weight stmts) + 1 + LENGTH stmts)
 ` (WF_REL_TAC `measure stmt_size` >> simp[] >>
@@ -45,19 +44,34 @@ val stmt_weight_def = tDefine "stmt_weight" `
    rpt strip_tac >> res_tac >> simp[])
 val _ = export_rewrites ["stmt_weight_def"]
 
+
+val seq_count_def = tDefine "seq_count" `
+  (seq_count (Seq cs) = SUM (MAP seq_count cs) + 1) ∧
+  (seq_count (Par cs) = SUM (MAP seq_count cs) + 1) ∧
+  (seq_count (ParLoop v d s) = seq_count s) ∧
+  (seq_count (ForLoop v d s) = seq_count s) ∧
+  (seq_count (IfStmt g t e) = seq_count t + seq_count e) ∧
+  (seq_count _ = 0)
+`
+  (WF_REL_TAC `measure stmt_size` >> simp[] >> Induct >> simp[] >>
+   rpt strip_tac >> simp[stmt_size_def] >> res_tac >> simp[])
+val _ = export_rewrites ["seq_count_def"]
+
 val loopbag_def = tDefine "loopbag" `
-  (loopbag Abort = {| 0 |}) ∧
-  (loopbag Done = {| 0 |}) ∧
-  (loopbag (Assign w ds v) = {| 0 |}) ∧
-  (loopbag (AssignVar v ds vf) = {| 0 |}) ∧
-  (loopbag (Malloc v d value) = {| 0 |}) ∧
+  (loopbag Abort = {| |}) ∧
+  (loopbag Done = {| |}) ∧
+  (loopbag (Assign w ds v) = {| |}) ∧
+  (loopbag (AssignVar v ds vf) = {| |}) ∧
+  (loopbag (Malloc v d value) = {| |}) ∧
   (loopbag (IfStmt g t e) = BAG_UNION (loopbag t) (loopbag e)) ∧
-  (loopbag (ForLoop v d s) = BAG_IMAGE SUC (loopbag s)) ∧
-  (loopbag (ParLoop v d s) = BAG_IMAGE SUC (loopbag s)) ∧
+  (loopbag (ForLoop v d s) = if loopbag s = {||} then {|1|}
+                             else BAG_IMAGE SUC (loopbag s)) ∧
+  (loopbag (ParLoop v d s) = if loopbag s = {||} then {|1|}
+                             else BAG_IMAGE SUC (loopbag s)) ∧
   (loopbag (Seq stmts) =
-     FOLDR (λms b. BAG_UNION (loopbag ms) b) {|0|} stmts) ∧
+     FOLDR (λms b. BAG_UNION (loopbag ms) b) {||} stmts) ∧
   (loopbag (Par stmts) =
-     FOLDR (λms b. BAG_UNION (loopbag ms) b) {|0|} stmts)
+     FOLDR (λms b. BAG_UNION (loopbag ms) b) {||} stmts)
 ` (WF_REL_TAC `measure stmt_size` >> simp[] >>
    Induct >> dsimp[stmt_size_def] >>
    rpt strip_tac >> res_tac >> simp[])
@@ -67,13 +81,8 @@ val FINITE_loopbag = store_thm(
   "FINITE_loopbag[simp]",
   ``∀s. FINITE_BAG (loopbag s)``,
   ho_match_mp_tac (theorem "loopbag_ind") >>
-  simp[] >> Induct >> simp[]);
-
-val loopbag_not_empty = store_thm(
-  "loopbag_not_empty[simp]",
-  ``∀s. loopbag s ≠ {||}``,
-  ho_match_mp_tac (theorem "loopbag_ind") >> simp[] >>
-  Induct >> simp[]);
+  simp[] >> reverse (rpt conj_tac)
+  >- (Induct >> simp[]) >> rw[]);
 
 val MAX_PLUS = store_thm(
   "MAX_PLUS",
@@ -115,16 +124,19 @@ val FINITE_BAG_FOLDR_loopbag = store_thm(
 
 val mlt_loopbag_lemma = store_thm(
   "mlt_loopbag_lemma",
-  ``mlt $< (FOLDR (λx b. BAG_UNION (loopbag s) b) {|0|} list)
+  ``loopbag s ≠ {||} ⇒
+    mlt $< (FOLDR (λx b. BAG_UNION (loopbag s) b) {||} list)
            (BAG_IMAGE SUC (loopbag s))``,
-  simp[mlt_dominates_thm1] >> qexists_tac `BAG_IMAGE SUC (loopbag s)` >>
+  simp[mlt_dominates_thm1] >> strip_tac >>
+  qexists_tac `BAG_IMAGE SUC (loopbag s)` >>
   simp[] >> dsimp[dominates_def] >>
   qho_match_abbrev_tac
     `∀e1. BAG_IN e1 FF ⇒ ∃e2. BAG_IN e2 (loopbag s) /\ e1 < SUC e2` >>
-  `∀e. BAG_IN e FF ⇒ BAG_IN e (loopbag s) ∨ e = 0`
-    by (simp[Abbr`FF`] >> Induct_on `list` >> simp[] >> metis_tac[]) >>
-  rpt strip_tac >> res_tac >- metis_tac[DECIDE ``x < SUC x``] >> simp[] >>
-  metis_tac[loopbag_not_empty, BAG_cases, BAG_IN_BAG_INSERT]);
+  `list ≠ [] ⇒ ∀e. BAG_IN e FF ⇒ BAG_IN e (loopbag s)`
+    by (simp[Abbr`FF`] >> Induct_on `list` >> simp[] >>
+        Cases_on `list` >> fs[] >> metis_tac[]) >>
+  rpt strip_tac >> Cases_on `list` >> fs[] >- fs[Abbr`FF`] >>
+  res_tac >> metis_tac[DECIDE ``x < SUC x``])
 
 val FORALL_domain = store_thm(
   "FORALL_domain",
@@ -139,11 +151,14 @@ val loopbag_ssubst = store_thm(
     [ssubst_def, FORALL_domain] >>
   simp[FOLDR_MAP,
       Cong (SPEC_ALL
-              (REWRITE_RULE [GSYM AND_IMP_INTRO] FOLDR_CONG))]);
+              (REWRITE_RULE [GSYM AND_IMP_INTRO] FOLDR_CONG))] >>
+  metis_tac[]);
 
 val _ = overload_on (
   "evalR",
-  ``inv_image (mlt (<) LEX (<)) (λ(m:memory,s). (loopbag s, stmt_weight dexpr_weight expr_weight s))``
+  ``inv_image (mlt (<) LEX (<) LEX (<))
+      (λ(m:memory,s). (loopbag s, stmt_weight dexpr_weight expr_weight s,
+                       seq_count s))``
 )
 
 val WF_evalR = store_thm(
@@ -160,6 +175,36 @@ val WF_eval_induction =
       |> SIMP_RULE (srw_ss()) []
       |> Q.GEN `Q`
 
+val mlt_FINITE_BAG = store_thm(
+  "mlt_FINITE_BAG",
+  ``∀s1 s2. mlt R s1 s2 ⇒ FINITE_BAG s1 ∧ FINITE_BAG s2``,
+  Induct_on `TC` >> simp[mlt1_def]);
+
+val mlt_EMPTY_BAG = store_thm(
+  "mlt_EMPTY_BAG[simp]",
+  ``mlt R {||} s ⇔ FINITE_BAG s ∧ s ≠ {||}``,
+  eq_tac
+  >- (`∀s1 s2. mlt R s1 s2 ⇒ s1 = {||} ⇒ FINITE_BAG s2 ∧ s2 ≠ {||}`
+        suffices_by metis_tac[] >>
+      Induct_on `TC` >> simp[] >> rpt strip_tac >>
+      fs[mlt1_def] >> imp_res_tac mlt_FINITE_BAG) >>
+  `∀s. FINITE_BAG s ⇒ s ≠ {||} ⇒ mlt R {||} s`
+    suffices_by metis_tac[] >>
+  Induct_on `FINITE_BAG` >> simp[] >> qx_gen_tac `b` >>
+  strip_tac >> qx_gen_tac `e` >> Cases_on `b = {||}` >> fs[]
+  >- (match_mp_tac relationTheory.TC_SUBSET >> simp[mlt1_def]) >>
+  `mlt R b (BAG_INSERT e b)`
+    by (match_mp_tac relationTheory.TC_SUBSET >>
+        simp[mlt1_def] >> map_every qexists_tac [`e`, `{||}`, `b`] >>
+        simp[] >> simp[BAG_EXTENSION, BAG_INN, BAG_INSERT, BAG_UNION,
+                       EMPTY_BAG] >>
+        map_every qx_gen_tac [`m`, `d`] >> Cases_on `d = e` >> simp[]) >>
+  metis_tac[relationTheory.TC_RULES]);
+
+val FOLDR_KI = store_thm(
+  "FOLDR_KI[simp]",
+  ``FOLDR (\e a. a) acc list = acc``,
+  Induct_on `list` >> simp[]);
 
 val eval_terminates = store_thm(
   "eval_terminates",
@@ -168,25 +213,23 @@ val eval_terminates = store_thm(
   lfs[LEX_DEF, MAX_SET_THM, SUM_APPEND]
   >- (Induct_on `pfx` >> simp[])
   >- (Induct_on `pfx` >> simp[])
-  >- (simp[mltLT_SING0] >> Induct_on `cs` >> simp[] >>
-      metis_tac[BAG_UNION_LEFT_CANCEL, BAG_UNION_EMPTY])
-  >- (Cases_on `b` >> simp[])
-  >- (simp[mltLT_SING0] >> metis_tac[])
+  >- (Induct_on `pfx` >> simp[])
+  >- (metis_tac[])
+  >- (Cases_on `b` >> simp[MAX_PLUS])
+  >- (metis_tac[])
   >- (Cases_on `e` >> fs[isValue_def])
   >- (Cases_on `expr` >> fs[isValue_def])
   >- (Cases_on `expr` >> fs[isValue_def])
-  >- simp[FOLDR_MAP, mlt_loopbag_lemma]
-  >- (simp[mltLT_SING0] >> metis_tac[])
-  >- (simp[FOLDR_MAP, mlt_loopbag_lemma])
-  >- (simp[mltLT_SING0] >> metis_tac[])
+  >- (rw[] >> simp[FOLDR_MAP, mlt_loopbag_lemma])
+  >- (rw[])
+  >- (rw[] >> simp[FOLDR_MAP, mlt_loopbag_lemma])
+  >- (rw[])
   >- (disj1_tac >> rw[] >> Induct_on `pfx` >> simp[] >>
       Induct_on `sfx` >> simp[])
-  >- (disj2_tac >> simp[SUM_APPEND] >> rw[] >>
-      Induct_on `pfx` >> simp[])
-  >- (simp[mltLT_SING0] >> Induct_on `cs` >> simp[] >>
-      metis_tac[BAG_UNION_LEFT_CANCEL, BAG_UNION_EMPTY])
-  >- (simp[mltLT_SING0] >> Induct_on `cs` >> simp[] >>
-      rw[] >> simp[] >> metis_tac[BAG_UNION_LEFT_CANCEL, BAG_UNION_EMPTY]));
+  >- (disj2_tac >> rw[] >> Induct_on `pfx` >> simp[])
+  >- (disj2_tac >> rw[] >> Induct_on `pfx` >> simp[])
+  >- (metis_tac[])
+  >- (metis_tac[]));
 
 (* ----------------------------------------------------------------------
     Create an action graph from a PseudoC program.
@@ -210,8 +253,8 @@ val OPT_SEQUENCE_def = Define`
 val MEM_FOLDR_mlt = store_thm(
   "MEM_FOLDR_mlt",
   ``MEM e l ⇒
-    mlt $< (loopbag (f e)) (FOLDR (\e a. loopbag (f e) ⊎ a) {|0|} l) ∨
-    loopbag (f e) = FOLDR (\e a. loopbag (f e) ⊎ a) {|0|} l``,
+    mlt $< (loopbag (f e)) (FOLDR (\e a. loopbag (f e) ⊎ a) {||} l) ∨
+    loopbag (f e) = FOLDR (\e a. loopbag (f e) ⊎ a) {||} l``,
   Induct_on `l` >> dsimp[] >> rpt strip_tac >> res_tac
   >- (Cases_on `loopbag (f h) = {||}` >> simp[] >>
       disj1_tac >>
@@ -844,7 +887,7 @@ val graphOf_def = tDefine "graphOf" `
 ` (WF_REL_TAC
      `inv_image (mlt (<) LEX (<)) (λ(i,m,s). (loopbag s, stmt_weight (K 0) (K 0) s))` >>
    simp[WF_mlt1, FOLDR_MAP, mlt_loopbag_lemma] >>
-   rpt strip_tac
+   rpt strip_tac >> TRY (rw[mlt_loopbag_lemma, MAX_PLUS] >> NO_TAC)
    >- (imp_res_tac MEM_FOLDR_mlt >> pop_assum (qspec_then `I` mp_tac) >>
        rw[] >> simp[] >> qpat_assum `MEM c cmds` mp_tac >>
        rpt (pop_assum kall_tac) >>
@@ -2330,6 +2373,7 @@ val graphOf_correct_lemma = store_thm(
   >- ((* guard of if evaluates to boolean and next statement selected *)
       map_every qx_gen_tac [`m0`, `gd`, `t`, `e`, `b`] >>
       rpt gen_tac >> strip_tac >> simp[Once graphOf_def, SimpL ``$==>``] >>
+      simp[graphOf_def, SimpR ``$==>``] >>
       Cases_on `b` >> simp[EXISTS_PROD, PULL_EXISTS, FORALL_PROD] >>
       map_every qx_gen_tac [`i0`, `i`, `m`, `g`] >>
       strip_tac >>
