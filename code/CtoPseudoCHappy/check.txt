@@ -1,0 +1,28 @@
+int foo;
+foo = 42;
+int bar = 5;
+bar = 1 + 2;
+foo = 4 - 3;
+bar = 5 * 6;
+foo = 7 / 8;
+bar = 1 + 2 - 3 * 4 / 5;
+foo = 0 + 6 * 7 - 8 / 9;
+bar = 7 >= 8;
+foo = exp(9+3);
+bar = bar + 2;
+foo = bar[p-1];
+foo = data[row[p-1]];
+foo[p] = data[row[p-1]];
+foo = MAX(data[row[p]],bar);
+if (7 >= 8) foo = 0; else foo = 1;
+for (int i = 0; i < foo; i++) junk = 34;
+int* rRow = malloc(sizeof(int) * 5 );
+for (int x = 0; x < 5; x++)
+   rRow[x] = 0;
+bool* rCol = malloc(sizeof(bool) * 6 );
+for (int x = 0; x < 6; x++)
+   rCol[x] = false;
+bool flag;
+double sum;
+
+
