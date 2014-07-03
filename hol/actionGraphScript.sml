@@ -727,6 +727,11 @@ val idents_add_postaction = store_thm(
   ``idents (add_postaction a G) = a.ident INSERT idents G``,
   dsimp[idents_thm, EXTENSION, EQ_IMP_THM] >> metis_tac[]);
 
+val FINITE_idents = store_thm(
+  "FINITE_idents[simp]",
+  ``FINITE (idents g)``,
+  simp[idents_thm]);
+
 val add_postactionID = store_thm(
   "add_postactionID",
   ``a.ident ∈ idents g ⇒ add_postaction a g = g``,
