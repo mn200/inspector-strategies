@@ -1,0 +1,7 @@
+INCLUDES = ../hol
+
+
+all: fastwaveTheory.uo
+
+
+.PHONY: all
