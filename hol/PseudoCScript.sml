@@ -20,8 +20,8 @@ val _ = Datatype`
 `;
 
 val _ = Datatype`
-  expr = VarExp string
-       | ISub string expr
+  expr = VRead string
+       | ARead string expr
        | Opn (value list -> value) (expr list)
        | Value value
 `
@@ -40,8 +40,8 @@ val _ = disable_tyabbrev_printing "vname"
 
 val _ = Datatype`
   dexpr = DValue value
-        | ARead aname expr
-        | VRead vname
+        | DARead aname expr
+        | DVRead vname
 `
 
 val isDValue_def = Define`
@@ -130,11 +130,11 @@ val lookup_v_def = Define`
 
 (* evalexpr : memory -> expr -> value *)
 val evalexpr_def = tDefine "evalexpr" `
-  (evalexpr m (ISub nm i_expr) =
+  (evalexpr m (ARead nm i_expr) =
      case evalexpr m i_expr of
          Int i => lookup_array m nm i
        | _ => Error) ∧
-  (evalexpr m (VarExp nm) = lookup_v m nm) ∧
+  (evalexpr m (VRead nm) = lookup_v m nm) ∧
   (evalexpr m (Opn vf elist) = vf (MAP (evalexpr m) elist)) ∧
   (evalexpr m (Value v) = v)
 ` (WF_REL_TAC `inv_image (measure expr_size) SND` >>
@@ -152,9 +152,9 @@ val dvalues_def = Define`
 `;
 
 val esubst_def = tDefine "esubst" `
-  (esubst vnm value (VarExp vnm') = if vnm = vnm' then Value value
-                                    else VarExp vnm') ∧
-  (esubst vnm value (ISub vn e) = ISub vn (esubst vnm value e)) ∧
+  (esubst vnm value (VRead vnm') = if vnm = vnm' then Value value
+                                    else VRead vnm') ∧
+  (esubst vnm value (ARead vn e) = ARead vn (esubst vnm value e)) ∧
   (esubst vnm value (Opn f vs) = Opn f (MAP (esubst vnm value) vs)) ∧
   (esubst vnm value (Value v) = Value v)
 `
@@ -171,9 +171,9 @@ val _ = export_rewrites ["ap1_def", "ap2_def", "ap3_def"]
 
 val dsubst_def = Define`
   (dsubst vnm value (DValue v) = DValue v) ∧
-  (dsubst vnm value (ARead anm e) = ARead anm (esubst vnm value e)) ∧
-  (dsubst vnm value (VRead vnm') = if vnm = vnm' then DValue value
-                                   else VRead vnm')
+  (dsubst vnm value (DARead anm e) = DARead anm (esubst vnm value e)) ∧
+  (dsubst vnm value (DVRead vnm') = if vnm = vnm' then DValue value
+                                   else DVRead vnm')
 `;
 
 val ssubst_def = tDefine "ssubst" `
@@ -251,23 +251,23 @@ val (eval_rules, eval_ind, eval_cases) = Hol_reln`
   (∀m vnm pfx sfx anm e vf.
      ¬isValue e
     ⇒
-     eval (m, AssignVar vnm (pfx ++ [ARead anm e] ++ sfx) vf)
+     eval (m, AssignVar vnm (pfx ++ [DARead anm e] ++ sfx) vf)
           (m, AssignVar vnm (pfx ++
-                             [ARead anm (Value (evalexpr m e))] ++
+                             [DARead anm (Value (evalexpr m e))] ++
                              sfx) vf))
 
      ∧
 
   (* assignvar completes an array read *)
   (∀m vnm pfx sfx anm i vf.
-     eval (m, AssignVar vnm (pfx ++ [ARead anm (Value (Int i))] ++ sfx) vf)
+     eval (m, AssignVar vnm (pfx ++ [DARead anm (Value (Int i))] ++ sfx) vf)
           (m, AssignVar vnm (pfx ++ [DValue (lookup_array m anm i)] ++ sfx) vf))
 
      ∧
 
-  (* assignvar completes a VRead *)
+  (* assignvar completes a DVRead *)
   (∀m vnm pfx sfx vr vf.
-     eval (m, AssignVar vnm (pfx ++ [VRead vr] ++ sfx) vf)
+     eval (m, AssignVar vnm (pfx ++ [DVRead vr] ++ sfx) vf)
           (m, AssignVar vnm (pfx ++ [DValue (lookup_v m vr)] ++ sfx) vf))
 
      ∧
@@ -297,17 +297,17 @@ val (eval_rules, eval_ind, eval_cases) = Hol_reln`
      ∧
 
   (∀rds pfx aname expr sfx w vf m.
-      rds = pfx ++ [ARead aname expr] ++ sfx /\ ¬isValue expr ⇒
+      rds = pfx ++ [DARead aname expr] ++ sfx /\ ¬isValue expr ⇒
       eval (m, Assign w rds vf)
            (m,
             Assign w
-                  (pfx ++ [ARead aname (Value (evalexpr m expr))] ++ sfx)
+                  (pfx ++ [DARead aname (Value (evalexpr m expr))] ++ sfx)
                   vf))
 
      ∧
 
   (∀rds pfx aname i sfx w vf m.
-      rds = pfx ++ [ARead aname (Value (Int i))] ++ sfx
+      rds = pfx ++ [DARead aname (Value (Int i))] ++ sfx
      ⇒
       eval (m, Assign w rds vf)
            (m,
@@ -316,7 +316,7 @@ val (eval_rules, eval_ind, eval_cases) = Hol_reln`
      ∧
 
   (∀rds pfx vname sfx w vf m.
-      rds = pfx ++ [VRead vname] ++ sfx ⇒
+      rds = pfx ++ [DVRead vname] ++ sfx ⇒
       eval (m, Assign w rds vf)
            (m,
             Assign w (pfx ++ [DValue (lookup_v m vname)] ++ sfx) vf))

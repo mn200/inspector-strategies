@@ -21,8 +21,8 @@ val _ = export_rewrites ["expr_weight_def"]
 
 val dexpr_weight_def = Define`
   (dexpr_weight (DValue v) = 0:num) ∧
-  (dexpr_weight (ARead v e) = 1 + expr_weight e) ∧
-  (dexpr_weight (VRead v) = 1)
+  (dexpr_weight (DARead v e) = 1 + expr_weight e) ∧
+  (dexpr_weight (DVRead v) = 1)
 `;
 val _ = export_rewrites ["dexpr_weight_def"]
 
@@ -278,22 +278,22 @@ val lookupRW_def = Define`
 
 val getReads_def = Define`
   (getReads m [] = SOME []) ∧
-  (getReads m (ARead aname i_e :: des) =
+  (getReads m (DARead aname i_e :: des) =
      lift2 (λi rest. Array aname i :: rest)
            (some i. evalexpr m i_e = Int i)
            (getReads m des)) ∧
-  (getReads m (VRead vname :: des) =
+  (getReads m (DVRead vname :: des) =
      OPTION_MAP (CONS (Variable vname)) (getReads m des)) ∧
   (getReads m (DValue _ :: des) = getReads m des)
 `;
 
 val mergeReads0_def = Define`
   (mergeReads0 [] acc opn vs = opn (REVERSE acc)) ∧
-  (mergeReads0 (VRead _ :: ds) acc opn vs =
+  (mergeReads0 (DVRead _ :: ds) acc opn vs =
      mergeReads0 ds (HD vs :: acc) opn (TL vs)) ∧
   (mergeReads0 (DValue v :: ds) acc opn vs =
      mergeReads0 ds (v :: acc) opn vs) ∧
-  (mergeReads0 (ARead _ _ :: ds) acc opn vs =
+  (mergeReads0 (DARead _ _ :: ds) acc opn vs =
      mergeReads0 ds (HD vs :: acc) opn (TL vs))
 `;
 
@@ -303,8 +303,8 @@ val mergeReads_def = Define`
 
 val evalDexpr_def = Define`
   (evalDexpr m (DValue v) = SOME v) ∧
-  (evalDexpr m (VRead vname) = SOME (lookup_v m vname)) ∧
-  (evalDexpr m (ARead aname e_i) =
+  (evalDexpr m (DVRead vname) = SOME (lookup_v m vname)) ∧
+  (evalDexpr m (DARead aname e_i) =
      do
        i <- (some i. evalexpr m e_i = Int i);
        SOME (lookup_array m aname i)
@@ -739,8 +739,8 @@ val pcg_eval_imap_irrelevance = store_thm(
   simp[commutes_lemma] >> simp[apply_action_def]);
 
 val expr_reads_def = tDefine "expr_reads" `
-  (expr_reads m (VarExp vnm) = [Variable vnm]) ∧
-  (expr_reads m (ISub a i_e) =
+  (expr_reads m (VRead vnm) = [Variable vnm]) ∧
+  (expr_reads m (ARead a i_e) =
      (case evalexpr m i_e of
           Int i => CONS (Array a i)
        | _ => I)
@@ -778,8 +778,8 @@ val domreadAction_ident = store_thm(
 
 val dvread_def = Define`
   dvread m (DValue _) = [] ∧
-  dvread m (ARead _ e) = expr_reads m e ∧
-  dvread m (VRead _) = []
+  dvread m (DARead _ e) = expr_reads m e ∧
+  dvread m (DVRead _) = []
 `;
 
 val dvreadAction_def = Define`
@@ -1779,8 +1779,8 @@ val expr_ind' = store_thm(
   "expr_ind'",
   ``∀P. (∀v. P (Value v)) ∧
         (∀f l. (∀e. MEM e l ⇒ P e) ⇒ P (Opn f l)) ∧
-        (∀anm e. P e ⇒ P (ISub anm e)) ∧
-        (∀s. P (VarExp s)) ⇒
+        (∀anm e. P e ⇒ P (ARead anm e)) ∧
+        (∀s. P (VRead s)) ⇒
         ∀e. P e``,
   gen_tac >> strip_tac >>
   `(!e. P e) ∧ (∀l e. MEM e l ⇒ P e)` suffices_by simp[] >>
@@ -1951,19 +1951,19 @@ val apply_action_dvreadAction_commutes = store_thm(
       fs[readAction_def] >> BasicProvers.VAR_EQ_TAC >> fs[] >>
       qmatch_assum_rename_tac `w ≠ Array anm i : actionRW` [] >>
       imp_res_tac some_EQ_SOME_E >> fs[] >>
-      `evalexpr m0 (ISub anm e) = lookup_array m0 anm i ∧
-       evalexpr m (ISub anm e) = lookup_array m anm i`
+      `evalexpr m0 (ARead anm e) = lookup_array m0 anm i ∧
+       evalexpr m (ARead anm e) = lookup_array m anm i`
         by simp[evalexpr_def] >>
-      `b ≁ₜ readAction jj m0 (ISub anm e)`
+      `b ≁ₜ readAction jj m0 (ARead anm e)`
         by simp[readAction_def, touches_def, expr_reads_def] >>
       metis_tac[apply_action_expr_eval_commutes, touches_SYM]) >>
   simp[dvread_def, DISJ_IMP_THM, FORALL_AND_THM, PULL_EXISTS] >>
   simp[PULL_FORALL] >> qx_gen_tac `z` >> rpt strip_tac >>
   qmatch_assum_rename_tac `w ≠ Variable v` [] >>
-  `evalexpr m0 (VarExp v) = lookup_v m0 v ∧
-   evalexpr m (VarExp v) = lookup_v m v`
+  `evalexpr m0 (VRead v) = lookup_v m0 v ∧
+   evalexpr m (VRead v) = lookup_v m v`
     by simp[evalexpr_def] >>
-  `b ≁ₜ readAction jj m0 (VarExp v)`
+  `b ≁ₜ readAction jj m0 (VRead v)`
     by simp[touches_def, readAction_def, expr_reads_def] >>
   metis_tac[apply_action_expr_eval_commutes, touches_SYM])
 
