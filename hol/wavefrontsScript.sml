@@ -60,16 +60,6 @@ val splitAtPki_l1 = prove(
   CONV_TAC (RAND_CONV (REWR_CONV lift_splitAtPki_RAND)) >>
   simp[combinTheory.o_DEF]);
 
-val findi_def = Define`
-  findi x [] = 0 ∧
-  findi x (h::t) = if x = h then 0 else 1 + findi x t
-`;
-
-val MEM_findi = prove(
-  ``MEM x l ⇒ findi x l < LENGTH l``,
-  Induct_on `l` >> simp[findi_def] >>
-  rw[arithmeticTheory.ADD1, arithmeticTheory.ZERO_LESS_ADD]);
-
 val BIJ_CONG = store_thm(
   "BIJ_CONG",
   ``s1 = s1' ⇒ s2 = s2' ⇒ (∀x. x ∈ s1' ⇒ f x = f' x) ⇒

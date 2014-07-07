@@ -113,4 +113,14 @@ val FOLDRi_CONG' = store_thm(
   dsimp[LT_SUC] >> rpt strip_tac >> AP_TERM_TAC >>
   first_x_assum match_mp_tac >> simp[]);
 
+val findi_def = Define`
+  findi x [] = 0 ∧
+  findi x (h::t) = if x = h then 0 else 1 + findi x t
+`;
+
+val MEM_findi = prove(
+  ``MEM x l ⇒ findi x l < LENGTH l``,
+  Induct_on `l` >> simp[findi_def] >>
+  rw[arithmeticTheory.ADD1, arithmeticTheory.ZERO_LESS_ADD]);
+
 val _ = export_theory();
