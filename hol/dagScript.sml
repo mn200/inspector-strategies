@@ -4,6 +4,7 @@ open actionGraphTheory
 open lcsymtacs boolSimps
 open pairTheory pred_setTheory listTheory
 open bagTheory
+open indexedListsTheory
 
 val _ = new_theory "dag";
 
@@ -32,19 +33,6 @@ val geq_trans = store_thm(
   ``geq g1 g2 ∧ geq g2 g3 ⇒ geq g1 g3``,
   metis_tac[geq_rules]);
 
-val dagmap0_def = Define`
-  dagmap0 f g = MAP (polydata_upd f) g
-`;
-
-val dagmap0_thm = prove(
-  ``dagmap0 f [] = [] ∧
-    dagmap0 f (a::g) = polydata_upd f a :: dagmap0 f g``,
-  simp[dagmap0_def]);
-
-val wfdagmap0 = prove(
-  ``∀g1 g2. geq g1 g2 ⇒ geq (dagmap0 f g1) (dagmap0 f g2)``,
-  Induct_on `geq` >> simp[geq_rules, dagmap0_def] >> metis_tac[geq_rules]);
-
 val geq_equiv = prove(
   ``∀g1 g2. geq g1 g2 ⇔ (geq g1 = geq g2)``,
   simp[FUN_EQ_THM] >> metis_tac[geq_refl, geq_sym, geq_trans]);
@@ -63,6 +51,25 @@ val recursion = prove(
        |> BETA_RULE) >>
   qexists_tac `h` >> simp[] >> Induct_on `geq` >> simp[] >>
   metis_tac[]);
+
+val geq_MEM = prove(
+  ``∀g1 g2. geq g1 g2 ⇒ ∀a. MEM a g1 ⇔ MEM a g2``,
+  Induct_on `geq` >> simp[] >> metis_tac[]);
+
+val geq_findi = prove(
+  ``∀l1 l2. geq l1 l2 ⇒
+            ∀a b. a ∼ₜ b ∧ a ≠ b ∧ MEM a l1 ∧ MEM b l1 ⇒
+                  (findi a l1 < findi b l1 ⇔
+                   findi a l2 < findi b l2)``,
+  Induct_on `geq` >> simp[] >> rpt strip_tac >> rw[findi_def] >> simp[] >>
+  fs[] >> metis_tac[touches_SYM, geq_MEM])
+
+val geq_commute_lemma = prove(
+  ``geq (a::b::g1) (b::a::g2) ⇒ a = b ∨ a ≁ₜ b``,
+  strip_tac >>
+  qspecl_then [`a::b::g1`, `b::a::g2`] mp_tac geq_findi >> simp[] >>
+  disch_then (qspecl_then [`a`, `b`] mp_tac) >> simp[findi_def] >>
+  dsimp[]);
 
 fun define_quotient {types,defs,thms,poly_preserves,poly_respects,respects} =
     let
@@ -83,21 +90,20 @@ val dagAdd_commutes0 = last (CONJUNCTS geq_rules)
 val wfdagAdd = List.nth(CONJUNCTS geq_rules, 3)
 val alpha_node = inst [alpha |-> ``:(α,β)node``]
 
-val [dag_ind, dag_recursion, dagAdd_commutes] =
+val [dag_ind, dag_recursion, dagAdd_commutes, dagAdd_commuteEQ_E] =
   define_quotient {
   types = [{name = "dag", equiv = geq_equiv}],
   defs = [("emptydag",``[] : (α,β)node list``),
           ("dagAdd",
-           ``CONS : (α,β) node -> (α,β) node list -> (α,β)node list``),
-          ("dagmap",
-           ``dagmap0 : (α -> γ) -> (α,β) node list -> (γ,β)node list``)],
+           ``CONS : (α,β) node -> (α,β) node list -> (α,β)node list``)],
   thms = [("dag_ind", TypeBase.induction_of ``:'a list``
                         |> INST_TYPE [alpha |-> ``:(α,β)node``]),
           ("dag_recursion", recursion),
-          ("dagAdd_commutes", dagAdd_commutes0)],
+          ("dagAdd_commutes", dagAdd_commutes0),
+          ("dagAdd_commuteEQ_E", geq_commute_lemma)],
   poly_preserves = [],
   poly_respects = [],
-  respects = [wfdagmap0, wfdagAdd]}
+  respects = [wfdagAdd]}
 
 val _ = overload_on("ε", ``emptydag``)
 val _ = set_mapped_fixity {term_name = "dagAdd", tok = "<+",
@@ -159,34 +165,6 @@ val dagAdd_commutes' = prove(
   ``b ≁ₜ a ⇒ a <+ b <+ g = b <+ a <+ g``,
   metis_tac[touches_SYM, dagAdd_commutes]);
 
-val dagmap_def = new_specification("dagmap_def",
-  ["dagmap"],
-  dag_recursion |> ISPEC ``dagAdd o polydata_upd f`` |> SPEC ``emptydag``
-                |> SIMP_RULE (srw_ss()) [dagAdd_commutes']
-                |> Q.GEN `f` |> SIMP_RULE bool_ss [SKOLEM_THM]
-                |> SIMP_RULE bool_ss [FORALL_AND_THM]);
-val _ = export_rewrites ["dagmap_def"]
-
-val dagmap_CONG = store_thm(
-  "dagmap_CONG[defncong]",
-  ``∀f1 f2 g1 g2.
-      (∀d. d ∈ IMAGE action_data (nodeset g1) ⇒ f1 d = f2 d) ∧
-      g1 = g2 ⇒ dagmap f1 g1 = dagmap f2 g2``,
-  simp[PULL_EXISTS] >> ntac 2 gen_tac >>
-  ho_match_mp_tac dag_ind >> simp[polydata_upd_def]);
-
-val dagmerge_def = new_specification("dagmerge_def",
-  ["dagmerge"],
-  dag_recursion |> ISPEC ``λa:(α,β)node r g2:(α,β)dag. a <+ r g2``
-                |> SPEC ``λr2:(α,β)dag. r2``
-                |> SIMP_RULE (srw_ss()) [FUN_EQ_THM, dagAdd_commutes'])
-val _ = export_rewrites ["dagmerge_def"]
-
-val dagmerge_ASSOC = store_thm(
-  "dagmerge_ASSOC",
-  ``∀d1 d2 d3. dagmerge d1 (dagmerge d2 d3) = dagmerge (dagmerge d1 d2) d3``,
-  ho_match_mp_tac dag_ind >> simp[]);
-
 val dag_recursion' = store_thm(
   "dag_recursion'",
   ``∀f e.
@@ -231,12 +209,64 @@ val ddel_simp = save_thm(
   ddel_def |> CONJUNCT2 |> SPECL [``a:(α,β)node``, ``a:(α,β)node``]
            |> REWRITE_RULE[]);
 
+val IN_nodeset_dagsize_nonzero = store_thm(
+  "IN_nodeset_dagsize_nonzero",
+  ``∀dag a. a ∈ dag ⇒ 0 < dagsize dag``,
+  ho_match_mp_tac dag_ind >> simp[]);
+
+val IN_nodeset_ddel_size = store_thm(
+  "IN_nodeset_ddel_size",
+  ``∀dag a. a ∈ dag ⇒ dagsize (ddel a dag) = dagsize dag - 1``,
+  ho_match_mp_tac dag_ind >> simp[ddel_def] >> dsimp[] >> rw[] >>
+  imp_res_tac IN_nodeset_dagsize_nonzero >> simp[]);
+
 val dagAdd_11 = store_thm(
   "dagAdd_11[simp]",
   ``(a <+ g = b <+ g ⇔ a = b) ∧ (a <+ g1 = a <+ g2 ⇔ g1 = g2)``,
   simp[EQ_IMP_THM] >> conj_tac
   >- (disch_then (mp_tac o Q.AP_TERM `nodebag`) >> simp[]) >>
   disch_then (mp_tac o Q.AP_TERM `ddel a`) >> simp[]);
+
+val dagmap_def = new_specification("dagmap_def",
+  ["dagmap"],
+  dag_recursion |> ISPEC ``dagAdd o polydata_upd f`` |> SPEC ``emptydag``
+                |> SIMP_RULE (srw_ss()) [dagAdd_commutes']
+                |> Q.GEN `f` |> SIMP_RULE bool_ss [SKOLEM_THM]
+                |> SIMP_RULE bool_ss [FORALL_AND_THM]);
+val _ = export_rewrites ["dagmap_def"]
+
+val dagmap_I = store_thm(
+  "dagmap_I[simp]",
+  ``dagmap I g = g ∧ dagmap (λx. x) g = g``,
+  qid_spec_tac `g` >> ho_match_mp_tac dag_ind >>
+  simp[polydata_upd_def, action_component_equality])
+
+val dagmap_dagmap_o = store_thm(
+  "dagmap_dagmap_o",
+  ``∀d. dagmap f (dagmap g d) = dagmap (f o g) d``,
+  ho_match_mp_tac dag_ind >> simp[] >>
+  simp[polydata_upd_def]);
+
+val dagmap_CONG = store_thm(
+  "dagmap_CONG[defncong]",
+  ``∀f1 f2 g1 g2.
+      (∀d. d ∈ IMAGE action_data (nodeset g1) ⇒ f1 d = f2 d) ∧
+      g1 = g2 ⇒ dagmap f1 g1 = dagmap f2 g2``,
+  simp[PULL_EXISTS] >> ntac 2 gen_tac >>
+  ho_match_mp_tac dag_ind >> simp[polydata_upd_def]);
+
+val dagmerge_def = new_specification("dagmerge_def",
+  ["dagmerge"],
+  dag_recursion |> ISPEC ``λa:(α,β)node r g2:(α,β)dag. a <+ r g2``
+                |> SPEC ``λr2:(α,β)dag. r2``
+                |> SIMP_RULE (srw_ss()) [FUN_EQ_THM, dagAdd_commutes'])
+val _ = export_rewrites ["dagmerge_def"]
+
+val dagmerge_ASSOC = store_thm(
+  "dagmerge_ASSOC",
+  ``∀d1 d2 d3. dagmerge d1 (dagmerge d2 d3) = dagmerge (dagmerge d1 d2) d3``,
+  ho_match_mp_tac dag_ind >> simp[]);
+
 
 val (dagREL_rules, dagREL_ind, dagREL_cases) = Hol_reln`
   dagREL R ε ε ∧
@@ -271,5 +301,91 @@ val wave0_def = new_specification("wave0_def",
                 |> SIMP_RULE (srw_ss()) [Once touches_SYM', BAG_FILTER_FILTER]
                 |> SIMP_RULE (srw_ss()) [BAG_INSERT_commutes]
                 |> SIMP_RULE (srw_ss()) [Once CONJ_COMM]);
+
+val FOLDR_dagAdd_dataupd = store_thm(
+  "FOLDR_dagAdd_dataupd",
+  ``FOLDR (dagAdd o polydata_upd f o g) ε l =
+    dagmap f (FOLDR (dagAdd o g) ε l) ∧
+    FOLDR (dagAdd o polydata_upd f) ε l = dagmap f (FOLDR dagAdd ε l)``,
+  Induct_on`l` >> simp[]);
+
+val IN_FOLDR_dagAdd = store_thm(
+  "IN_FOLDR_dagAdd[simp]",
+  ``(a ∈ FOLDR (dagAdd o f) ε l ⇔ ∃e. MEM e l ∧ a = f e) ∧
+    (a ∈ FOLDR dagAdd ε l ⇔ MEM a l)``,
+  Induct_on`l` >> simp[] >> metis_tac[]);
+
+val EL_BAG_BAG_INSERT = store_thm(
+  "EL_BAG_BAG_INSERT[simp]",
+  ``{|x|} = BAG_INSERT y b ⇔ x = y ∧ b = {||}``,
+  simp[EQ_IMP_THM] >>
+  simp[bagTheory.BAG_EXTENSION, bagTheory.BAG_INN,
+       bagTheory.BAG_INSERT, bagTheory.EMPTY_BAG] >>
+  strip_tac >>
+  `x = y`
+    by (spose_not_then assume_tac >>
+        first_x_assum (qspecl_then [`1`, `y`] mp_tac) >>
+        simp[]) >> rw[] >>
+  simp[EQ_IMP_THM] >> spose_not_then strip_assume_tac >> Cases_on `e = x`
+  >- (rw[] >> first_x_assum (qspecl_then [`n+1`, `e`] mp_tac) >>
+      simp[]) >>
+  first_x_assum (qspecl_then [`n`, `e`] mp_tac) >> simp[]);
+
+val dagAdd_commute_simp = store_thm(
+  "dagAdd_commute_simp[simp]",
+  ``∀g1 g2 a b. a <+ b <+ g1 = b <+ a <+ g2 ⇔ g1 = g2 ∧ (a = b ∨ a ≁ₜ b)``,
+  dsimp[EQ_IMP_THM, dagAdd_commutes'] >>
+  `∀g1 g2 a b. a <+ b <+ g1 = b <+ a <+ g2 ⇒ a = b ∨ a ≁ₜ b`
+    suffices_by (rpt strip_tac >> res_tac >> fs[] >>
+                 metis_tac[dagAdd_11, dagAdd_commutes]) >>
+  rpt gen_tac >> MATCH_ACCEPT_TAC dagAdd_commuteEQ_E);
+
+val wave0_ddel = store_thm(
+  "wave0_ddel[simp]",
+  ``∀d a. BAG_IN a (wave0 d) ⇒ a <+ (ddel a d) = d``,
+  ho_match_mp_tac dag_ind >> simp[wave0_def] >> dsimp[] >>
+  simp[ddel_def] >> rw[] >> metis_tac[dagAdd_commutes]);
+
+val dagAdd_11_thm = store_thm(
+  "dagAdd_11_thm",
+  ``∀g1 g2 a b.
+      a <+ g1 = b <+ g2 ⇔
+      a = b ∧ g1 = g2 ∨
+      a ≁ₜ b ∧ ∃g0. g1 = b <+ g0 ∧ g2 = a <+ g0``,
+  gen_tac >> Induct_on `dagsize g1` >> simp[]
+  >- (simp[EQ_IMP_THM] >> rpt gen_tac >> strip_tac >>
+      first_x_assum (mp_tac o Q.AP_TERM `nodebag`) >> simp[]) >>
+  qx_gen_tac `g1` >>
+  qspec_then `g1` strip_assume_tac dag_CASES >> simp[] >> strip_tac >>
+  qmatch_assum_rename_tac `g1 = c <+ g0` [] >>
+  fs[DECIDE ``SUC m = x + 1 ⇔ m = x``] >> rpt (pop_assum SUBST_ALL_TAC) >>
+  map_every qx_gen_tac [`g2`, `a`, `b`] >>
+  Cases_on `a = b` >> simp[]
+  >- (eq_tac >> strip_tac >> simp[]) >>
+  reverse eq_tac
+  >- (dsimp[PULL_EXISTS] >> simp[dagAdd_commutes']) >>
+  strip_tac >>
+  dsimp[PULL_EXISTS] >> Cases_on `b = c` >> simp[]
+  >- (BasicProvers.VAR_EQ_TAC >>
+      `g2 = a <+ g0` suffices_by (strip_tac >> fs[] >> fs[]) >>
+      pop_assum (mp_tac o Q.AP_TERM `ddel b`) >> simp[ddel_def]) >>
+  Cases_on `a = c` >> rw[]
+  >- (first_assum (mp_tac o Q.AP_TERM `ddel a`) >> simp[ddel_def] >>
+      disch_then (CONJUNCTS_THEN2 assume_tac
+                                  (qx_choose_then `g00` strip_assume_tac)) >>
+      rw[] >>
+      `BAG_IN a (wave0 (a <+ a <+ b <+ g00))` by simp[wave0_def] >>
+      `BAG_IN a (wave0 (b <+ g2))` by metis_tac[] >>
+      `BAG_IN a (wave0 g2)` by (pop_assum mp_tac >> rw[wave0_def]) >>
+      `a <+ a <+ g00 = a <+ ddel a g2` by simp[] >>
+      simp[wave0_ddel]) >>
+  first_assum (mp_tac o Q.AP_TERM `ddel c`) >> simp[ddel_def] >>
+  disch_then (CONJUNCTS_THEN2 assume_tac
+                              (qx_choose_then `g01` strip_assume_tac)) >>
+  simp[] >> conj_tac
+  >- (Q.UNDISCH_THEN `a <+ c <+ g0 = b <+ g2`
+                     (mp_tac o Q.AP_TERM `ddel a`) >> simp[ddel_def]) >>
+  rw[] >> pop_assum kall_tac >>
+  first_x_assum (mp_tac o Q.AP_TERM `ddel b`) >> simp[ddel_def])
 
 val _ = export_theory();
