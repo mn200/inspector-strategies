@@ -388,4 +388,60 @@ val dagAdd_11_thm = store_thm(
   rw[] >> pop_assum kall_tac >>
   first_x_assum (mp_tac o Q.AP_TERM `ddel b`) >> simp[ddel_def])
 
+val daglink_def = Define`
+  daglink g a b ⇔ a ∼ₜ b ∧ ∃g0 g1. g = dagmerge g0 (a <+ b <+ g1)
+`;
+
+val dagmerge_EQ_empty = store_thm(
+  "dagmerge_EQ_empty[simp]",
+  ``dagmerge g1 g2 = ε ⇔ g1 = ε ∧ g2 = ε``,
+  map_every qid_spec_tac [`g2`, `g1`] >> ho_match_mp_tac dag_ind >> simp[]);
+
+val dagAdd_EQ_sing = store_thm(
+  "dagAdd_EQ_sing[simp]",
+  ``a <+ g = b <+ ε ⇔ a = b ∧ g = ε``,
+  map_every qid_spec_tac [`a`, `b`, `g`] >> ho_match_mp_tac dag_ind >> simp[] >>
+  rpt strip_tac >> first_x_assum (mp_tac o Q.AP_TERM `dagsize`) >> simp[]);
+
+val dagmerge_EQ_sing = store_thm(
+  "dagmerge_EQ_sing",
+  ``dagmerge g1 g2 = a <+ ε ⇔ g1 = a <+ ε ∧ g2 = ε ∨ g1 = ε ∧ g2 = a <+ ε``,
+  map_every qid_spec_tac [`a`, `g2`, `g1`] >> ho_match_mp_tac dag_ind >>
+  simp[] >> metis_tac[]);
+
+(*
+val daglink_add = store_thm(
+  "daglink_add",
+  ``∀g a b c.
+       daglink (a <+ g) b c ⇔
+       a = b ∧ b ∼ₜ c ∧ (∃g1. g = c <+ g1) ∨ daglink g b c``,
+  simp[daglink_def] >> ho_match_mp_tac dag_ind >> simp[dagmerge_EQ_sing] >>
+  qx_gen_tac `g` >> strip_tac >> map_every qx_gen_tac [`h`, `a`, `b`, `c`] >>
+  Cases_on `b ∼ₜ c` >> simp[] >> reverse (Cases_on `a = b`) >> simp[]
+  >- (eq_tac >> rpt strip_tac
+      >- (qspec_then `g0` strip_assume_tac dag_CASES >> fs[]
+          >- (rw[] >> pop_assum mp_tac >> simp[Once dagAdd_11_thm] >>
+              dsimp[dagAdd_11_thm] >> rw[]
+              >- metis_tac[touches_SYM]
+              >- metis_tac[touches_SYM]
+              >- metis_tac[touches_SYM]
+              >- (disj2_tac >> map_every qexists_tac [`ε`, `g0`] >> simp[])) >>
+          qmatch_assum_rename_tac `g0 = e <+ g00` [] >> pop_assum SUBST_ALL_TAC >>
+          pop_assum mp_tac >> simp[Once dagAdd_11_thm] >> strip_tac
+          >- (first_x_assum (qspecl_then [`h`, `b`, `c`] mp_tac) >> simp[] >>
+              metis_tac[]) >>
+          metis_tac[]
+
+
+  simp[daglink_def, EQ_IMP_THM, PULL_EXISTS] >> rpt strip_tac >> rw[]
+  >- (Cases_on `a = b` >> simp[] >> rw[]
+      >- (qspec_then `g0` strip_assume_tac dag_CASES >> fs[] >>
+          fs[dagAdd_11_thm] >- metis_tac[] >>
+          dsimp[] >> rw[]
+
+pop_assum mp_tac >> map_every qid_spec_tac [`g1`, `g`, `g0`] >>
+          ho_match_mp_tac dag_ind >> simp[] >> rpt strip_tac >>
+          Cases_on `a = h` >> fs[] >- metis_tac[] >>
+
+*)
 val _ = export_theory();
