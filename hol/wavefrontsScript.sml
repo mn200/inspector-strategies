@@ -2,6 +2,7 @@ open HolKernel Parse boolLib bossLib;
 
 open actionGraphTheory datadepsTheory
 open pred_setTheory listTheory sortingTheory relationTheory
+open indexedListsTheory
 
 open lcsymtacs
 
@@ -60,34 +61,12 @@ val splitAtPki_l1 = prove(
   CONV_TAC (RAND_CONV (REWR_CONV lift_splitAtPki_RAND)) >>
   simp[combinTheory.o_DEF]);
 
-val findi_def = Define`
-  findi x [] = 0 ∧
-  findi x (h::t) = if x = h then 0 else 1 + findi x t
-`;
-
-val MEM_findi = prove(
-  ``MEM x l ⇒ findi x l < LENGTH l``,
-  Induct_on `l` >> simp[findi_def] >>
-  rw[arithmeticTheory.ADD1, arithmeticTheory.ZERO_LESS_ADD]);
-
 val BIJ_CONG = store_thm(
   "BIJ_CONG",
   ``s1 = s1' ⇒ s2 = s2' ⇒ (∀x. x ∈ s1' ⇒ f x = f' x) ⇒
     (BIJ f s1 s2 ⇔ BIJ f' s1' s2')``,
   SIMP_TAC (srw_ss() ++ boolSimps.CONJ_ss)
            [BIJ_DEF, INJ_DEF, SURJ_DEF, EQ_IMP_THM]);
-
-val findi_EL = store_thm(
-  "findi_EL",
-  ``∀l n. n < LENGTH l ∧ ALL_DISTINCT l ⇒ findi (EL n l) l = n``,
-  Induct >> simp[] >> map_every qx_gen_tac [`h`, `n`] >> strip_tac >>
-  Cases_on `n` >> simp[findi_def] >> rw[arithmeticTheory.ADD1] >>
-  fs[] >> metis_tac[MEM_EL]);
-
-val EL_findi = store_thm(
-  "EL_findi",
-  ``∀l x. MEM x l ⇒ EL (findi x l) l = x``,
-  Induct_on`l` >> rw[findi_def] >> simp[DECIDE ``1 + x = SUC x``]);
 
 val PERM_BIJ = store_thm(
   "PERM_BIJ",

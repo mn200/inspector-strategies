@@ -113,4 +113,27 @@ val FOLDRi_CONG' = store_thm(
   dsimp[LT_SUC] >> rpt strip_tac >> AP_TERM_TAC >>
   first_x_assum match_mp_tac >> simp[]);
 
+val findi_def = Define`
+  findi x [] = 0 ∧
+  findi x (h::t) = if x = h then 0 else 1 + findi x t
+`;
+
+val MEM_findi = store_thm(
+  "MEM_findi",
+  ``MEM x l ⇒ findi x l < LENGTH l``,
+  Induct_on `l` >> simp[findi_def] >>
+  rw[arithmeticTheory.ADD1, arithmeticTheory.ZERO_LESS_ADD]);
+
+val findi_EL = store_thm(
+  "findi_EL",
+  ``∀l n. n < LENGTH l ∧ ALL_DISTINCT l ⇒ findi (EL n l) l = n``,
+  Induct >> simp[] >> map_every qx_gen_tac [`h`, `n`] >> strip_tac >>
+  Cases_on `n` >> simp[findi_def] >> rw[arithmeticTheory.ADD1] >>
+  fs[] >> metis_tac[MEM_EL]);
+
+val EL_findi = store_thm(
+  "EL_findi",
+  ``∀l x. MEM x l ⇒ EL (findi x l) l = x``,
+  Induct_on`l` >> rw[findi_def] >> simp[DECIDE ``1 + x = SUC x``]);
+
 val _ = export_theory();
