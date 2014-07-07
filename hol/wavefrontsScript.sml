@@ -2,6 +2,7 @@ open HolKernel Parse boolLib bossLib;
 
 open actionGraphTheory datadepsTheory
 open pred_setTheory listTheory sortingTheory relationTheory
+open indexedListsTheory
 
 open lcsymtacs
 
@@ -66,18 +67,6 @@ val BIJ_CONG = store_thm(
     (BIJ f s1 s2 ⇔ BIJ f' s1' s2')``,
   SIMP_TAC (srw_ss() ++ boolSimps.CONJ_ss)
            [BIJ_DEF, INJ_DEF, SURJ_DEF, EQ_IMP_THM]);
-
-val findi_EL = store_thm(
-  "findi_EL",
-  ``∀l n. n < LENGTH l ∧ ALL_DISTINCT l ⇒ findi (EL n l) l = n``,
-  Induct >> simp[] >> map_every qx_gen_tac [`h`, `n`] >> strip_tac >>
-  Cases_on `n` >> simp[findi_def] >> rw[arithmeticTheory.ADD1] >>
-  fs[] >> metis_tac[MEM_EL]);
-
-val EL_findi = store_thm(
-  "EL_findi",
-  ``∀l x. MEM x l ⇒ EL (findi x l) l = x``,
-  Induct_on`l` >> rw[findi_def] >> simp[DECIDE ``1 + x = SUC x``]);
 
 val PERM_BIJ = store_thm(
   "PERM_BIJ",
