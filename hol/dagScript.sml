@@ -304,16 +304,16 @@ val wave0_def = new_specification("wave0_def",
 
 val FOLDR_dagAdd_dataupd = store_thm(
   "FOLDR_dagAdd_dataupd",
-  ``FOLDR (dagAdd o polydata_upd f o g) ε l =
-    dagmap f (FOLDR (dagAdd o g) ε l) ∧
-    FOLDR (dagAdd o polydata_upd f) ε l = dagmap f (FOLDR dagAdd ε l)``,
-  Induct_on`l` >> simp[]);
+  ``(∀l. FOLDR (dagAdd o polydata_upd f o g) ε l =
+         dagmap f (FOLDR (dagAdd o g) ε l)) ∧
+    ∀l. FOLDR (dagAdd o polydata_upd f) ε l = dagmap f (FOLDR dagAdd ε l)``,
+  conj_tac >> Induct_on`l` >> simp[]);
 
 val IN_FOLDR_dagAdd = store_thm(
   "IN_FOLDR_dagAdd[simp]",
-  ``(a ∈ FOLDR (dagAdd o f) ε l ⇔ ∃e. MEM e l ∧ a = f e) ∧
-    (a ∈ FOLDR dagAdd ε l ⇔ MEM a l)``,
-  Induct_on`l` >> simp[] >> metis_tac[]);
+  ``(∀l. a ∈ FOLDR (dagAdd o f) ε l ⇔ ∃e. MEM e l ∧ a = f e) ∧
+    (∀l. a ∈ FOLDR dagAdd ε l ⇔ MEM a l)``,
+  conj_tac >> Induct_on`l` >> simp[] >> metis_tac[]);
 
 val EL_BAG_BAG_INSERT = store_thm(
   "EL_BAG_BAG_INSERT[simp]",
@@ -388,9 +388,112 @@ val dagAdd_11_thm = store_thm(
   rw[] >> pop_assum kall_tac >>
   first_x_assum (mp_tac o Q.AP_TERM `ddel b`) >> simp[ddel_def])
 
-val daglink_def = Define`
-  daglink g a b ⇔ a ∼ₜ b ∧ ∃g0 g1. g = dagmerge g0 (a <+ b <+ g1)
-`;
+val move_nontouching_front = prove(
+  ``∀n l. n < LENGTH l ∧ (∀i. i < n ⇒ EL i l ≁ₜ EL n l) ⇒
+          FOLDR dagAdd ε l = FOLDR dagAdd ε (EL n l :: delN n l)``,
+  Induct >- (Cases >> simp[delN_def]) >> dsimp[LT_SUC] >>
+  qx_gen_tac `l` >> strip_tac >>
+  `∃h t. l = h::t` by (Cases_on `l` >> fs[]) >> rw[] >>
+  simp[delN_def] >> fs[])
+
+val BIJ_THM = store_thm(
+  "BIJ_THM",
+  ``BIJ f s t ⇔
+       (∀x. x ∈ s ⇒ f x ∈ t) ∧
+       (∀x y. x ∈ s ∧ y ∈ s ⇒ (f x = f y ⇔ x = y)) ∧
+       ∀a. a ∈ t ⇒ ∃x. x ∈ s ∧ f x = a``,
+  simp[BIJ_DEF, INJ_DEF, SURJ_DEF] >> metis_tac[]);
+
+val BIJ_FOLDR_add_EQ = store_thm(
+  "BIJ_FOLDR_add_EQ",
+  ``∀l1 l2 b.
+       LENGTH l2 = LENGTH l1 ∧ BIJ b (count (LENGTH l1)) (count (LENGTH l1)) ∧
+       (∀i. i < LENGTH l1 ⇒ EL (b i) l2 = EL i l1) ∧
+       (∀i j. i < j ∧ j < LENGTH l1 ∧ EL i l1 ∼ₜ EL j l1 ⇒ b i < b j) ⇒
+       FOLDR dagAdd ε l1 = FOLDR dagAdd ε l2``,
+  Induct >> simp[] >- csimp[LENGTH_NIL] >>
+  map_every qx_gen_tac [`h1`, `l2`, `b`] >>
+  strip_tac >>
+  qmatch_assum_rename_tac `LENGTH l2 = SUC (LENGTH t1)` [] >>
+  `EL 0 (h1::t1) = h1` by simp[] >>
+  `EL (b 0) l2 = h1` by simp[] >>
+  `b 0 < SUC (LENGTH t1)`
+    by metis_tac[BIJ_DEF, SURJ_DEF, IN_COUNT, DECIDE ``0 < SUC x``] >>
+  `∀j. j < b 0 ⇒ EL j l2 ≁ₜ h1`
+    by (spose_not_then strip_assume_tac >>
+        `j < SUC (LENGTH t1)` by simp[] >>
+        `∃i. i < SUC (LENGTH t1) ∧ b i = j` by fs[BIJ_DEF, SURJ_DEF] >>
+        `¬(b 0 < b i)` by simp[] >>
+        `i ≠ 0` by (strip_tac >> fs[]) >>
+        `0 < i` by simp[] >>
+        metis_tac[touches_SYM]) >>
+  `FOLDR dagAdd ε l2 = FOLDR dagAdd ε (EL (b 0) l2 :: delN (b 0) l2)`
+    by simp[move_nontouching_front] >>
+  pop_assum SUBST_ALL_TAC >> simp[] >> first_x_assum match_mp_tac >>
+  simp[delN_shortens] >>
+  qabbrev_tac `b' = λi. if b 0 < b (i + 1) then b (i + 1) - 1
+                        else b (i + 1)` >>
+  `BIJ b' (count (LENGTH t1)) (count (LENGTH t1))`
+    by (fs[Abbr`b'`, BIJ_THM] >> rpt strip_tac
+        >- (`i + 1 < SUC (LENGTH t1)` by simp[] >>
+            `b(i + 1) < SUC (LENGTH t1)` by simp[] >>
+            COND_CASES_TAC >- simp[] >>
+            `b (i + 1) ≠ b 0` by simp[] >>
+            simp[])
+        >- (pop_assum mp_tac >>
+            qmatch_assum_rename_tac `m < LENGTH t1` [] >>
+            strip_tac >>
+            qmatch_assum_rename_tac `n < LENGTH t1` [] >>
+            Cases_on `b 0 < b (m + 1)` >> simp[]
+            >- (Cases_on `b 0 < b (n + 1)` >> simp[]
+                >- simp[DECIDE ``0 < y ∧ 0 < z ⇒ (y - 1n = z - 1 ⇔ y = z)``] >>
+                `b 0 ≠ b (n + 1)`
+                  by (`0 < SUC (LENGTH t1) ∧ n + 1 < SUC (LENGTH t1)`
+                        by simp[] >>
+                      simp[]) >>
+                `b (m + 1) - 1 ≠ b (n + 1)` by simp[] >> simp[] >>
+                strip_tac >> fs[]) >>
+            Cases_on `b 0 < b (n + 1)` >> simp[]
+            >- (`b 0 ≠ b (m + 1)`
+                  by (`0 < SUC (LENGTH t1) ∧ m + 1 < SUC (LENGTH t1)`
+                        by simp[] >>
+                      simp[]) >>
+                `b (m + 1) ≠ b (n + 1) - 1` by simp[] >> simp[] >>
+                strip_tac >> fs[]))
+        >- (Cases_on `a < b 0`
+            >- (`a < SUC (LENGTH t1)` by simp[] >>
+                `∃x. x < SUC (LENGTH t1) ∧ b x = a` by metis_tac[] >>
+                `x ≠ 0` by (strip_tac >> fs[]) >>
+                qexists_tac `x - 1` >> simp[]) >>
+            `a + 1 < SUC (LENGTH t1)` by simp[] >>
+            `∃x. x < SUC (LENGTH t1) ∧ b x = a + 1` by metis_tac[] >>
+            `x ≠ 0` by (strip_tac >> fs[]) >>
+            qexists_tac `x - 1` >> simp[])) >>
+  qexists_tac `b'` >> simp[] >> conj_tac
+  >- (simp[Abbr`b'`] >> qx_gen_tac `i` >> strip_tac >>
+      `i + 1 < SUC (LENGTH t1)` by simp[] >>
+      Cases_on `b 0 < b (i + 1)` >> simp[]
+      >- (`b (i + 1) < SUC (LENGTH t1)` by fs[BIJ_THM] >>
+          simp[EL_delN_AFTER] >>
+          simp[GSYM arithmeticTheory.ADD1]) >>
+      `b (i + 1) ≠ b 0` by fs[BIJ_THM] >>
+      `b (i + 1) < b 0` by simp[] >>
+      simp[EL_delN_BEFORE] >>
+      simp[GSYM arithmeticTheory.ADD1]) >>
+  map_every qx_gen_tac [`i`, `j`] >> strip_tac >>
+  simp[Abbr`b'`] >>
+  Cases_on `b 0 < b (i + 1)` >> simp[]
+  >- (Cases_on `b 0 < b (j + 1)` >> simp[]
+      >- (`b (i + 1) < b (j + 1)` suffices_by simp[] >>
+          first_x_assum match_mp_tac >>
+          simp[GSYM arithmeticTheory.ADD1]) >>
+      `b (j + 1) ≠ b 0` by (fs[BIJ_THM] >> simp[]) >>
+      `b (j + 1) < b (i + 1)` by simp[] >>
+      first_x_assum (qspecl_then [`SUC i`, `SUC j`] mp_tac) >>
+      simp[] >> simp[arithmeticTheory.ADD1]) >>
+  `b (i + 1) ≠ b 0` by (fs[BIJ_THM] >> simp[]) >>
+  Cases_on `b 0 < b (j + 1)` >> simp[] >>
+  first_x_assum match_mp_tac >> simp[GSYM arithmeticTheory.ADD1])
 
 val dagmerge_EQ_empty = store_thm(
   "dagmerge_EQ_empty[simp]",
@@ -409,39 +512,4 @@ val dagmerge_EQ_sing = store_thm(
   map_every qid_spec_tac [`a`, `g2`, `g1`] >> ho_match_mp_tac dag_ind >>
   simp[] >> metis_tac[]);
 
-(*
-val daglink_add = store_thm(
-  "daglink_add",
-  ``∀g a b c.
-       daglink (a <+ g) b c ⇔
-       a = b ∧ b ∼ₜ c ∧ (∃g1. g = c <+ g1) ∨ daglink g b c``,
-  simp[daglink_def] >> ho_match_mp_tac dag_ind >> simp[dagmerge_EQ_sing] >>
-  qx_gen_tac `g` >> strip_tac >> map_every qx_gen_tac [`h`, `a`, `b`, `c`] >>
-  Cases_on `b ∼ₜ c` >> simp[] >> reverse (Cases_on `a = b`) >> simp[]
-  >- (eq_tac >> rpt strip_tac
-      >- (qspec_then `g0` strip_assume_tac dag_CASES >> fs[]
-          >- (rw[] >> pop_assum mp_tac >> simp[Once dagAdd_11_thm] >>
-              dsimp[dagAdd_11_thm] >> rw[]
-              >- metis_tac[touches_SYM]
-              >- metis_tac[touches_SYM]
-              >- metis_tac[touches_SYM]
-              >- (disj2_tac >> map_every qexists_tac [`ε`, `g0`] >> simp[])) >>
-          qmatch_assum_rename_tac `g0 = e <+ g00` [] >> pop_assum SUBST_ALL_TAC >>
-          pop_assum mp_tac >> simp[Once dagAdd_11_thm] >> strip_tac
-          >- (first_x_assum (qspecl_then [`h`, `b`, `c`] mp_tac) >> simp[] >>
-              metis_tac[]) >>
-          metis_tac[]
-
-
-  simp[daglink_def, EQ_IMP_THM, PULL_EXISTS] >> rpt strip_tac >> rw[]
-  >- (Cases_on `a = b` >> simp[] >> rw[]
-      >- (qspec_then `g0` strip_assume_tac dag_CASES >> fs[] >>
-          fs[dagAdd_11_thm] >- metis_tac[] >>
-          dsimp[] >> rw[]
-
-pop_assum mp_tac >> map_every qid_spec_tac [`g1`, `g`, `g0`] >>
-          ho_match_mp_tac dag_ind >> simp[] >> rpt strip_tac >>
-          Cases_on `a = h` >> fs[] >- metis_tac[] >>
-
-*)
 val _ = export_theory();

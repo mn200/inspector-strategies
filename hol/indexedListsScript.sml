@@ -136,4 +136,29 @@ val EL_findi = store_thm(
   ``∀l x. MEM x l ⇒ EL (findi x l) l = x``,
   Induct_on`l` >> rw[findi_def] >> simp[DECIDE ``1 + x = SUC x``]);
 
+val delN_def = Define`
+  delN i [] = [] ∧
+  delN i (h::t) = if i = 0 then t
+                  else h::delN (i - 1) t
+`;
+
+val delN_shortens = store_thm(
+  "delN_shortens",
+  ``∀l i. i < LENGTH l ⇒ LENGTH (delN i l) = LENGTH l - 1``,
+  Induct >> dsimp[delN_def, LT_SUC]);
+
+val EL_delN_BEFORE = store_thm(
+  "EL_delN_BEFORE",
+  ``∀l i j. i < j ∧ j < LENGTH l ⇒ EL i (delN j l) = EL i l``,
+  Induct >> simp[delN_def] >> map_every qx_gen_tac [`h`, `i`, `j`] >>
+  Cases_on `i` >> simp[])
+
+val EL_delN_AFTER = store_thm(
+  "EL_delN_AFTER",
+  ``∀l i j. j ≤ i ∧ i + 1 < LENGTH l ⇒ (EL i (delN j l) = EL (i + 1) l)``,
+  Induct >> simp[delN_def] >> rw[]
+  >- simp[GSYM arithmeticTheory.ADD1] >>
+  `∃i0. i = SUC i0` by (Cases_on `i` >> fs[]) >> rw[] >>
+  fs[arithmeticTheory.ADD_CLAUSES] >> simp[]);
+
 val _ = export_theory();
