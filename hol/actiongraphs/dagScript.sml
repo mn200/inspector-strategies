@@ -1,6 +1,6 @@
 open HolKernel Parse boolLib bossLib;
 
-open actionGraphTheory
+open actionTheory
 open lcsymtacs boolSimps
 open pairTheory pred_setTheory listTheory
 open bagTheory

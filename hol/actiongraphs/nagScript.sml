@@ -6,7 +6,7 @@ open boolSimps
 open pred_setTheory
 open listTheory
 open pairTheory
-open actionGraphTheory
+open actionTheory actionGraphTheory
 open cardinalTheory
 
 (* nag = "Nested Action Graph" *)

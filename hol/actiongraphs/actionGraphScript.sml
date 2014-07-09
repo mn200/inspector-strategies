@@ -4,47 +4,9 @@ open pred_setTheory listRangeTheory listTheory
 open finite_mapTheory
 open lcsymtacs
 open indexedListsTheory
+open actionTheory
 
 val _ = new_theory "actionGraph";
-
-val _ = Hol_datatype`
-  action = <|
-    writes : 'rw list;
-    reads : 'rw list ;
-    data : 'data;
-    ident : 's_ident
-     (* bogus ty variable name chosen to preserve order of
-        type arguments *)
-  |>
-`;
-
-val action_component_equality = theorem "action_component_equality"
-
-val touches_def = Define`
-  touches a1 a2 ⇔
-     (∃w. MEM w a1.writes ∧ MEM w a2.writes) ∨
-     (∃w. MEM w a1.writes ∧ MEM w a2.reads) ∨
-     (∃w. MEM w a2.writes ∧ MEM w a1.reads)
-`;
-
-val _ = set_mapped_fixity {term_name = "touches", fixity = Infix(NONASSOC, 450),
-                           tok = "∼ₜ"}
-val _ = set_mapped_fixity {term_name = "not_touches",
-                           fixity = Infix(NONASSOC, 450),
-                           tok = "≁ₜ"}
-val _ = overload_on("not_touches", ``λa1 a2. ¬(touches a1 a2)``)
-
-val touches_ignores_ident = store_thm(
-  "touches_ignores_ident",
-  ``(touches a1 (a2 with ident updated_by f) ⇔ touches a1 a2) ∧
-    (touches (a1 with ident updated_by f) a2 ⇔ touches a1 a2)``,
-  simp[touches_def]);
-val _ = export_rewrites ["touches_ignores_ident"]
-
-val touches_SYM = store_thm(
-  "touches_SYM",
-  ``touches a1 a2 ⇒ touches a2 a1``,
-  simp[touches_def] >> rpt strip_tac >> simp[] >> metis_tac[]);
 
 val _ = Hol_datatype`
   action_graph0 = <|
@@ -488,25 +450,6 @@ val fmap0_inverts_ident = prove(
        wfEQ_def, RES_FORALL_THM, quotientTheory.IN_RESPECTS] >>
   rpt strip_tac >> SELECT_ELIM_TAC >> conj_tac >- metis_tac[] >>
   fs[wfG_def, INJ_THM] >> metis_tac[]);
-
-(* redundant if HOL's github issue #173 is fixed *)
-val polydata_upd_def = Define`
-  polydata_upd f a = <|
-    reads := a.reads ;
-    writes := a.writes ;
-    data := f a.data;
-    ident := a.ident
-  |>`
-
-val polydata_upd_ident = store_thm(
-  "polydata_upd_ident[simp]",
-  ``(polydata_upd f a).ident = a.ident``,
-  simp[polydata_upd_def]);
-
-val polydata_upd_reads_writes = store_thm(
-  "polydata_upd_reads_writes[simp]",
-  ``(polydata_upd f a).reads = a.reads ∧ (polydata_upd f a).writes = a.writes``,
-  simp[polydata_upd_def]);
 
 val dgmap0_def = Define`
   dgmap0 f g  =
@@ -977,7 +920,7 @@ val dgmap_I = store_thm(
   "dgmap_I[simp]",
   ``∀g. dgmap (λx. x) g = g ∧ dgmap I g = g``,
   ho_match_mp_tac graph_ind >> simp[polydata_upd_def] >>
-  simp[theorem "FORALL_action"]);
+  simp[FORALL_action]);
 
 val dgmap_CONG = store_thm(
   "dgmap_CONG",

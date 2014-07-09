@@ -4,7 +4,7 @@ open lcsymtacs
 
 open bagTheory
 open PseudoCTheory
-open actionGraphTheory
+open actionTheory actionGraphTheory
 open pred_setTheory finite_mapTheory
 open intLib
 open pairTheory listTheory rich_listTheory
