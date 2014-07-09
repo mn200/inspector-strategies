@@ -1,6 +1,6 @@
 open HolKernel Parse boolLib bossLib;
 
-open primitivesTheory pred_setTheory listRangeTheory listTheory
+open pred_setTheory listRangeTheory listTheory
 open finite_mapTheory
 open lcsymtacs
 open indexedListsTheory
