@@ -6,8 +6,6 @@ open indexedListsTheory
 
 open lcsymtacs
 
-fun dsimp thl = ASM_SIMP_TAC (srw_ss() ++ boolSimps.DNF_ss) thl
-
 val _ = new_theory "wavefronts";
 
 val total_LE = store_thm(
