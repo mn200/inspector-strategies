@@ -6,6 +6,7 @@ open realTheory
 open finite_mapTheory
 open lcsymtacs
 open listRangeTheory
+open intrealTheory transcTheory
 
 val _ = new_theory "PseudoC";
 
@@ -403,8 +404,8 @@ val multval_def = Define`
 (* FIXME: don't know how to define exponent function. *)
 (* also how do we convert to Real? *)
 val expval_def = Define`
-  expval [Real s] = Real(s) ∧
-  expval [Int j] = Int(j) ∧
+  expval [Real s] = Real(exp(s)) ∧
+  expval [Int j] = Real(exp(real_of_int j)) ∧
   expval _ = Error
 `
 
