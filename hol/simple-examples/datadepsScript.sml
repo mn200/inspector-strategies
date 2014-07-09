@@ -4,7 +4,7 @@ open listRangeTheory
 open listTheory
 open lcsymtacs
 
-open actionGraphTheory
+open actionTheory actionGraphTheory
 
 fun fds thl = full_simp_tac (srw_ss() ++ boolSimps.DNF_ss) thl
 
@@ -167,7 +167,7 @@ val imap_irrelevance = save_thm(
 
 val INJ_COMPOSE' = prove(
   ``¬INJ f s UNIV ⇒ ¬INJ (g o f) s UNIV``,
-  simp[INJ_THM] >> metis_tac[]);
+  simp[INJ_IFF] >> metis_tac[]);
 
 val ddepR_def = Define`
   ddepR wf rfs i0 i ⇔
@@ -251,7 +251,7 @@ val same_graphs = store_thm(
   `∀n. n < N ⇒ γ (δ n) = n ∧ δ (γ n) = n`
      by metis_tac[IN_COUNT, BIJ_DEF, LINV_DEF, BIJ_LINV_INV] >>
   `∀n. n < N ⇒ γ n < N ∧ δ n < N`
-     by metis_tac[BIJ_DEF, INJ_THM, BIJ_LINV_BIJ, IN_COUNT] >>
+     by metis_tac[BIJ_DEF, INJ_IFF, BIJ_LINV_BIJ, IN_COUNT] >>
   `(∀m n. m < N ∧ n < N ⇒ (δ m = δ n ⇔ m = n)) ∧
    (∀m n. m < N ∧ n < N ⇒ (γ m = γ n ⇔ m = n))` by metis_tac[] >>
   simp[loop_to_graph_FOLDR] >>
@@ -275,7 +275,7 @@ val same_graphs = store_thm(
     by dsimp[INJ_DEF, idents_thm, IN_imap, imap_edges, MEM_MAP,
              Abbr`add`, IN_FOLD_add_action, Abbr`mk'`] >>
   `INJ γ (idents (FOLDR (add_action o mk') emptyG (MAP δ [0 ..< N]))) UNIV`
-    by (dsimp[INJ_THM, IN_FOLD_add_action, MEM_MAP, idents_thm] >>
+    by (dsimp[INJ_IFF, IN_FOLD_add_action, MEM_MAP, idents_thm] >>
         simp[Abbr`mk'`, mkEAction_def]) >>
   pop_assum (assume_tac o MATCH_MP FOLDR_add_iterupd) >>
   pop_assum SUBST_ALL_TAC >> simp[imap_imap_o] >>
@@ -331,7 +331,7 @@ val correctness = store_thm(
   `∀n. n < N ⇒ γ (δ n) = n ∧ δ (γ n) = n`
      by metis_tac[IN_COUNT, BIJ_DEF, LINV_DEF, BIJ_LINV_INV] >>
   `∀n. n < N ⇒ γ n < N ∧ δ n < N`
-     by metis_tac[BIJ_DEF, INJ_THM, BIJ_LINV_BIJ, IN_COUNT] >>
+     by metis_tac[BIJ_DEF, INJ_IFF, BIJ_LINV_BIJ, IN_COUNT] >>
   `(∀m n. m < N ∧ n < N ⇒ (δ m = δ n ⇔ m = n)) ∧
    (∀m n. m < N ∧ n < N ⇒ (γ m = γ n ⇔ m = n))` by metis_tac[] >>
   ONCE_REWRITE_TAC [FUN_EQ_THM] >>

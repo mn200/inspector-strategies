@@ -125,7 +125,7 @@ val aglt = MATCH_MP cardeqLleq (CONJ (ONCE_REWRITE_RULE [cardeq_SYM] eqn1) c123)
 val sumlt1 = prove(
   ``UNIV : (^aqtau_ag + δ) set <<= {T;F} CROSS UNIV : ^aqtau set``,
   simp[cardleq_def, INJ_DEF] >>
-  strip_assume_tac (SIMP_RULE (srw_ss()) [INJ_THM, cardleq_def] aglt) >>
+  strip_assume_tac (SIMP_RULE (srw_ss()) [INJ_IFF, cardleq_def] aglt) >>
   qexists_tac `λs. case s of INL t => (T,f t) | INR d => (F, INR(ARB,ARB,d))` >>
   simp[] >> map_every qx_gen_tac [`x`, `y`] >>
   Cases_on `x` >> Cases_on `y` >> simp[]);

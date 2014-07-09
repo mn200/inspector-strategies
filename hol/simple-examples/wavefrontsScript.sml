@@ -1,6 +1,6 @@
 open HolKernel Parse boolLib bossLib;
 
-open actionGraphTheory datadepsTheory
+open actionTheory actionGraphTheory datadepsTheory
 open pred_setTheory listTheory sortingTheory relationTheory
 open indexedListsTheory
 

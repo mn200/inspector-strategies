@@ -4,7 +4,7 @@ open listRangeTheory
 open listTheory
 open lcsymtacs
 
-open actionGraphTheory
+open actionTheory
 open dagTheory
 
 fun fds thl = full_simp_tac (srw_ss() ++ boolSimps.DNF_ss) thl
@@ -229,7 +229,7 @@ val same_graphs = store_thm(
   `∀n. n < N ⇒ γ (δ n) = n ∧ δ (γ n) = n`
      by metis_tac[IN_COUNT, BIJ_DEF, LINV_DEF, BIJ_LINV_INV] >>
   `∀n. n < N ⇒ γ n < N ∧ δ n < N`
-     by metis_tac[BIJ_DEF, INJ_THM, BIJ_LINV_BIJ, IN_COUNT] >>
+     by metis_tac[BIJ_DEF, INJ_IFF, BIJ_LINV_BIJ, IN_COUNT] >>
   `(∀m n. m < N ∧ n < N ⇒ (δ m = δ n ⇔ m = n)) ∧
    (∀m n. m < N ∧ n < N ⇒ (γ m = γ n ⇔ m = n))` by metis_tac[] >>
   simp[loop_to_graph_FOLDR] >>
@@ -290,7 +290,7 @@ val correctness = store_thm(
   `∀n. n < N ⇒ γ (δ n) = n ∧ δ (γ n) = n`
      by metis_tac[IN_COUNT, BIJ_DEF, LINV_DEF, BIJ_LINV_INV] >>
   `∀n. n < N ⇒ γ n < N ∧ δ n < N`
-     by metis_tac[BIJ_DEF, INJ_THM, BIJ_LINV_BIJ, IN_COUNT] >>
+     by metis_tac[BIJ_DEF, INJ_IFF, BIJ_LINV_BIJ, IN_COUNT] >>
   `(∀m n. m < N ∧ n < N ⇒ (δ m = δ n ⇔ m = n)) ∧
    (∀m n. m < N ∧ n < N ⇒ (γ m = γ n ⇔ m = n))` by metis_tac[] >>
   ONCE_REWRITE_TAC [FUN_EQ_THM] >>
