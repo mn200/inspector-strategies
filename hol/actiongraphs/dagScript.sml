@@ -302,6 +302,39 @@ val wave0_def = new_specification("wave0_def",
                 |> SIMP_RULE (srw_ss()) [BAG_INSERT_commutes]
                 |> SIMP_RULE (srw_ss()) [Once CONJ_COMM]);
 
+val wave0_empty = store_thm(
+  "wave0_empty[simp]",
+  ``wave0 ε = {||}``,
+  simp[wave0_def]);
+
+val BAG_FILTER_SUB_BAG = store_thm(
+  "BAG_FILTER_SUB_BAG[simp]",
+  ``∀P b. BAG_FILTER P b ≤ b``,
+  dsimp[BAG_FILTER_DEF, SUB_BAG]);
+
+val wave0_SUBBAG = store_thm(
+  "wave0_SUBBAG[simp]",
+  ``∀d. wave0 d ≤ nodebag d``,
+  ho_match_mp_tac dag_ind >> simp[wave0_def, SUB_BAG_INSERT] >>
+  qx_gen_tac `d` >> strip_tac >> gen_tac >>
+  match_mp_tac SUB_BAG_TRANS >> qexists_tac `wave0 d` >> simp[]);
+
+val wave0_FINITE = store_thm(
+  "wave0_FINITE[simp]",
+  ``FINITE_BAG (wave0 d)``,
+  metis_tac[FINITE_SUB_BAG, FINITE_nodebag, wave0_SUBBAG]);
+
+val wave0_ddel = store_thm(
+  "wave0_ddel[simp]",
+  ``∀d a. BAG_IN a (wave0 d) ⇒ a <+ (ddel a d) = d``,
+  ho_match_mp_tac dag_ind >> simp[wave0_def] >> dsimp[] >>
+  simp[ddel_def] >> rw[] >> metis_tac[dagAdd_commutes]);
+
+val wave0_EQ_EMPTY = store_thm(
+  "wave0_EQ_EMPTY[simp]",
+  ``(wave0 g = {||} ⇔ g = ε) ∧ ({||} = wave0 g ⇔ g = ε)``,
+  qspec_then `g` strip_assume_tac dag_CASES >> simp[wave0_def]);
+
 val FOLDR_dagAdd_dataupd = store_thm(
   "FOLDR_dagAdd_dataupd",
   ``(∀l. FOLDR (dagAdd o polydata_upd f o g) ε l =
@@ -339,12 +372,6 @@ val dagAdd_commute_simp = store_thm(
     suffices_by (rpt strip_tac >> res_tac >> fs[] >>
                  metis_tac[dagAdd_11, dagAdd_commutes]) >>
   rpt gen_tac >> MATCH_ACCEPT_TAC dagAdd_commuteEQ_E);
-
-val wave0_ddel = store_thm(
-  "wave0_ddel[simp]",
-  ``∀d a. BAG_IN a (wave0 d) ⇒ a <+ (ddel a d) = d``,
-  ho_match_mp_tac dag_ind >> simp[wave0_def] >> dsimp[] >>
-  simp[ddel_def] >> rw[] >> metis_tac[dagAdd_commutes]);
 
 val dagAdd_11_thm = store_thm(
   "dagAdd_11_thm",
@@ -511,5 +538,102 @@ val dagmerge_EQ_sing = store_thm(
   ``dagmerge g1 g2 = a <+ ε ⇔ g1 = a <+ ε ∧ g2 = ε ∨ g1 = ε ∧ g2 = a <+ ε``,
   map_every qid_spec_tac [`a`, `g2`, `g1`] >> ho_match_mp_tac dag_ind >>
   simp[] >> metis_tac[]);
+
+val ddel_commutes = store_thm(
+  "ddel_commutes",
+  ``∀g a b. (* a ≁ₜ b ⇒ *) ddel a (ddel b g) = ddel b (ddel a g)``,
+  ho_match_mp_tac dag_ind >> simp[ddel_def] >> rw[] >> rw[] >>
+  simp[ddel_def] >> first_x_assum match_mp_tac >> simp[]);
+
+val wave_def = Define`
+  wave 0 g = wave0 g ∧
+  wave (SUC n) g = wave n (ITBAG ddel (wave0 g) g)
+`;
+
+val wave_empty = store_thm(
+  "wave_empty[simp]",
+  ``wave n ε = {||}``,
+  Induct_on `n` >> simp[wave_def]);
+
+val nodebag_ddel = store_thm(
+  "nodebag_ddel[simp]",
+  ``∀d a. nodebag (ddel a d) = nodebag d - {|a|}``,
+  ho_match_mp_tac dag_ind >> simp[ddel_def] >> qx_gen_tac `d` >> strip_tac >>
+  map_every qx_gen_tac [`h`, `a`] >> COND_CASES_TAC >> simp[BAG_DIFF_INSERT]);
+
+val nodebag_ITBAG_ddel = store_thm(
+  "nodebag_ITBAG_ddel",
+  ``∀b. FINITE_BAG b ⇒ nodebag (ITBAG ddel b d) = nodebag d - b``,
+  Induct_on `FINITE_BAG` >>
+  simp[COMMUTING_ITBAG_RECURSES, ddel_commutes, BAG_DIFF_2L, BAG_UNION_INSERT]);
+
+val wave_SUBBAG = store_thm(
+  "wave_SUBBAG",
+  ``∀n d. wave n d ≤ nodebag d``,
+  Induct >> simp[wave_def] >> qx_gen_tac `d` >>
+  first_x_assum (qspec_then `ITBAG ddel (wave0 d) d` mp_tac) >>
+  `nodebag (ITBAG ddel (wave0 d) d) ≤ nodebag d` suffices_by
+    metis_tac[SUB_BAG_TRANS] >>
+  simp[nodebag_ITBAG_ddel]);
+
+val dagsize_CARD_nodebag = store_thm(
+  "dagsize_CARD_nodebag",
+  ``∀d. dagsize d = BAG_CARD (nodebag d)``,
+  ho_match_mp_tac dag_ind >> simp[BAG_CARD_THM]);
+
+val BAG_CARD_DIFF = store_thm(
+  "BAG_CARD_DIFF",
+  ``∀b. FINITE_BAG b ⇒
+        ∀c. c ≤ b ⇒ BAG_CARD (b - c) = BAG_CARD b - BAG_CARD c``,
+  Induct_on `FINITE_BAG` >> simp[BAG_CARD_THM] >> qx_gen_tac `b` >> strip_tac >>
+  map_every qx_gen_tac [`e`, `c`] >> strip_tac >>
+  `FINITE_BAG c` by metis_tac[FINITE_BAG_THM, FINITE_SUB_BAG] >>
+  Cases_on `BAG_IN e c`
+  >- (`∃c0. c = BAG_INSERT e c0` by metis_tac[BAG_DECOMPOSE] >>
+      lfs[BAG_CARD_THM, SUB_BAG_INSERT]) >>
+  simp[BAG_DIFF_INSERT, BAG_CARD_THM, FINITE_BAG_DIFF] >>
+  lfs[NOT_IN_SUB_BAG_INSERT] >>
+  `BAG_CARD c ≤ BAG_CARD b` by simp[SUB_BAG_CARD] >> simp[]);
+
+val empty_wave_exists = store_thm(
+  "empty_wave_exists",
+  ``∀d. ∃n. wave n d = {||}``,
+  gen_tac >> completeInduct_on `dagsize d` >>
+  qx_gen_tac `d` >> strip_tac >>
+  Cases_on `wave0 d = {||}` >> fs[] >>
+  Q.REFINE_EXISTS_TAC `SUC m` >> simp[wave_def] >>
+  fs[PULL_FORALL] >> first_x_assum match_mp_tac >>
+  `∀b. FINITE_BAG b ⇒
+       ∀d. b ≤ nodebag d ⇒ dagsize (ITBAG ddel b d) = dagsize d - BAG_CARD b`
+    suffices_by
+      (disch_then (qspec_then `wave0 d` mp_tac) >> simp[] >>
+       disch_then (qspec_then `d` mp_tac) >> simp[] >> strip_tac >>
+       qspec_then `d` strip_assume_tac dag_CASES >>
+       simp[wave0_def, FINITE_BAG_FILTER, BAG_CARD_THM]) >>
+  rpt (pop_assum kall_tac) >> Induct_on `FINITE_BAG` >>
+  simp[COMMUTING_ITBAG_RECURSES, ddel_commutes] >>
+  simp[dagsize_CARD_nodebag, nodebag_ITBAG_ddel,
+       GSYM BAG_CARD_DIFF, BAG_DIFF_2L, BAG_UNION_INSERT]);
+
+val wavedepth_def = Define`
+  wavedepth g = LEAST n. wave n g = {||}
+`;
+
+val LEAST_T = store_thm(
+  "LEAST_T[simp]",
+  ``(LEAST n. T) = 0``,
+  numLib.LEAST_ELIM_TAC >> simp[] >>
+  spose_not_then strip_assume_tac >> first_x_assum (qspec_then `0` mp_tac) >>
+  simp[]);
+
+val wavedepth_empty = store_thm(
+  "wavedepth_empty[simp]",
+  ``wavedepth ε = 0 ∧ (wavedepth d = 0 ⇔ d = ε) ∧
+    (0 = wavedepth d ⇔ d = ε)``,
+  conj_tac >- simp[wavedepth_def] >>
+  ONCE_REWRITE_TAC [EQ_SYM_EQ] >> csimp[] >>
+  simp[wavedepth_def, EQ_IMP_THM] >>
+  numLib.LEAST_ELIM_TAC >> conj_tac >- metis_tac[empty_wave_exists] >>
+  simp[] >> simp[wave_def]);
 
 val _ = export_theory();
