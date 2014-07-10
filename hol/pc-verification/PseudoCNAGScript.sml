@@ -7,7 +7,7 @@ open monadsyntax
 open nagTheory
 open PseudoCTheory
 open PseudoCPropsTheory
-open actionGraphTheory
+open actionTheory actionGraphTheory
 open indexedListsTheory
 
 val _ = new_theory "PseudoCNAG";

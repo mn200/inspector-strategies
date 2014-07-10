@@ -1,0 +1,5 @@
+INCLUDES = ../pseudoc ../actiongraphs
+
+ifdef POLY
+HOLHEAP = ../pseudoc/ie0-heap
+endif

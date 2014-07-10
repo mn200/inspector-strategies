@@ -1,4 +1,4 @@
-INCLUDES = ../hol
+INCLUDES = ../hol/pseudoc
 
 
 all: fastwaveTheory.uo

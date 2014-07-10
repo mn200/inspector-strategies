@@ -3,7 +3,7 @@
 
 open HolKernel Parse boolLib bossLib;
 
-open PseudoCTheory
+open PseudoCTheory PseudoCOpsTheory
 
 val _ = new_theory "fastwave";
 

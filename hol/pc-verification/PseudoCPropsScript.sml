@@ -4,7 +4,7 @@ open lcsymtacs
 
 open bagTheory
 open PseudoCTheory
-open actionGraphTheory
+open actionTheory actionGraphTheory
 open pred_setTheory finite_mapTheory
 open intLib
 open pairTheory listTheory rich_listTheory
@@ -963,7 +963,7 @@ val idents_FOLDR_merge_graph = store_thm(
 
 val SNOC_11 = prove(
   ``INJ (λi. i ++ [x]) s UNIV``,
-  simp[INJ_THM]);
+  simp[INJ_IFF]);
 
 val ilistLE_NIL = store_thm(
   "ilistLE_NIL[simp]",
@@ -1266,7 +1266,7 @@ val INJ_UNION_DOMAIN = store_thm(
   ``INJ f (p ∪ q) r ⇔
       INJ f p r ∧ INJ f q r ∧
       DISJOINT (IMAGE f (p DIFF q)) (IMAGE f (q DIFF p))``,
-  dsimp[INJ_THM, EQ_IMP_THM] >> rw[]
+  dsimp[INJ_IFF, EQ_IMP_THM] >> rw[]
   >- (simp[DISJOINT_DEF, EXTENSION] >> metis_tac[])
   >- (fs[DISJOINT_DEF, EXTENSION] >> metis_tac[])
   >- (fs[DISJOINT_DEF, EXTENSION] >> metis_tac[]));
@@ -1285,7 +1285,7 @@ val imap_merge_graph = store_thm(
   `INJ f (a.ident INSERT idents g1) UNIV ∧
    INJ f (a.ident INSERT idents g2) UNIV ∧
    INJ f (idents g1) UNIV ∧ INJ f (idents g2) UNIV`
-    by (fs[INJ_UNION_DOMAIN, INJ_INSERT] >> fs[INJ_THM] >>
+    by (fs[INJ_UNION_DOMAIN, INJ_INSERT] >> fs[INJ_IFF] >>
         metis_tac[]) >>
   `∀j. j ∈ idents g1 ∨ j ∈ idents g2 ⇒ (f a.ident ≠ f j)`
     by (rpt strip_tac >> fs[INJ_INSERT, DISJOINT_DEF, EXTENSION] >>
@@ -1297,7 +1297,7 @@ val imap_merge_graph = store_thm(
 val INJ_CONG = store_thm(
   "INJ_CONG",
   ``(∀x. x ∈ s ⇒ f x = g x) ⇒ (INJ f s t ⇔ INJ g s t)``,
-  simp[INJ_THM]);
+  simp[INJ_IFF]);
 
 val match_imp = let
   fun f th = SUBGOAL_THEN (lhand (concl th)) (mp_tac o MATCH_MP th)
@@ -1583,7 +1583,7 @@ val graphOf_starting_id_irrelevant = store_thm(
                  TAKE (LENGTH (i0 ++ [j;0]) - 1) it = i0 ++ [j]`
                   by metis_tac[graphOf_idents_apart] >>
                 fs[]) >>
-            dsimp[idents_FOLDRi_merge, INJ_THM] >>
+            dsimp[idents_FOLDRi_merge, INJ_IFF] >>
             map_every qx_gen_tac [`it1`, `it2`, `i`, `j`] >> strip_tac >>
             `TAKE (LENGTH (i0 ++ [i;0]) - 1) it1 = i0 ++ [i] ∧
              TAKE (LENGTH (i0 ++ [j;0]) - 1) it2 = i0 ++ [j] ∧
@@ -1614,7 +1614,7 @@ val graphOf_starting_id_irrelevant = store_thm(
                   by metis_tac[graphOf_idents_apart] >>
                 fs[FRONT_APPEND] >>
                 strip_tac >> fs[]) >>
-            pop_assum SUBST_ALL_TAC >> fs[INJ_THM]) >>
+            pop_assum SUBST_ALL_TAC >> fs[INJ_IFF]) >>
         `∀i. i < LENGTH cs ⇒ imap fff (gfg i) = imap (ff i) (gfg i)`
           by (pop_assum kall_tac >> simp[Abbr`fff`] >> qx_gen_tac `i` >>
               strip_tac >>
