@@ -41,7 +41,7 @@ val orgbody_def = Define`
             [ DARead "data_org" (ARead "row" (VRead "p"));
               DVRead "sum"
             ]
-            (\xs . plusval [HD xs; plusval [Real 1.0; HD (TL xs)]])
+            (\xs . plusval [HD xs; plusval [Real 1.0; HD (TL xs)]]);
 
         (* data_org[ col[p] ] += 1.0 + sum; *)
         Assign ("data_org", (ARead "col" (VRead "p")))
@@ -52,7 +52,7 @@ val orgbody_def = Define`
     ]`
 
 val original_def = Define`
-  original = ForLoop "p" (D (Value(Int 0)) (VRead "nnz")) (Seq orgbody))
+  original = ForLoop "p" (D (Value(Int 0)) (VRead "nnz")) (Seq orgbody)
 `;
 
 val _ = export_theory();
