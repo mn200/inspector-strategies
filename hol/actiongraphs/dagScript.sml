@@ -364,6 +364,13 @@ val EL_BAG_BAG_INSERT = store_thm(
       simp[]) >>
   first_x_assum (qspecl_then [`n`, `e`] mp_tac) >> simp[]);
 
+val EL_BAG_SUB_BAG = store_thm(
+  "EL_BAG_SUB_BAG[simp]",
+  ``{| x |} ≤ b ⇔ BAG_IN x b``,
+  simp_tac (srw_ss() ++ COND_elim_ss ++ DNF_ss)
+           [SUB_BAG, BAG_INN, BAG_IN, BAG_INSERT, EMPTY_BAG, EQ_IMP_THM,
+            arithmeticTheory.GREATER_EQ] >> simp[]);
+
 val dagAdd_commute_simp = store_thm(
   "dagAdd_commute_simp[simp]",
   ``∀g1 g2 a b. a <+ b <+ g1 = b <+ a <+ g2 ⇔ g1 = g2 ∧ (a = b ∨ a ≁ₜ b)``,
@@ -635,5 +642,75 @@ val wavedepth_empty = store_thm(
   simp[wavedepth_def, EQ_IMP_THM] >>
   numLib.LEAST_ELIM_TAC >> conj_tac >- metis_tac[empty_wave_exists] >>
   simp[] >> simp[wave_def]);
+
+val wavedepth_add = store_thm(
+  "wavedepth_add",
+  ``∀d. d ≠ ε ⇒ wavedepth d = 1 + wavedepth (ITBAG ddel (wave0 d) d)``,
+  simp[wavedepth_def] >> qx_gen_tac `d` >> strip_tac >>
+  numLib.LEAST_ELIM_TAC >> conj_tac >- metis_tac[empty_wave_exists] >>
+  qx_gen_tac `n` >> Cases_on `n = 0` >> simp[] >- simp[wave_def] >>
+  `∃n0. n = SUC n0` by (Cases_on `n` >> fs[]) >> pop_assum SUBST_ALL_TAC >>
+  simp[wave_def] >> strip_tac >>
+  `(LEAST n. wave n (ITBAG ddel (wave0 d) d) = {||}) = n0` suffices_by simp[] >>
+  numLib.LEAST_ELIM_TAC >> conj_tac >- metis_tac[empty_wave_exists] >>
+  qx_gen_tac `m` >> strip_tac >>
+  `¬(m < n0) ∧ ¬(n0 < m)` suffices_by simp[] >> rpt strip_tac
+  >- (`wave (SUC m) d ≠ {||}` by simp[] >> fs[wave_def]) >>
+  metis_tac[]);
+
+val wave0_elements_dont_touch = store_thm(
+  "wave0_elements_dont_touch",
+  ``∀d a b w0. wave0 d = BAG_INSERT a (BAG_INSERT b w0) ⇒ a ≁ₜ b``,
+  ho_match_mp_tac dag_ind >> simp[wave0_def] >> qx_gen_tac `d` >> strip_tac >>
+  map_every qx_gen_tac [`c`, `a`, `b`, `w0`] >>
+  Cases_on `c = a` >> simp[]
+  >- (disch_then (mp_tac o Q.AP_TERM `BAG_IN b`) >> simp[]) >>
+  ONCE_REWRITE_TAC [BAG_INSERT_commutes] >>
+  Cases_on `c = b` >> simp[]
+  >- (disch_then (mp_tac o Q.AP_TERM `BAG_IN a`) >> simp[] >>
+      metis_tac[touches_SYM]) >> strip_tac >>
+  `a ≁ₜ c`
+    by (pop_assum (mp_tac o Q.AP_TERM `BAG_IN a`) >> simp[] >>
+        metis_tac[touches_SYM]) >>
+  `b ≁ₜ c`
+    by (first_x_assum (mp_tac o Q.AP_TERM `BAG_IN b`) >> simp[] >>
+        metis_tac[touches_SYM]) >>
+  fs[BAG_INSERT_EQUAL] >> fs[] >> rw[] >>
+  first_x_assum match_mp_tac >>
+  qexists_tac `wave0 d - {| a; b |}` >>
+  `{| a; b |} ≤ wave0 d`
+    by (`BAG_IN a (wave0 d)`
+          by (first_x_assum (mp_tac o Q.AP_TERM `BAG_IN a`) >> simp[]) >>
+        `∃w1. wave0 d = BAG_INSERT a w1` by metis_tac[BAG_DECOMPOSE] >>
+        simp[SUB_BAG_INSERT] >>
+        `c ≁ₜ b ∧ c ≁ₜ a` by metis_tac[touches_SYM] >> fs[] >>
+        RULE_ASSUM_TAC (ONCE_REWRITE_RULE [BAG_INSERT_commutes]) >> fs[] >>
+        first_x_assum (mp_tac o Q.AP_TERM `BAG_IN b` o
+                       assert (can (find_term (same_const ``BAG_FILTER``)) o
+                               concl)) >> simp[]) >>
+  simp[GSYM BAG_DIFF_INSERT_SUB_BAG] >>
+  simp[Once BAG_INSERT_commutes] >>
+  `BAG_IN a (wave0 d)`
+    by (first_x_assum (mp_tac o Q.AP_TERM `BAG_IN a`) >> simp[]) >>
+  `{|a|} ≤ wave0 d` by simp[] >>
+  simp[GSYM BAG_DIFF_INSERT_SUB_BAG])
+
+val wave_elements_dont_touch = store_thm(
+  "wave_elements_dont_touch",
+  ``∀n d a b w0.
+      wave n d = BAG_INSERT a (BAG_INSERT b w0) ⇒ a ≁ₜ b``,
+  Induct >> simp[wave_def] >> metis_tac[wave0_elements_dont_touch]);
+
+val waveset_elements_dont_touch = store_thm(
+  "waveset_elements_dont_touch",
+  ``∀n a b d.
+       a ∈ SET_OF_BAG (wave n d) ∧ b ∈ SET_OF_BAG (wave n d) ∧ a ≠ b ⇒
+       a ≁ₜ b``,
+  simp[] >> rpt strip_tac >>
+  `∃w1. wave n d = BAG_INSERT a w1` by metis_tac[BAG_DECOMPOSE] >>
+  `BAG_IN b w1`
+    by (pop_assum (mp_tac o Q.AP_TERM `BAG_IN b`) >> simp[]) >>
+  `∃w2. w1 = BAG_INSERT b w2` by metis_tac [BAG_DECOMPOSE] >> rw[] >>
+  metis_tac[wave_elements_dont_touch]);
 
 val _ = export_theory();
