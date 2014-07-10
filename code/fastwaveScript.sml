@@ -42,7 +42,8 @@ val orgbody_def = Define`
             [ DARead "data_org" (ARead "row" (VRead "p"));
               DVRead "sum"
             ]
-            (\xs . plusval [HD xs; plusval [Real 1.0; HD (TL xs)]]);
+(*            (\xs . plusval [HD xs; plusval [Real 1.0; HD (TL xs)]]); *)
+            (\ xs . case xs of [d;s] => (Real 1.0) + d + s);
 
         (* data_org[ col[p] ] += 1.0 + sum; *)
         Assign ("data_org", (ARead "col" (VRead "p")))
