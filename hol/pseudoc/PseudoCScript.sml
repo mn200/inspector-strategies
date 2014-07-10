@@ -64,7 +64,7 @@ val _ = Datatype`
   stmt = Assign write (dexpr list) (value list -> value)
        | AssignVar vname (dexpr list) (value list -> value)
        | IfStmt expr stmt stmt
-       | Malloc aname num value
+       | Malloc aname expr value
        | ForLoop vname domain stmt
        | ParLoop vname domain stmt
        | Seq (stmt list)
@@ -79,7 +79,7 @@ val stmt_induction = store_thm(
      (∀w ds vf. P (Assign w ds vf)) ∧
      (∀v ds vf. P (AssignVar v ds vf)) ∧
      (∀g t e. P t ∧ P e ⇒ P (IfStmt g t e)) ∧
-     (∀nm n value. P (Malloc nm n value)) ∧
+     (∀nm e value. P (Malloc nm e value)) ∧
      (∀s d stmt. P stmt ⇒ P (ForLoop s d stmt)) ∧
      (∀s d stmt. P stmt ⇒ P (ParLoop s d stmt)) ∧
      (∀stmts. (∀m s. MEM s stmts ⇒ P s) ⇒ P (Seq stmts)) ∧
@@ -184,7 +184,8 @@ val ssubst_def = tDefine "ssubst" `
      AssignVar vnm' (MAP (dsubst vnm value) ds) opf) ∧ (* maybe abort if vnm = vnm' ? *)
   (ssubst vnm value (IfStmt g t e) =
      IfStmt (esubst vnm value g) (ssubst vnm value t) (ssubst vnm value e)) ∧
-  (ssubst vnm value (Malloc vnm' n value') = Malloc vnm' n value') ∧
+  (ssubst vnm value (Malloc vnm' e value') =
+     Malloc vnm' (esubst vnm value e) value') ∧
   (ssubst vnm value (ForLoop vnm' (D lo hi) s) =
      ForLoop vnm' (D (esubst vnm value lo) (esubst vnm value hi))
              (if vnm = vnm' then s else ssubst vnm value s)) ∧
@@ -372,6 +373,17 @@ val (eval_rules, eval_ind, eval_cases) = Hol_reln`
       MEM Abort cs
      ⇒
       eval (m, Par cs) (m, Abort))
+
+     ∧
+
+  (∀anm sz_e sz_i iv m0.
+      evalexpr m0 sz_e = Int sz_i ∧
+      0 ≤ sz_i ∧
+      anm ∉ FDOM m0
+     ⇒
+      eval (m0, Malloc anm sz_e iv)
+           (m0 |+ (anm, Array (GENLIST (K iv) (Num sz_i))),
+            Done))
 `
 
 val _ = set_fixity "--->" (Infix(NONASSOC, 450))

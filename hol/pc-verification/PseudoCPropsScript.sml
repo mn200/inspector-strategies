@@ -2244,7 +2244,8 @@ val eval_graphOf_action = store_thm(
       Q.ISPEC_THEN `pfx ++ [c0] ++ sfx`
         (Q.ISPEC_THEN `LENGTH pfx`
            (Q.ISPEC_THEN `λn c. TOS (GG n m0 c)` mp_tac))
-        pregraph_FOLDRi_merge_graph >> simp[]))
+        pregraph_FOLDRi_merge_graph >> simp[])
+  >- ((* malloc *) simp[graphOf_def]));
 
 val _ = temp_overload_on ("MergeL", ``FOLDR merge_graph emptyG``)
 
@@ -2653,7 +2654,8 @@ val graphOf_correct_lemma = store_thm(
       map_every qx_gen_tac [`m0`, `cs`] >> simp[MEM_EL] >>
       disch_then (qx_choose_then `n` strip_assume_tac) >>
       `∀i m. graphOf i m Abort = NONE` by simp[] >>
-      metis_tac[optionTheory.NOT_NONE_SOME]));
+      metis_tac[optionTheory.NOT_NONE_SOME])
+  >- ((* Malloc *) simp[graphOf_def]));
 
 val _ = overload_on("--->*", ``RTC eval``)
 val _ = overload_on("--->⁺", ``TC eval``)
