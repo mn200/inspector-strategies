@@ -46,12 +46,9 @@ val original_def = Define`
 val findWavesFast_def = Define`
   findWavesFast = 
     Seq [
-        (*Malloc "lw_iter" (VRead "N") (Int (-1));
+        Malloc "lw_iter" (VRead "N") (Int (-1));
         Malloc "lr_iter" (VRead "N") (Int (-1));
-        Malloc "wave" (VRead "nnz") (Int 0);*)
-        Malloc "lw_iter" 99 (Int (-1));
-        Malloc "lr_iter" 99 (Int (-1));
-        Malloc "wave" 99 (Int 0);
+        Malloc "wave" (VRead "nnz") (Int 0);
         AssignVar "max_wave" [] (\xs . Int 0);
 
         ForLoop "p" (D (Value(Int 1)) (VRead "nnz") )
@@ -127,9 +124,8 @@ val findWavesFast_def = Define`
 
             ]);
             
-            (*Malloc "wavestart" (Opn plusval [VRead "max_wave"; Value (Int 2)] )
-                (Int(0));*)
-            Malloc "wavestart" 99 (Int 0);
+            Malloc "wavestart" (Opn plusval [VRead "max_wave"; Value (Int 2)] )
+                (Int(0));
             
             ForLoop "p" (D (Value(Int 0)) (VRead "nnz") )
                 (Assign ("wavestart", ARead "wave" (VRead "p"))
@@ -143,8 +139,7 @@ val findWavesFast_def = Define`
                      DARead "wavestart" (VRead "w")]
                     (\xs . case xs of [x;y] => x + y));
                     
-            (*Malloc "wavefronts" (VRead "nnz") (Int 0);*)
-            Malloc "wavefronts" 99 (Int 0);
+            Malloc "wavefronts" (VRead "nnz") (Int 0);
             ForLoop "prev" (D (Value(Int 1)) (Opn plusval [(VRead "nnz");
                                                            (Value(Int 1))] ))
                 (Seq [
@@ -167,7 +162,7 @@ val findWavesFast_def = Define`
 val executor_def = Define`
   executor = 
     Seq [
-      ForLoop "w" (D (Value(Int 0)) (VRead max_wave")) (AssignVar "p" [] (\xs . Int 0))
+      ForLoop "w" (D (Value(Int 0)) (VRead max_wave"))
         (ParLoop "k" (D (ARead "wavestart" (VRead "w"))
                         (ARead "wavestart" (Opn plusval (VRead "w")
                                                         (Value(Int 1)))))
