@@ -158,24 +158,21 @@ val findWavesFast_def = Define`
 `
 
 (* BK:  stuck with the following *)
-(*
 val executor_def = Define`
-  executor = 
+  executor =
     Seq [
-      ForLoop "w" (D (Value(Int 0)) (VRead max_wave"))
+      ForLoop "w" (D (Value(Int 0)) (VRead "max_wave"))
         (ParLoop "k" (D (ARead "wavestart" (VRead "w"))
-                        (ARead "wavestart" (Opn plusval (VRead "w")
-                                                        (Value(Int 1)))))
-            (Seq [
-                AssignVar "p" [DARead "wavefronts" (VRead "k")]
-                  (\xs . case xs of [w] => w) 
+                        (ARead "wavestart" (Opn plusval [VRead "w"; Value(Int 1)])))
+            (Seq
+                (AssignVar "p" [DARead "wavefronts" (VRead "k")]
+                  (\xs . case xs of [w] => w)
                   ::
-                orgbody
-            ])
+                orgbody)
+            )
          )
 
     ]
 `
-*)
 
 val _ = export_theory();
