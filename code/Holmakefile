@@ -1,5 +1,9 @@
 INCLUDES = ../hol/pseudoc
 
+ifdef POLY
+HOLHEAP = ../hol/pseudoc/ie0-heap
+endif
+
 
 all: fastwaveTheory.uo
 

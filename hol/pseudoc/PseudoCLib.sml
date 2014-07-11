@@ -3,26 +3,66 @@ struct
 
 open HolKernel simpLib
 
-open listRangeTheory finite_mapTheory PseudoCTheory
+open listRangeTheory finite_mapTheory PseudoCTheory PseudoCOpsTheory
+
+open lcsymtacs intReduce
 
 fun newrule t =
-    eval_cases |> Q.SPEC `(m,lm,^t)` |> SIMP_RULE (srw_ss()) []
+    eval_cases |> Q.SPEC `(m,^t)` |> SIMP_RULE (srw_ss()) []
 
-val evalths = [newrule ``Seq []``, newrule ``Done``, newrule ``Seq (h::t)``,
+val evalths = [newrule ``Seq []``, newrule ``Done``,
                newrule ``ForLoop v d b``, newrule ``Assign w rds vf``,
                newrule ``ParLoop v d b``, newrule ``Par []``,
-               newrule ``Par (h::t)``, newrule ``AssignVar v e``,
+               newrule ``Par (h::t)``, newrule ``AssignVar v rds vf``,
                newrule ``IfStmt g t e``, newrule ``Malloc v n value``]
 
+val option_CASE_Cong = prove(
+  ``M1 = M2 ⇒ option_CASE M1 n f = option_CASE M2 n f``,
+  simp[]);
+
+val alt_upd_var = prove(
+  ``upd_var m vnm v =
+      case FLOOKUP m vnm of
+          NONE => NONE
+        | SOME (Array _) => NONE
+        | SOME _ => case v of
+                        Error => NONE
+                      | Array _ => NONE
+                      | _ => SOME(m |+ (vnm,v))``,
+  simp[upd_var_def] >> Cases_on `v` >> simp[FLOOKUP_DEF] >>
+  Cases_on `vnm ∈ FDOM m` >> simp[] >>
+  Cases_on `m ' vnm` >> simp[]);
+
+val evalseq_cons = prove(
+  ``∀cs c. eval (m0, Seq (c::cs)) mr ⇔
+           if c = Done then
+             EVERY ((=) Done) cs ∧ mr = (m0,Done) ∨
+             (∃cs' m r. eval(m0,Seq cs) (m,Seq cs') ∧ r = Seq (Done::cs') ∧
+                        mr = (m,r))
+           else
+             ∃c' m. eval (m0,c) (m,c') ∧ mr = (m,Seq(c'::cs))``,
+  dsimp[newrule ``Seq(h::t)``, listTheory.APPEND_EQ_CONS] >>
+  map_every qx_gen_tac [`cs`, `c`] >> reverse (Cases_on `c = Done`) >>
+  simp[newrule ``Done``] >- metis_tac[] >>
+  Cases_on `mr = (m0,Done)` >> simp[] >>
+  simp[newrule ``Seq cs``] >> dsimp[] >> metis_tac[])
+
 fun subeval t =
-    SIMP_CONV (srw_ss()) (dvalues_def:: listRangeLHI_CONS :: isValue_def ::
-                          listTheory.APPEND_EQ_CONS :: EXISTS_OR_THM ::
-                          LEFT_AND_OVER_OR :: RIGHT_AND_OVER_OR ::
-                          evalexpr_def :: lookup_v_def :: upd_array_def ::
-                          FLOOKUP_FUNION :: FLOOKUP_UPDATE :: isDValue_def ::
-                          lookup_array_def :: destDValue_def :: incval_def ::
-                          listTheory.LUPDATE_compute ::
-                          evalths) t
+    (SIMP_CONV (srw_ss() ++ INT_REDUCE_ss)
+              (FLOOKUP_UPDATE :: lookup_v_def :: evalexpr_def ::
+               evalseq_cons :: alt_upd_var :: Cong option_CASE_Cong ::
+               PULL_EXISTS :: dvalues_def :: ssubst_def :: esubst_def ::
+               dsubst_def :: listTheory.APPEND_EQ_CONS ::
+               minusval_def :: plusval_def :: cmpGTEval_def ::
+               lookup_array_def :: upd_array_def :: listTheory.LUPDATE_compute::
+               evalths) THENC
+     SIMP_CONV (srw_ss() ++ INT_REDUCE_ss)
+               [RIGHT_AND_OVER_OR, LEFT_AND_OVER_OR, EXISTS_OR_THM,
+                evalexpr_def, lookup_v_def, lookup_array_def,
+                minusval_def, plusval_def, cmpGTEval_def,
+                FLOOKUP_UPDATE])
+      t
+
 fun eval1 t0 = let
   val gv = genvar (type_of t0)
   val th = subeval ``eval ^t0 ^gv``
@@ -37,10 +77,6 @@ end;
 
 val _ = overload_on ("VInt", ``\i. Value (Int i)``)
 
-val ser_t =
-    ``(FEMPTY |+ ("a", Array (GENLIST (λn. Int &n) 20)), FEMPTY : memory,
-       ForLoop "i" (D (VInt 0) (VInt 10)) (Assign ("a", VarExp "i") [Read "a" (VarExp "i")] incval))``
-
 fun chain m eq (f: 'a -> 'b list) (d: 'b -> 'a) s0 = let
   fun history_to_next h =
       case h of
@@ -50,12 +86,15 @@ fun chain m eq (f: 'a -> 'b list) (d: 'b -> 'a) s0 = let
                    | newbs => map (fn b' => (b'::bs, a)) newbs)
         | ([], a) => map (fn b => ([b], a)) (f a)
 
+  fun pluralise n str =
+      Int.toString n ^ " " ^ str ^ (if n = 1 then "" else "s")
+
   fun recurse n hs =
     if n <= 0 then hs
     else let
       val acc' = op_mk_set eq (List.concat (map history_to_next hs))
       val _ = print ("Stage " ^ Int.toString (m - n + 1) ^ ": " ^
-                     Int.toString (length acc') ^ " results\n")
+                     pluralise (length acc')  "result" ^ "\n")
     in
       recurse (n - 1) acc'
     end
@@ -73,14 +112,5 @@ in
              d
              t)
 end
-
-val par_t =
-    ``(FEMPTY |+ ("a", Array (GENLIST (λn. Real &(2 * n)) 10)), FEMPTY : memory,
-         ParLoop "i" (D (VInt 0) (VInt 3)) (Assign ("a", VarExp "i") [Read "a" (VarExp "i")] incval))``
-(*
-val serial_res = chaineval 52 ser_t;
-val res = chaineval 4 par_t;
-val _ = print ("Length of result is " ^ Int.toString (length res) ^ "\n")
-*)
 
 end (* struct *)
