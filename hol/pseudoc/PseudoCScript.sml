@@ -49,10 +49,12 @@ val isDValue_def = Define`
   isDValue (DValue _) = T ∧
   isDValue _ = F
 `
+val _ = export_rewrites ["isDValue_def"]
 
 val destDValue_def = Define`
   destDValue (DValue v) = v
 `;
+val _ = export_rewrites ["destDValue_def"]
 
 val _ = Datatype`domain = D expr expr`  (* lo/hi pair *)
 
