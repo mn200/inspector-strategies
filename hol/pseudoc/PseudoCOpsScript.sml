@@ -46,16 +46,16 @@ val _ = overload_on("*", ``\v1 v2. multval[v1;v2]``)
 
       Int (if i < j then i else j)
 
-   The fact that real max is called "max" and integer max is called "INT_MAX" is
+   The fact that real max is called "max" and integer max is called "int_max" is
    unfortunate (and totally fixable).
 
 *)
 val maxval_def = Define`
   maxval [Real r; Real s] = Real (max r s) ∧
-  maxval [Int i; Int j] = Int (INT_MAX i j) ∧
+  maxval [Int i; Int j] = Int (int_max i j) ∧
   maxval _ = Error
 `
-val _ = overload_on("max", ``\v1 v2. maxval[v1;v2]``)*)
+val _ = overload_on("max", ``\v1 v2. maxval[v1;v2]``)
 
 val cmpGTEval_def = Define`
   cmpGTEval [Real r; Real s] = Bool (r >= s) ∧
