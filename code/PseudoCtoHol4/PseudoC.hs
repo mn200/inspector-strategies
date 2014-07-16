@@ -38,7 +38,7 @@ data Stmt =
          -- Array element definition (array name, index exp, and rhs)
            Assign String Expr Expr
 
-         -- InitVar (declaration plus initialization) to scalar (* var initval *)
+         -- InitVar (declaration and initialization) to scalar (* var initval *)
          -- initval is not an expression so can easily get type info
          | InitVar String ValType
 
@@ -71,6 +71,45 @@ data Stmt =
          
          deriving (Show)
 
+--------------------------------------------------------------------------
+-- hol code generation functions.
+
+genHexpr :: Expr -> String
+
+genHexpr (Value (IntVal n)) = "(Value (Int "++(show n)++"))"
+genHexpr (Value (BoolVal b)) = "(Value (Bool "++(show b)++"))"
+genHexpr (Value (DoubleVal d)) = "(Value (Real "++(show d)++"))"
+genHexpr (VRead var) = "(VRead "++var++")"
+-- (ARead "col" (VRead "p"))
+genHexpr (ARead var idx) = "(ARead \""++var++"\" "++(genHexpr idx)++")"
+
+
+
+-- Given a PseudoC AST, a list of scalar vars that have already
+-- declared in the generated hol code, and the current tab level
+-- generate a string of hol code.
+genHstmt :: Stmt -> Int -> String
+genHstmt s lvl =
+    let indent lvl | lvl>0 = "    "++(indent (lvl-1)) | otherwise = ""
+    in case s of
+        (AssignVar var rhs) -> (indent lvl) ++ var
+                               ++ " = " ++ (genHexpr rhs)
+
+        (SeqStmt ([]))-> (indent lvl) ++ "(Seq [])"
+        (SeqStmt (ys))-> (indent lvl) ++"(Seq [\n" 
+                         ++ (genHstmtList ys (lvl+1)) 
+                         ++ (indent lvl) ++ "])\n"
+            where
+               genHstmtList :: [Stmt] -> Int -> String
+               genHstmtList (x:xs) llvl =
+                  case xs of
+                     ([]) -> (genHstmt x llvl) ++ "\n"
+                     _    -> (genHstmt x llvl) ++ ";\n"
+                              ++ (genHstmtList xs llvl)
+
+        
+
+--------------------------------------------------------------------------
 -- C code generation functions.
 
 genCexpr :: Expr -> String
