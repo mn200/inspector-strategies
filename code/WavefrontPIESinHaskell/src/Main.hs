@@ -22,96 +22,114 @@ tab = "    "
 -- stub inspector that just mallocs and sets minimal vars for C compile
 stub :: PseudoC.Stmt
 stub = SeqStmt
-        [AssignVar "max_wave" (Value (IntVal(0))),
+        [InitVar "max_wave" (IntVal(0)),
          Malloc "wavestart" 
-                (Plus (VarExpr("max_wave")) (Value (IntVal(2))))
+                (Plus (VRead("max_wave")) (Value (IntVal(2))))
                 (IntVal 0),
-         Malloc "wavefronts" (VarExpr("nnz")) (IntVal 0)
+         Malloc "wavefronts" (VRead("nnz")) (IntVal 0)
+-- instructions below for testing additional functionality
+-- in PseudoC.hs not currently in wavebench
+{-
+         ,
+         InitVar "testBool" (BoolVal (False)),
+         InitVar "testDouble" (DoubleVal 0.0),
+         Malloc "testBarray" (VRead("nnz")) (BoolVal (True)),
+         Malloc "testDarray" (VRead("nnz")) (DoubleVal (-1.0)),
+         WhileLoop (CmpLT (VRead "max_wave") (Value(IntVal(5))))
+                   (AssignVar "max_wave" 
+                              (Mult (Value(IntVal(10)))
+                                    (Divide (VRead "max_wave")
+                                            (Value(IntVal(2))))))
+-}
         ]
 
 
 -- PseudoC representation of find_waves_fast_gen inspector
 findWavesFast :: PseudoC.Stmt
 findWavesFast = SeqStmt [
-        Malloc "lw_iter" (VarExpr "N")  (IntVal (-1)),
-        Malloc "lr_iter" (VarExpr "N")  (IntVal (-1)),
-        Malloc "wave"    (VarExpr "nnz") (IntVal 0),
-        AssignVar "max_wave" (Value (IntVal 0)),
-        ForLoop "p" (D1D (Value(IntVal 1)) (VarExpr "nnz"))
+        Malloc "lw_iter" (VRead "N")  (IntVal (-1)),
+        Malloc "lr_iter" (VRead "N")  (IntVal (-1)),
+        Malloc "wave"    (VRead "nnz") (IntVal 0),
+        InitVar "max_wave" (IntVal 0),
+        InitVar "r" (IntVal(0)),
+        InitVar "c" (IntVal(0)),
+        ForLoop "p" (D1D (Value(IntVal 1)) (VRead "nnz"))
             (SeqStmt [
                 Assign "lr_iter"
-                    (ARead "row" (Minus (VarExpr "p") (Value(IntVal 1))))
-                    (Minus (VarExpr "p") (Value(IntVal 1))),
+                    (ARead "row" (Minus (VRead "p") (Value(IntVal 1))))
+                    (Minus (VRead "p") (Value(IntVal 1))),
                 Assign "lr_iter"
-                    (ARead "col" (Minus (VarExpr "p") (Value(IntVal 1))))
-                    (Minus (VarExpr "p") (Value(IntVal 1))),
+                    (ARead "col" (Minus (VRead "p") (Value(IntVal 1))))
+                    (Minus (VRead "p") (Value(IntVal 1))),
                 Assign "lw_iter"
-                    (ARead "row" (Minus (VarExpr "p") (Value(IntVal 1))))
-                    (Minus (VarExpr "p") (Value(IntVal 1))),
+                    (ARead "row" (Minus (VRead "p") (Value(IntVal 1))))
+                    (Minus (VRead "p") (Value(IntVal 1))),
                 Assign "lw_iter"
-                    (ARead "col" (Minus (VarExpr "p") (Value(IntVal 1))))
-                    (Minus (VarExpr "p") (Value(IntVal 1))),
-                AssignVar "r" (ARead "row" (VarExpr "p")),
-                AssignVar "c" (ARead "col" (VarExpr "p")),
-                IfStmt  (CmpGTE (ARead "lw_iter" (VarExpr "r")) 
+                    (ARead "col" (Minus (VRead "p") (Value(IntVal 1))))
+                    (Minus (VRead "p") (Value(IntVal 1))),
+                AssignVar "r" (ARead "row" (VRead "p")),
+                AssignVar "c" (ARead "col" (VRead "p")),
+                IfStmt  (CmpGTE (ARead "lw_iter" (VRead "r")) 
                                 (Value(IntVal(0))))
-                        (Assign "wave" (VarExpr "p")
-                                (Max (ARead "wave" (VarExpr "p"))
+                        (Assign "wave" (VRead "p")
+                                (Max (ARead "wave" (VRead "p"))
                                      (Plus (ARead "wave"
-                                                (ARead "lw_iter" (VarExpr "r")))
+                                                (ARead "lw_iter" (VRead "r")))
                                            (Value(IntVal(1))))))
                         (SeqStmt []),
-                IfStmt  (CmpGTE (ARead "lr_iter" (VarExpr "r")) 
+                IfStmt  (CmpGTE (ARead "lr_iter" (VRead "r")) 
                                 (Value(IntVal(0))))
-                        (Assign "wave" (VarExpr "p")
-                                (Max (ARead "wave" (VarExpr "p"))
+                        (Assign "wave" (VRead "p")
+                                (Max (ARead "wave" (VRead "p"))
                                      (Plus (ARead "wave"
-                                                (ARead "lr_iter" (VarExpr "r")))
+                                                (ARead "lr_iter" (VRead "r")))
                                            (Value(IntVal(1))))))
                         (SeqStmt []),
-                IfStmt  (CmpGTE (ARead "lw_iter" (VarExpr "c")) 
+                IfStmt  (CmpGTE (ARead "lw_iter" (VRead "c")) 
                                 (Value(IntVal(0))))
-                        (Assign "wave" (VarExpr "p")
-                                (Max (ARead "wave" (VarExpr "p"))
+                        (Assign "wave" (VRead "p")
+                                (Max (ARead "wave" (VRead "p"))
                                      (Plus (ARead "wave"
-                                                (ARead "lw_iter" (VarExpr "c")))
+                                                (ARead "lw_iter" (VRead "c")))
                                            (Value(IntVal(1))))))
                         (SeqStmt []),
-                IfStmt  (CmpGTE (ARead "lr_iter" (VarExpr "c")) 
+                IfStmt  (CmpGTE (ARead "lr_iter" (VRead "c")) 
                                 (Value(IntVal(0))))
-                        (Assign "wave" (VarExpr "p")
-                                (Max (ARead "wave" (VarExpr "p"))
+                        (Assign "wave" (VRead "p")
+                                (Max (ARead "wave" (VRead "p"))
                                      (Plus (ARead "wave"
-                                                (ARead "lr_iter" (VarExpr "c")))
+                                                (ARead "lr_iter" (VRead "c")))
                                            (Value(IntVal(1))))))
                         (SeqStmt []),
-                AssignVar "max_wave" (Max (VarExpr "max_wave")
-                                          (ARead "wave" (VarExpr "p")))
+                AssignVar "max_wave" (Max (VRead "max_wave")
+                                          (ARead "wave" (VRead "p")))
             ]),
-            Malloc "wavestart" (Plus (VarExpr "max_wave") (Value(IntVal 2)))
+            Malloc "wavestart" (Plus (VRead "max_wave") (Value(IntVal 2)))
                                 (IntVal 0),
-            ForLoop "p" (D1D (Value(IntVal 0)) (VarExpr "nnz"))
-                (Assign "wavestart" (ARead "wave" (VarExpr "p"))
-                    (Plus (ARead "wavestart" (ARead "wave" (VarExpr "p")))
+            ForLoop "p" (D1D (Value(IntVal 0)) (VRead "nnz"))
+                (Assign "wavestart" (ARead "wave" (VRead "p"))
+                    (Plus (ARead "wavestart" (ARead "wave" (VRead "p")))
                           (Value(IntVal 1)))),
-            ForLoop "w" (D1D (Value(IntVal 1)) (Plus (VarExpr "max_wave")
+            ForLoop "w" (D1D (Value(IntVal 1)) (Plus (VRead "max_wave")
                                                      (Value(IntVal 1))))
-                (Assign "wavestart" (VarExpr "w")
+                (Assign "wavestart" (VRead "w")
                     (Plus (ARead "wavestart" 
-                              (Minus (VarExpr "w") (Value(IntVal 1))))
-                          (ARead "wavestart" (VarExpr "w")))),
-            Malloc "wavefronts" (VarExpr "nnz") (IntVal 0),
-            ForLoop "prev" (D1D (Value(IntVal 1)) (Plus (VarExpr "nnz")
+                              (Minus (VRead "w") (Value(IntVal 1))))
+                          (ARead "wavestart" (VRead "w")))),
+            Malloc "wavefronts" (VRead "nnz") (IntVal 0),
+            InitVar "p" (IntVal(0)),
+            InitVar "w" (IntVal(0)),
+            ForLoop "prev" (D1D (Value(IntVal 1)) (Plus (VRead "nnz")
                                                          (Value(IntVal 1))))
                 (SeqStmt [
-                    AssignVar "p" (Minus (VarExpr "nnz") (VarExpr "prev")),
-                    AssignVar "w" (ARead "wave" (VarExpr "p")),
-                    Assign "wavestart" (VarExpr "w")
-                        (Minus (ARead "wavestart" (VarExpr"w"))
+                    AssignVar "p" (Minus (VRead "nnz") (VRead "prev")),
+                    AssignVar "w" (ARead "wave" (VRead "p")),
+                    Assign "wavestart" (VRead "w")
+                        (Minus (ARead "wavestart" (VRead"w"))
                                (Value(IntVal 1))),
                     Assign "wavefronts"
-                        (ARead "wavestart" (VarExpr "w"))
-                        (VarExpr "p")
+                        (ARead "wavestart" (VRead "w"))
+                        (VRead "p")
                 ])    
     ]
 
