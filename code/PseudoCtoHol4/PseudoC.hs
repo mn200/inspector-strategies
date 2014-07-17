@@ -79,9 +79,17 @@ genHexpr :: Expr -> String
 genHexpr (Value (IntVal n)) = "(Value (Int "++(show n)++"))"
 genHexpr (Value (BoolVal b)) = "(Value (Bool "++(show b)++"))"
 genHexpr (Value (DoubleVal d)) = "(Value (Real "++(show d)++"))"
-genHexpr (VRead var) = "(VRead "++var++")"
+genHexpr (VRead var) = "(VRead \""++var++"\")"
 -- (ARead "col" (VRead "p"))
 genHexpr (ARead var idx) = "(ARead \""++var++"\" "++(genHexpr idx)++")"
+genHexpr (Plus e1 e2) = "(Opn plusval ["++(genHexpr e1)++";"
+                                        ++(genHexpr e2)++"])"
+genHexpr (Minus e1 e2) = "(Opn minusval ["++(genHexpr e1)++";"
+                                        ++(genHexpr e2)++"])"
+genHexpr (Mult e1 e2) = "(Opn multval ["++(genHexpr e1)++";"
+                                        ++(genHexpr e2)++"])"
+genHexpr (Divide e1 e2) = "(Opn divval ["++(genHexpr e1)++";"
+                                        ++(genHexpr e2)++"])"
 
 
 
@@ -92,21 +100,90 @@ genHstmt :: Stmt -> Int -> String
 genHstmt s lvl =
     let indent lvl | lvl>0 = "    "++(indent (lvl-1)) | otherwise = ""
     in case s of
-        (AssignVar var rhs) -> (indent lvl) ++ var
-                               ++ " = " ++ (genHexpr rhs)
+        (AssignVar var rhs) -> 
+            let (cnt, deps, parms, func) = (findDexpr rhs (0,"",""))
+            in (indent lvl) ++ "(AssignVar \"" ++ var ++ "\"\n" 
+                ++ (indent (lvl+1)) ++ "[" ++ deps ++ "] \n"
+                ++ (indent (lvl+1)) ++ "(\\xs . case xs of ["
+                ++ parms ++ "] => " ++ func ++")"
 
         (SeqStmt ([]))-> (indent lvl) ++ "(Seq [])"
         (SeqStmt (ys))-> (indent lvl) ++"(Seq [\n" 
-                         ++ (genHstmtList ys (lvl+1)) 
+                         ++ (genHstmtList ys (lvl+1)) ++"\n"
                          ++ (indent lvl) ++ "])\n"
             where
                genHstmtList :: [Stmt] -> Int -> String
                genHstmtList (x:xs) llvl =
                   case xs of
-                     ([]) -> (genHstmt x llvl) ++ "\n"
+                     ([]) -> (genHstmt x llvl)
                      _    -> (genHstmt x llvl) ++ ";\n"
                               ++ (genHstmtList xs llvl)
 
+
+-- Find the depString, parameterString, and functionString from
+--      the rhs of assignment statement
+-- usage:  findDexpr Expr (cnt, depString, parameterString)
+--   will return (cnt, depString, parameterString, functionString)
+-- 
+findDexpr :: Expr -> (Int, String, String) -> (Int, String, String, String)
+findDexpr (Value (IntVal n)) (cnt,deps,parms) = (cnt, deps, parms, 
+                             "(Int " ++ (show n) ++ ")")
+findDexpr (Value (BoolVal b)) (cnt,deps,parms) = (cnt, deps, parms, 
+                             "(Bool " ++ (show b) ++ ")")
+findDexpr (Value (DoubleVal d)) (cnt,deps,parms) = (cnt, deps, parms, 
+                             "(Real " ++ (show d) ++ ")")
+findDexpr (VRead var) (cnt,deps,parms) = (cnt+1, newdeps, newparms, newfunc)
+             where newdeps = case deps of
+                      "" -> "DVRead \"" ++ var ++ "\""
+                      _  -> deps ++ "; DVRead \"" ++ var ++ "\""
+                   newparms = case parms of
+                      "" -> "x" ++ (show (cnt))
+                      _  -> parms ++ ";x" ++ (show (cnt))
+                   newfunc = "x" ++ (show (cnt))
+findDexpr (ARead var idx) (cnt,deps,parms) = 
+                                          (cnt+1, newdeps, newparms, newfunc)
+             where newdeps = case deps of
+                      "" -> "D"++(stripParen (genHexpr (ARead var idx)))
+                      _  -> deps ++ "; D"
+                            ++ (stripParen (genHexpr (ARead var idx)))
+                   newparms = case parms of
+                      "" -> "x" ++ (show (cnt))
+                      _  -> parms ++ ";x" ++ (show (cnt))
+                   newfunc = "x" ++ (show (cnt))
+findDexpr (Plus e1 e2) (cnt,deps,parms) = 
+              let (cnt1,deps1,parms1,func1) 
+                                        = (findDexpr e1 (cnt,deps,parms))
+                  (cnt2,deps2,parms2,func2) 
+                                        = (findDexpr e2 (cnt1,deps1,parms1))
+              in (cnt2,deps2,parms2,"("++func1++" + "++func2++")") 
+findDexpr (Minus e1 e2) (cnt,deps,parms) = 
+              let (cnt1,deps1,parms1,func1) 
+                                        = (findDexpr e1 (cnt,deps,parms))
+                  (cnt2,deps2,parms2,func2) 
+                                        = (findDexpr e2 (cnt1,deps1,parms1))
+              in (cnt2,deps2,parms2,"("++func1++" - "++func2++")") 
+findDexpr (Mult e1 e2) (cnt,deps,parms) = 
+              let (cnt1,deps1,parms1,func1) 
+                                        = (findDexpr e1 (cnt,deps,parms))
+                  (cnt2,deps2,parms2,func2) 
+                                        = (findDexpr e2 (cnt1,deps1,parms1))
+              in (cnt2,deps2,parms2,"("++func1++" * "++func2++")") 
+findDexpr (Divide e1 e2) (cnt,deps,parms) = 
+              let (cnt1,deps1,parms1,func1) 
+                                        = (findDexpr e1 (cnt,deps,parms))
+                  (cnt2,deps2,parms2,func2) 
+                                        = (findDexpr e2 (cnt1,deps1,parms1))
+              in (cnt2,deps2,parms2,"("++func1++" / "++func2++")") 
+
+stripParen :: String -> String
+stripParen str = if (length str) > 1 
+                    then if (head str) == '('
+                            then if (last str) ==')'
+                                   then (tail (init str))
+                                   else str
+                            else str
+                    else str
+ 
         
 
 --------------------------------------------------------------------------
@@ -121,8 +198,8 @@ genCexpr (Plus e1 e2) = "("++(genCexpr e1)++" + "++(genCexpr e2)++")"
 genCexpr (Minus e1 e2) = "("++(genCexpr e1)++" - "++(genCexpr e2)++")"
 genCexpr (Mult e1 e2) = "("++(genCexpr e1)++" * "++(genCexpr e2)++")"
 genCexpr (Divide e1 e2) = "("++(genCexpr e1)++" / "++(genCexpr e2)++")"
-genCexpr (CmpGTE e1 e2) = "("++(genCexpr e1)++")>=("++(genCexpr e2)++")"
-genCexpr (CmpLT e1 e2) = "("++(genCexpr e1)++")<("++(genCexpr e2)++")"
+genCexpr (CmpGTE e1 e2) = "("++(genCexpr e1)++") >= ("++(genCexpr e2)++")"
+genCexpr (CmpLT e1 e2) = "("++(genCexpr e1)++") < ("++(genCexpr e2)++")"
 
 -- Given a PseudoC AST, a list of scalar vars that have already
 -- declared in the generated C code, and the current tab level

@@ -27,7 +27,20 @@ stub = SeqStmt
          AssignVar "testBool" (Value (BoolVal True)),
          AssignVar "testBool2" (Value (BoolVal False)),
          AssignVar "testDouble" (Value (DoubleVal 0.0)),
-         AssignVar "y" (VRead "testInt")
+         AssignVar "y" (VRead "testInt"),
+         AssignVar "y" (ARead "foo" (VRead "x")),
+         AssignVar "y" (Plus (VRead "x") (Value (IntVal 5))),
+         AssignVar "y" (Plus (VRead "x") (VRead "z")),
+         AssignVar "y" (Minus (VRead "x") (Value (IntVal 5))),
+         AssignVar "y" (Minus (VRead "x") (VRead "z")),
+         AssignVar "y" (ARead "foo" (Minus (VRead "x") (VRead "z"))),
+         AssignVar "y" (ARead "foo" (Plus (VRead "x") (Value (IntVal 4)))),
+         AssignVar "y" (Mult (VRead "x") (Value (IntVal 5))),
+         AssignVar "y" (Mult (VRead "x") (VRead "z")),
+         AssignVar "y" (Divide (VRead "x") (Value (IntVal 5))),
+         AssignVar "y" (Divide (VRead "x") (VRead "z")),
+         AssignVar "y" (ARead "foo" (Mult (VRead "x") (VRead "z"))),
+         AssignVar "y" (ARead "foo" (Divide (VRead "x") (Value (IntVal 4))))
         ]
 
 {-
