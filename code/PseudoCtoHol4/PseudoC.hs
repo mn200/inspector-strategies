@@ -25,8 +25,11 @@ data Expr =
         | Convert Expr      -- convert integer to double
         
         -- comparison expressions
+        | CmpGT Expr Expr
         | CmpGTE Expr Expr
         | CmpLT Expr Expr
+        | CmpLTE Expr Expr
+--        | CmpEQ Expr Expr -- not yet available in PseudoCOpsScript.sml
         deriving (Show)
         
 data Domain =
@@ -76,21 +79,31 @@ data Stmt =
 
 genHexpr :: Expr -> String
 
-genHexpr (Value (IntVal n)) = "(Value (Int "++(show n)++"))"
-genHexpr (Value (BoolVal b)) = "(Value (Bool "++(show b)++"))"
-genHexpr (Value (DoubleVal d)) = "(Value (Real "++(show d)++"))"
+genHexpr (Value vtype) = "(Value " ++ (genHvalue vtype) ++ ")"
 genHexpr (VRead var) = "(VRead \""++var++"\")"
--- (ARead "col" (VRead "p"))
 genHexpr (ARead var idx) = "(ARead \""++var++"\" "++(genHexpr idx)++")"
-genHexpr (Plus e1 e2) = "(Opn plusval ["++(genHexpr e1)++";"
-                                        ++(genHexpr e2)++"])"
+genHexpr (Plus e1 e2) =  "(Opn plusval [" ++(genHexpr e1)++";"
+                                          ++(genHexpr e2)++"])"
 genHexpr (Minus e1 e2) = "(Opn minusval ["++(genHexpr e1)++";"
-                                        ++(genHexpr e2)++"])"
-genHexpr (Mult e1 e2) = "(Opn multval ["++(genHexpr e1)++";"
-                                        ++(genHexpr e2)++"])"
-genHexpr (Divide e1 e2) = "(Opn divval ["++(genHexpr e1)++";"
-                                        ++(genHexpr e2)++"])"
-
+                                          ++(genHexpr e2)++"])"
+genHexpr (Mult e1 e2) =   "(Opn multval ["++(genHexpr e1)++";"
+                                          ++(genHexpr e2)++"])"
+genHexpr (Divide e1 e2) = "(Opn divval [" ++(genHexpr e1)++";"
+                                          ++(genHexpr e2)++"])"
+genHexpr (CmpGT e1 e2) =  "(Opn cmpGTval ["  ++(genHexpr e1)++";"
+                                             ++(genHexpr e2)++"])"
+genHexpr (CmpGTE e1 e2) = "(Opn cmpGTEval [" ++(genHexpr e1)++";"
+                                             ++(genHexpr e2)++"])"
+genHexpr (CmpLT e1 e2) =  "(Opn cmpLTval ["  ++(genHexpr e1)++";"
+                                             ++(genHexpr e2)++"])"
+genHexpr (CmpLTE e1 e2) = "(Opn cmpLTEval [" ++(genHexpr e1)++";"
+                                             ++(genHexpr e2)++"])"
+-- -- CmpEQ not yet available in public/hol/pseudoc/PseudoCOpsScript.sml
+--genHexpr (CmpEQ e1 e2) =  "(Omp cmpEQval ["  ++(genHexpr e1)++";"
+--                                             ++(genHexpr e2)++"])"
+genHexpr (Max e1 e2) =    "(Opn maxval [" ++(genHexpr e1)++";"
+                                          ++(genHexpr e2)++"])"
+genHexpr (Exp e) =        "(Opn expval ["++(genHexpr e)++"])"
 
 
 -- Given a PseudoC AST, a list of scalar vars that have already
@@ -105,12 +118,46 @@ genHstmt s lvl =
             in (indent lvl) ++ "(AssignVar \"" ++ var ++ "\"\n" 
                 ++ (indent (lvl+1)) ++ "[" ++ deps ++ "] \n"
                 ++ (indent (lvl+1)) ++ "(\\xs . case xs of ["
-                ++ parms ++ "] => " ++ func ++")"
+                ++ parms ++ "] => " ++ func ++"))"
 
+        (Assign var idx rhs) -> 
+            let (cnt, deps, parms, func) = (findDexpr rhs (0,"",""))
+            in (indent lvl) ++ "(Assign\n"
+                ++ (indent (lvl+1)) ++"(\"" ++ var ++ "\",\n" 
+                ++ (indent (lvl+1)) ++ (genHexpr idx) ++ ")\n" 
+                ++ (indent (lvl+1)) ++ "[" ++ deps ++ "]\n"
+                ++ (indent (lvl+1)) ++ "(\\xs . case xs of ["
+                ++ parms ++ "] => " ++ func ++"))"
+
+        (IfStmt e thenbody elsebody) -> 
+            (indent lvl)++"(IfStmt "
+            ++(genHexpr e)++"\n"      -- each genHexpr has it's own ( )
+            ++(genHstmt thenbody (lvl+1))++"\n"
+            ++(genHstmt elsebody (lvl+1))++")"
+
+
+        -- Generate malloc call and initialization loop.
+        (Malloc var sz initvtype) -> 
+            (indent lvl) ++ "(Malloc \"" ++ var ++ "\"\n" 
+            ++(indent (lvl+1)) ++ (genHexpr sz) ++ "\n"
+            ++(indent (lvl+1)) ++ (genHvalue initvtype) ++ ")"
+
+        (ForLoop iter (D1D lb ub) body) ->
+            (indent lvl) ++ "(ForLoop \"" ++ iter ++ "\"\n"
+            ++(indent (lvl+1)) ++ "(D " ++ (genHexpr lb) ++ " "
+            ++(genHexpr ub) ++ ")\n"
+            ++(genHstmt body (lvl+1)) ++ ")"
+
+-- -- WhileLoop not yet available in public/hol/pseudoc/PseudoCScript.sml
+{-
+        (WhileLoop e body) ->
+            (indent lvl)++"(WhileLoop " ++ (genHexpr e) ++ "\n"
+            ++(genHstmt body (lvl+1)) ++ ")"
+-}
         (SeqStmt ([]))-> (indent lvl) ++ "(Seq [])"
         (SeqStmt (ys))-> (indent lvl) ++"(Seq [\n" 
                          ++ (genHstmtList ys (lvl+1)) ++"\n"
-                         ++ (indent lvl) ++ "])\n"
+                         ++ (indent lvl) ++ "])"
             where
                genHstmtList :: [Stmt] -> Int -> String
                genHstmtList (x:xs) llvl =
@@ -126,54 +173,87 @@ genHstmt s lvl =
 --   will return (cnt, depString, parameterString, functionString)
 -- 
 findDexpr :: Expr -> (Int, String, String) -> (Int, String, String, String)
-findDexpr (Value (IntVal n)) (cnt,deps,parms) = (cnt, deps, parms, 
-                             "(Int " ++ (show n) ++ ")")
-findDexpr (Value (BoolVal b)) (cnt,deps,parms) = (cnt, deps, parms, 
-                             "(Bool " ++ (show b) ++ ")")
-findDexpr (Value (DoubleVal d)) (cnt,deps,parms) = (cnt, deps, parms, 
-                             "(Real " ++ (show d) ++ ")")
-findDexpr (VRead var) (cnt,deps,parms) = (cnt+1, newdeps, newparms, newfunc)
-             where newdeps = case deps of
-                      "" -> "DVRead \"" ++ var ++ "\""
-                      _  -> deps ++ "; DVRead \"" ++ var ++ "\""
-                   newparms = case parms of
-                      "" -> "x" ++ (show (cnt))
-                      _  -> parms ++ ";x" ++ (show (cnt))
-                   newfunc = "x" ++ (show (cnt))
+findDexpr (Value vtype) (cnt,deps,parms) = 
+                 (cnt, deps, parms, (genHvalue vtype))
+{-
+findDexpr (Value (IntVal n)) (cnt,deps,parms) = 
+                 (cnt, deps, parms, "(Int " ++ (show n) ++ ")")
+findDexpr (Value (BoolVal b)) (cnt,deps,parms) = 
+                 (cnt, deps, parms, "(Bool " ++ [(head (show b))] ++ ")")
+findDexpr (Value (DoubleVal d)) (cnt,deps,parms) = 
+                 (cnt, deps, parms, "(Real " ++ (show d) ++ ")")
+-}
+findDexpr (VRead var) (cnt,deps,parms) =
+              let parm = "x"++(show cnt) 
+                  dep = "DVRead \"" ++ var ++ "\""
+                  newdeps = case deps of
+                      "" -> dep
+                      _  -> deps ++ ";" ++ dep
+                  newparms = case parms of
+                      "" -> parm
+                      _  -> parms ++ ";" ++ parm
+                  newfunc = parm
+              in  (cnt+1, newdeps, newparms, newfunc)
+
 findDexpr (ARead var idx) (cnt,deps,parms) = 
-                                          (cnt+1, newdeps, newparms, newfunc)
-             where newdeps = case deps of
-                      "" -> "D"++(stripParen (genHexpr (ARead var idx)))
-                      _  -> deps ++ "; D"
-                            ++ (stripParen (genHexpr (ARead var idx)))
-                   newparms = case parms of
-                      "" -> "x" ++ (show (cnt))
-                      _  -> parms ++ ";x" ++ (show (cnt))
-                   newfunc = "x" ++ (show (cnt))
+              let parm = "x"++(show cnt) 
+                  dep = "D"++(stripParen (genHexpr (ARead var idx)))
+                  newdeps = case deps of
+                      "" -> dep
+                      _  -> deps ++ ";" ++ dep
+                  newparms = case parms of
+                      "" -> parm
+                      _  -> parms ++ ";" ++ parm
+                  newfunc = parm
+              in  (cnt+1, newdeps, newparms, newfunc)
+
 findDexpr (Plus e1 e2) (cnt,deps,parms) = 
-              let (cnt1,deps1,parms1,func1) 
-                                        = (findDexpr e1 (cnt,deps,parms))
-                  (cnt2,deps2,parms2,func2) 
-                                        = (findDexpr e2 (cnt1,deps1,parms1))
-              in (cnt2,deps2,parms2,"("++func1++" + "++func2++")") 
+              let (c1,d1,p1,f1) = (findDexpr e1 (cnt,deps,parms))
+                  (c2,d2,p2,f2) = (findDexpr e2 (c1,d1,p1))
+              in (c2,d2,p2,"(" ++ f1 ++ " + " ++ f2 ++ ")" ) 
 findDexpr (Minus e1 e2) (cnt,deps,parms) = 
-              let (cnt1,deps1,parms1,func1) 
-                                        = (findDexpr e1 (cnt,deps,parms))
-                  (cnt2,deps2,parms2,func2) 
-                                        = (findDexpr e2 (cnt1,deps1,parms1))
-              in (cnt2,deps2,parms2,"("++func1++" - "++func2++")") 
+              let (c1,d1,p1,f1) = (findDexpr e1 (cnt,deps,parms))
+                  (c2,d2,p2,f2) = (findDexpr e2 (c1,d1,p1))
+              in (c2,d2,p2,"(" ++ f1 ++ " - " ++ f2 ++ ")" ) 
 findDexpr (Mult e1 e2) (cnt,deps,parms) = 
-              let (cnt1,deps1,parms1,func1) 
-                                        = (findDexpr e1 (cnt,deps,parms))
-                  (cnt2,deps2,parms2,func2) 
-                                        = (findDexpr e2 (cnt1,deps1,parms1))
-              in (cnt2,deps2,parms2,"("++func1++" * "++func2++")") 
+              let (c1,d1,p1,f1) = (findDexpr e1 (cnt,deps,parms))
+                  (c2,d2,p2,f2) = (findDexpr e2 (c1,d1,p1))
+              in (c2,d2,p2,"(" ++ f1 ++ " * " ++ f2 ++ ")" ) 
 findDexpr (Divide e1 e2) (cnt,deps,parms) = 
-              let (cnt1,deps1,parms1,func1) 
-                                        = (findDexpr e1 (cnt,deps,parms))
-                  (cnt2,deps2,parms2,func2) 
-                                        = (findDexpr e2 (cnt1,deps1,parms1))
-              in (cnt2,deps2,parms2,"("++func1++" / "++func2++")") 
+              let (c1,d1,p1,f1) = (findDexpr e1 (cnt,deps,parms))
+                  (c2,d2,p2,f2) = (findDexpr e2 (c1,d1,p1))
+              in (c2,d2,p2,"(" ++ f1 ++ " / " ++ f2 ++ ")" ) 
+findDexpr (CmpGT e1 e2) (cnt,deps,parms) = 
+              let (c1,d1,p1,f1) = (findDexpr e1 (cnt,deps,parms))
+                  (c2,d2,p2,f2) = (findDexpr e2 (c1,d1,p1))
+              in (c2,d2,p2,"(" ++ f1 ++ " > " ++ f2 ++ ")" ) 
+findDexpr (CmpGTE e1 e2) (cnt,deps,parms) = 
+              let (c1,d1,p1,f1) = (findDexpr e1 (cnt,deps,parms))
+                  (c2,d2,p2,f2) = (findDexpr e2 (c1,d1,p1))
+              in (c2,d2,p2,"(" ++ f1 ++ " >= " ++ f2 ++ ")" ) 
+findDexpr (CmpLT e1 e2) (cnt,deps,parms) = 
+              let (c1,d1,p1,f1) = (findDexpr e1 (cnt,deps,parms))
+                  (c2,d2,p2,f2) = (findDexpr e2 (c1,d1,p1))
+              in (c2,d2,p2,"(" ++ f1 ++ " < " ++ f2 ++ ")" ) 
+findDexpr (CmpLTE e1 e2) (cnt,deps,parms) = 
+              let (c1,d1,p1,f1) = (findDexpr e1 (cnt,deps,parms))
+                  (c2,d2,p2,f2) = (findDexpr e2 (c1,d1,p1))
+              in (c2,d2,p2,"(" ++ f1 ++ " <= " ++ f2 ++ ")" ) 
+findDexpr (Max e1 e2) (cnt,deps,parms) = 
+              let (c1,d1,p1,f1) = (findDexpr e1 (cnt,deps,parms))
+                  (c2,d2,p2,f2) = (findDexpr e2 (c1,d1,p1))
+              in (c2,d2,p2,"(maxval [" ++ f1 ++ ";" ++ f2 ++ "])" ) 
+findDexpr (Exp e) (cnt,deps,parms) = 
+              let (c1,d1,p1,f1) = (findDexpr e (cnt,deps,parms))
+              in (c1,d1,p1,"(exp " ++ f1 ++ ")" ) 
+
+-- CmpEQ not yet available in public/hol/pseudoc/PseudoCOpsScript.sml
+{-
+findDexpr (CmpEQ e1 e2) (cnt,deps,parms) = 
+              let (c1,d1,p1,f1) = (findDexpr e1 (cnt,deps,parms))
+                  (c2,d2,p2,f2) = (findDexpr e2 (c1,d1,p1))
+              in (c2,d2,p2,"(" ++ f1 ++ " == " ++ f2 ++ ")" ) 
+-}
 
 stripParen :: String -> String
 stripParen str = if (length str) > 1 
@@ -184,6 +264,18 @@ stripParen str = if (length str) > 1
                             else str
                     else str
  
+genHvalue :: ValType -> String
+genHvalue (IntVal (n)) = "(Int ("++(show n)++"))"
+genHvalue (DoubleVal (d)) = "(Real ("++(show d)++"))" 
+genHvalue (BoolVal (b)) = genHboolVal b
+            where genHboolVal True = "(Bool T)"
+                  genHboolVal False = "(Bool F)"
+
+genHtypeString :: ValType -> String
+genHtypeString (IntVal(n)) = "Int"
+genHtypeString (BoolVal(b)) = "Bool"
+genHtypeString (DoubleVal(d)) = "Real"
+
         
 
 --------------------------------------------------------------------------

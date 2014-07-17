@@ -53,6 +53,7 @@ val findWavesFast_def = Define`
 
         ForLoop "p" (D (Value(Int 1)) (VRead "nnz") )
             (Seq [
+
                   Assign 
                       ("lr_iter",
                        (ARead "row" 
@@ -78,7 +79,6 @@ val findWavesFast_def = Define`
                       [DVRead "p"]
                       (\xs . case xs of [p] => p - (Int 1) );
                   
-                  (* BK: are the following two correct? *)    
                   AssignVar "r" [DARead "row" (VRead "p")] (\xs . case xs of [r] => r);
                   AssignVar "c" [DARead "col" (VRead "p")] (\xs . case xs of [c] => c);
     
@@ -157,7 +157,6 @@ val findWavesFast_def = Define`
     ]
 `
 
-(* BK:  stuck with the following *)
 val executor_def = Define`
   executor =
     Seq [
