@@ -89,6 +89,18 @@ stub = SeqStmt
                     Assign "wavefronts"
                         (ARead "wavestart" (VRead "w"))
                         (VRead "p")
+                ]),    
+         ParForLoop "prev" (D1D (Value(IntVal 1)) (Plus (VRead "nnz")
+                                                     (Value(IntVal 1))))
+                (SeqStmt [
+                    AssignVar "p" (Minus (VRead "nnz") (VRead "prev")),
+                    AssignVar "w" (ARead "wave" (VRead "p")),
+                    Assign "wavestart" (VRead "w")
+                        (Minus (ARead "wavestart" (VRead"w"))
+                               (Value(IntVal 1))),
+                    Assign "wavefronts"
+                        (ARead "wavestart" (VRead "w"))
+                        (VRead "p")
                 ])    
 
 
@@ -190,14 +202,16 @@ findWavesFast = SeqStmt [
 -- FIXME: might want to move into PseudoC since have C code.
 genWaveInspector :: String -> PseudoC.Stmt -> String
 genWaveInspector inspecName inspecAST =
-        "void " ++ inspecName 
-        ++ "(COO_mat *mat, int nnz, int * row, int *col,\n"
-        ++ tab ++ tab ++ "int *max_wave_ptr, int **wavestart_ptr,\n"
-        ++ tab ++ tab ++ "int **wavefronts_ptr) {\n"
-        ++ (genHstmt inspecAST 1)
-        ++ tab ++ "\n"
-        ++ tab ++ "// epilogue to capture outputs\n"
-        ++ tab ++ "(*max_wave_ptr) = max_wave;\n"
-        ++ tab ++ "(*wavestart_ptr) = wavestart;\n"
-        ++ tab ++ "(*wavefronts_ptr) = wavefronts;\n"
-        ++ "}\n"
+-- some preamble for Hol4 files
+        "(* HOL specification of the PseudoC statements found in Test.hs*)\n\n"
+        ++"open HolKernel Parse boolLib bossLib;\n\n"
+        ++"open PseudoCTheory PseudoCOpsTheory\n\n"
+        ++"val _ = new_theory \"test\";\n\n"
+        ++"val testStmts_def = Define`\n"
+        ++"  testStmts =\n"
+        ++"    [\n"
+-- generate the statements
+        ++ (genHstmt inspecAST 1) ++"\n"
+-- generate the postamble
+        ++"    ]`;\n\n"
+        ++"val _ = export_theory();\n"

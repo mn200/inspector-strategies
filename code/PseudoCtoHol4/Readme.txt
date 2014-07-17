@@ -1,8 +1,9 @@
-# A work in progress to convert PseudoC to hol
+# A work in progress to convert PseudoC to HOL4
 #
 # usage:
 #   ghc Test.hs
-#   ./Test
+#   ./Test > testScript.sml
+#   $HOLDIR/bin/Holmake
 #
 #----------------------------
 

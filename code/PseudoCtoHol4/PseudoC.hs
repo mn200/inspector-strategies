@@ -148,6 +148,12 @@ genHstmt s lvl =
             ++(genHexpr ub) ++ ")\n"
             ++(genHstmt body (lvl+1)) ++ ")"
 
+        (ParForLoop iter (D1D lb ub) body) ->
+            (indent lvl) ++ "(ParLoop \"" ++ iter ++ "\"\n"
+            ++(indent (lvl+1)) ++ "(D " ++ (genHexpr lb) ++ " "
+            ++(genHexpr ub) ++ ")\n"
+            ++(genHstmt body (lvl+1)) ++ ")"
+
 -- -- WhileLoop not yet available in public/hol/pseudoc/PseudoCScript.sml
 {-
         (WhileLoop e body) ->
@@ -175,14 +181,6 @@ genHstmt s lvl =
 findDexpr :: Expr -> (Int, String, String) -> (Int, String, String, String)
 findDexpr (Value vtype) (cnt,deps,parms) = 
                  (cnt, deps, parms, (genHvalue vtype))
-{-
-findDexpr (Value (IntVal n)) (cnt,deps,parms) = 
-                 (cnt, deps, parms, "(Int " ++ (show n) ++ ")")
-findDexpr (Value (BoolVal b)) (cnt,deps,parms) = 
-                 (cnt, deps, parms, "(Bool " ++ [(head (show b))] ++ ")")
-findDexpr (Value (DoubleVal d)) (cnt,deps,parms) = 
-                 (cnt, deps, parms, "(Real " ++ (show d) ++ ")")
--}
 findDexpr (VRead var) (cnt,deps,parms) =
               let parm = "x"++(show cnt) 
                   dep = "DVRead \"" ++ var ++ "\""
@@ -208,37 +206,21 @@ findDexpr (ARead var idx) (cnt,deps,parms) =
               in  (cnt+1, newdeps, newparms, newfunc)
 
 findDexpr (Plus e1 e2) (cnt,deps,parms) = 
-              let (c1,d1,p1,f1) = (findDexpr e1 (cnt,deps,parms))
-                  (c2,d2,p2,f2) = (findDexpr e2 (c1,d1,p1))
-              in (c2,d2,p2,"(" ++ f1 ++ " + " ++ f2 ++ ")" ) 
+              getDexprBinOp(" + ",e1,e2,cnt,deps,parms)
 findDexpr (Minus e1 e2) (cnt,deps,parms) = 
-              let (c1,d1,p1,f1) = (findDexpr e1 (cnt,deps,parms))
-                  (c2,d2,p2,f2) = (findDexpr e2 (c1,d1,p1))
-              in (c2,d2,p2,"(" ++ f1 ++ " - " ++ f2 ++ ")" ) 
+              getDexprBinOp(" - ",e1,e2,cnt,deps,parms)
 findDexpr (Mult e1 e2) (cnt,deps,parms) = 
-              let (c1,d1,p1,f1) = (findDexpr e1 (cnt,deps,parms))
-                  (c2,d2,p2,f2) = (findDexpr e2 (c1,d1,p1))
-              in (c2,d2,p2,"(" ++ f1 ++ " * " ++ f2 ++ ")" ) 
+              getDexprBinOp(" * ",e1,e2,cnt,deps,parms)
 findDexpr (Divide e1 e2) (cnt,deps,parms) = 
-              let (c1,d1,p1,f1) = (findDexpr e1 (cnt,deps,parms))
-                  (c2,d2,p2,f2) = (findDexpr e2 (c1,d1,p1))
-              in (c2,d2,p2,"(" ++ f1 ++ " / " ++ f2 ++ ")" ) 
+              getDexprBinOp(" / ",e1,e2,cnt,deps,parms)
 findDexpr (CmpGT e1 e2) (cnt,deps,parms) = 
-              let (c1,d1,p1,f1) = (findDexpr e1 (cnt,deps,parms))
-                  (c2,d2,p2,f2) = (findDexpr e2 (c1,d1,p1))
-              in (c2,d2,p2,"(" ++ f1 ++ " > " ++ f2 ++ ")" ) 
+              getDexprBinOp(" > ",e1,e2,cnt,deps,parms)
 findDexpr (CmpGTE e1 e2) (cnt,deps,parms) = 
-              let (c1,d1,p1,f1) = (findDexpr e1 (cnt,deps,parms))
-                  (c2,d2,p2,f2) = (findDexpr e2 (c1,d1,p1))
-              in (c2,d2,p2,"(" ++ f1 ++ " >= " ++ f2 ++ ")" ) 
+              getDexprBinOp(" >= ",e1,e2,cnt,deps,parms)
 findDexpr (CmpLT e1 e2) (cnt,deps,parms) = 
-              let (c1,d1,p1,f1) = (findDexpr e1 (cnt,deps,parms))
-                  (c2,d2,p2,f2) = (findDexpr e2 (c1,d1,p1))
-              in (c2,d2,p2,"(" ++ f1 ++ " < " ++ f2 ++ ")" ) 
+              getDexprBinOp(" < ",e1,e2,cnt,deps,parms)
 findDexpr (CmpLTE e1 e2) (cnt,deps,parms) = 
-              let (c1,d1,p1,f1) = (findDexpr e1 (cnt,deps,parms))
-                  (c2,d2,p2,f2) = (findDexpr e2 (c1,d1,p1))
-              in (c2,d2,p2,"(" ++ f1 ++ " <= " ++ f2 ++ ")" ) 
+              getDexprBinOp(" <= ",e1,e2,cnt,deps,parms)
 findDexpr (Max e1 e2) (cnt,deps,parms) = 
               let (c1,d1,p1,f1) = (findDexpr e1 (cnt,deps,parms))
                   (c2,d2,p2,f2) = (findDexpr e2 (c1,d1,p1))
@@ -246,6 +228,15 @@ findDexpr (Max e1 e2) (cnt,deps,parms) =
 findDexpr (Exp e) (cnt,deps,parms) = 
               let (c1,d1,p1,f1) = (findDexpr e (cnt,deps,parms))
               in (c1,d1,p1,"(exp " ++ f1 ++ ")" ) 
+
+-- first parameter String is the infix operator for the BinOp
+-- (infixop, e1, e2, cnt, deps, params) -> (newcnt, newdep, newparam, funcstr)
+getDexprBinOp :: (String, Expr, Expr, Int, String, String) -> 
+                       (Int, String, String, String)
+getDexprBinOp (infixop, e1, e2, cnt, deps, parms) =
+              let (c1,d1,p1,f1) = (findDexpr e1 (cnt,deps,parms))
+                  (c2,d2,p2,f2) = (findDexpr e2 (c1,d1,p1))
+              in (c2,d2,p2,"(" ++ f1 ++ infixop ++ f2 ++ ")" ) 
 
 -- CmpEQ not yet available in public/hol/pseudoc/PseudoCOpsScript.sml
 {-
