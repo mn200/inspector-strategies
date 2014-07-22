@@ -1,0 +1,38 @@
+Initial Residual = 737.039
+Iteration = 15   Residual = 6.04683
+Iteration = 30   Residual = 0.000375673
+Iteration = 45   Residual = 7.71167e-09
+Iteration = 60   Residual = 1.2598e-14
+Iteration = 75   Residual = 4.59093e-19
+Iteration = 90   Residual = 1.59513e-23
+Iteration = 105   Residual = 8.22322e-28
+Iteration = 120   Residual = 8.39689e-32
+Iteration = 135   Residual = 1.97538e-35
+Iteration = 149   Residual = 1.07424e-38
+Mini-Application Name: hpccg
+Mini-Application Version: 1.0
+Parallelism: 
+  MPI not enabled: 
+  Number of OpenMP threads: 8
+Dimensions: 
+  nx: 29
+  ny: 29
+  nz: 29
+Number of iterations: : 149
+Final residual: : 1.07424e-38
+********** Performance Summary (times in sec) ***********: 
+Time Summary: 
+  Total   : 0.020014
+  DDOT    : 0.0018
+  WAXPBY  : 0.002497
+  SPARSEMV: 0.015494
+FLOPS Summary: 
+  Total   : 2.32574e+08
+  DDOT    : 1.45358e+07
+  WAXPBY  : 2.18038e+07
+  SPARSEMV: 1.96234e+08
+MFLOPS Summary: 
+  Total   : 11620.5
+  DDOT    : 8075.47
+  WAXPBY  : 8731.98
+  SPARSEMV: 12665.2
