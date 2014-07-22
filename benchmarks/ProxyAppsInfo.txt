@@ -1,0 +1,166 @@
+Proxy App Information
+
+http://www.mantevo.org/download.php
+
+-----------------------
+HPGGC-1.0:
+
+- Simple Conjugate Gradient Benchmark Code, Copyright (2006) Sandia Corporation
+- From README: 
+   + A simple conjugate gradient benchmark code for a 3D chimney domain on an arbitrary number of processors.
+   + This simple benchmark code is a self-contained piece of C++ software 
+that generates a 27-point finite difference matrix with a user-prescribed 
+sub-block size on each processor.
+   + It is implemented to be very scalable (in a weak sense).  Any 
+reasonable parallel computer should be able to achieve excellent 
+scaled speedup (weak scaling).  
+   + Kernel performance should be reasonable, but no attempts have been made
+to provide special kernel optimizations.
+- Compiles by default with MPI support
+- To compile without MPI:
+    make USE_MPI=
+- BK:  does not compile natively on Mac OS X 10.9.3 ... gcc is clang underpinnings
+       rather than Gnu
+- BK:  compiles on clemenceau in my CSU office
+- To run in serial mode (without MPI)
+    ./test_HPCCG nx ny nz
+- Output from run with:   ./test_HPCCG 50 50 50
+
+Initial Residual = 1282.05
+Iteration = 15   Residual = 13.8315
+Iteration = 30   Residual = 0.0335846
+Iteration = 45   Residual = 4.89172e-05
+Iteration = 60   Residual = 1.81391e-08
+Iteration = 75   Residual = 1.11558e-11
+Iteration = 90   Residual = 1.37655e-15
+Iteration = 105   Residual = 1.85267e-18
+Iteration = 120   Residual = 6.76787e-22
+Iteration = 135   Residual = 2.82763e-25
+Iteration = 149   Residual = 2.21357e-28
+Mini-Application Name: hpccg
+Mini-Application Version: 1.0
+Parallelism: 
+  MPI not enabled: 
+  OpenMP not enabled: 
+Dimensions: 
+  nx: 50
+  ny: 50
+  nz: 50
+Number of iterations: : 149
+Final residual: : 2.21357e-28
+********** Performance Summary (times in sec) ***********: 
+Time Summary: 
+  Total   : 1.399
+  DDOT    : 0.059
+  WAXPBY  : 0.091
+  SPARSEMV: 1.249
+FLOPS Summary: 
+  Total   : 1.192e+09
+  DDOT    : 7.45e+07
+  WAXPBY  : 1.1175e+08
+  SPARSEMV: 1.00575e+09
+MFLOPS Summary: 
+  Total   : 852.037
+  DDOT    : 1262.71
+  WAXPBY  : 1228.02
+  SPARSEMV: 805.244
+
+- Looks like SPARSEMV is taking the most time  
+
+-- Computing n for capitals (32GB memory)
+HPCCG README suggests picking a problem size that is between 25% and
+75% of total system memory.  README also claims total memory amounts:
+   Total number of bytes memory per MPI-Rank:
+       720 * n bytes     (when using a 27-point stencil)
+       240 * n bytes     (when using a  7-point stencil )
+where n = nx * ny * (nz * #MPI-Ranks)
+
+Here are my calculations for 32GB.
+
+We aren't using MPI, so #MPI-Ranks = 1
+We are using the 27-point stencil
+
+25% of 32GB = 8GB
+  ==> 8GB per MPI-Rank
+    n = 8GB / 720B
+       = 8,192MB / 720B
+       = 8,388,608KB / 720B
+       = 8,589,934,592B / 720B
+       = 11,930,464.7
+   nx = ny = nz = CubedRoot (n)
+   nx = CubedRoot(11,930,464.7)
+   nx = 229 (rounded)
+
+I think 225 came from using 1000 instead of 1024
+
+
+75% of 32GB = 24GB
+  ==> 24GB per MPI-Rank
+    n = 24GB / 720B
+       = 24,576MB / 720B
+       = 25,165,824KB / 720B
+       = 25,769,803,776B / 720B
+       = 35,791,294.13333
+   nx = ny = nz = CubedRoot (n)
+   nx = CubedRoot(35,791,294.13)
+   nx = 330 (rounded)              
+
+I think 324 came from using 1000 instead of 1024
+
+
+-- Computing for 20MB L3 cache  --
+Given:
+   Total number of bytes memory per MPI-Rank:
+       720 * n bytes     (when using a 27-point stencil)
+
+25% of 20MB L3 cache
+==> 5MB 
+    n = 5MB / 720B
+       = 5,242,880B / 720B
+       = 7281.7
+   nx = CubedRoot(7281.7)
+   nx = 19.38 ==>                   20 (rounded up)              
+  
+50% of 20MB L3 cache
+==> 10MB 
+    n = 10MB / 720B
+       = 10,485,760B / 720B
+       = 14,563.5
+   nx = CubedRoot(14,563,5)
+   nx = 24.42 ==>                   24 (rounded)              
+  
+75% of 20MB L3 cache
+==>  15MB 
+    n = 15MB / 720B
+       = 15,728,640B / 720B
+       = 21,845.3
+   nx = CubedRoot(21,845.3)
+   nx = 27.95 ==>                   28 (rounded)              
+  
+100% of 20MB L3 cache
+==> 20MB 
+    n = 20MB / 720B
+       = 20,971,520B / 720B
+       = 29127.1
+   nx = CubedRoot(29,127.1)
+   nx = 30.77 ==>                   30 (rounded down)              
+  
+
+
+-----------------------
+mini-MD:
+
+- miniMD is a parallel molecular dynamics (MD) simulation package written
+in C++ and intended for use on parallel supercomputers and new 
+architechtures for testing purposes.
+- Versions:
+   + ref
+   + OpenCL
+   + KokkosArray
+- ref version supports MPI+OpenMPI hybrid mode.
+
+-----------------------
+-----------------------
+-----------------------
+-----------------------
+-----------------------
