@@ -57,12 +57,43 @@ val maxval_def = Define`
 `
 val _ = overload_on("max", ``\v1 v2. maxval[v1;v2]``)
 
+val cmpGTval_def = Define`
+  cmpGTval [Real r; Real s] = Bool (r > s) ∧
+  cmpGTval [Int i; Int j] = Bool (i > j) ∧
+  cmpGTval _ = Error
+`
+val _ = overload_on(">", ``\v1 v2. cmpGTval[v1;v2]``)
+
 val cmpGTEval_def = Define`
   cmpGTEval [Real r; Real s] = Bool (r >= s) ∧
   cmpGTEval [Int i; Int j] = Bool (i >= j) ∧
   cmpGTEval _ = Error
 `
 val _ = overload_on(">=", ``\v1 v2. cmpGTEval[v1;v2]``)
+
+val cmpLTval_def = Define`
+  cmpLTval [Real r; Real s] = Bool (r < s) ∧
+  cmpLTval [Int i; Int j] = Bool (i < j) ∧
+  cmpLTval _ = Error
+`
+val _ = overload_on("<", ``\v1 v2. cmpLTval[v1;v2]``)
+
+val cmpLTEval_def = Define`
+  cmpLTEval [Real r; Real s] = Bool (r <= s) ∧
+  cmpLTEval [Int i; Int j] = Bool (i <=j) ∧
+  cmpLTEval _ = Error
+`
+val _ = overload_on("<=", ``\v1 v2. cmpLTEval[v1;v2]``)
+
+(* FIXME:   (r == s) gives an error *)
+(*
+val cmpEQval_def = Define`
+  cmpEQval [Real r; Real s] = Bool (r == s) ∧
+  cmpEQval [Int i; Int j] = Bool (i == j) ∧
+  cmpEQval _ = Error
+`
+val _ = overload_on("==", ``\v1 v2. cmpEQval[v1;v2]``)
+*)
 
 (* MN assumes it's desirable to have exp work on integer arguments *)
 val expval_def = Define`

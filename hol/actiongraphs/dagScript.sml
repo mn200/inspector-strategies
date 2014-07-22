@@ -126,18 +126,8 @@ val FINITE_nodebag = store_thm(
   ``∀d. FINITE_BAG (nodebag d)``,
   ho_match_mp_tac dag_ind >> simp[]);
 
-val nodeset_def = new_specification("nodeset_def",
-  ["nodeset"],
-  dag_recursion |> ISPEC (alpha_node ``(INSERT)``)
-                |> SPEC (alpha_node ``∅``)
-                |> SIMP_RULE (srw_ss()) [INSERT_COMM])
-val _ = export_rewrites ["nodeset_def"]
-val _ = overload_on("IN", ``λa d. a ∈ nodeset d``)
-
-val FINITE_nodeset = store_thm(
-  "FINITE_nodeset[simp]",
-  ``∀d. FINITE (nodeset d)``,
-  ho_match_mp_tac dag_ind >> simp[]);
+val _ = overload_on("IN", ``\a d. BAG_IN a (nodebag d)``)
+val _ = overload_on("nodeset", ``\d. SET_OF_BAG (nodebag d)``)
 
 val dagsize_def = new_specification("dagsize_def",
   ["dagsize"],
@@ -266,7 +256,6 @@ val dagmerge_ASSOC = store_thm(
   "dagmerge_ASSOC",
   ``∀d1 d2 d3. dagmerge d1 (dagmerge d2 d3) = dagmerge (dagmerge d1 d2) d3``,
   ho_match_mp_tac dag_ind >> simp[]);
-
 
 val (dagREL_rules, dagREL_ind, dagREL_cases) = Hol_reln`
   dagREL R ε ε ∧
@@ -556,6 +545,8 @@ val wave_def = Define`
   wave 0 g = wave0 g ∧
   wave (SUC n) g = wave n (ITBAG ddel (wave0 g) g)
 `;
+val _ = overload_on ("-", ``\d b. ITBAG ddel b d``)
+val _ = overload_on ("waveset", ``λn d. SET_OF_BAG (wave n d)``)
 
 val wave_empty = store_thm(
   "wave_empty[simp]",
@@ -712,5 +703,77 @@ val waveset_elements_dont_touch = store_thm(
     by (pop_assum (mp_tac o Q.AP_TERM `BAG_IN b`) >> simp[]) >>
   `∃w2. w1 = BAG_INSERT b w2` by metis_tac [BAG_DECOMPOSE] >> rw[] >>
   metis_tac[wave_elements_dont_touch]);
+
+val itbag_ddel_add = store_thm(
+  "itbag_ddel_add",
+  ``∀ms a d.
+      FINITE_BAG ms ⇒
+      a <+ d - ms = if BAG_IN a ms then d - (ms - {|a|})
+                    else a <+ (d - ms)``,
+  gen_tac >> Induct_on `BAG_CARD ms` >> rpt strip_tac
+  >- (`ms = {||}` by metis_tac[BCARD_0] >> simp[]) >>
+  qmatch_assum_rename_tac `SUC n = BAG_CARD ms` [] >>
+  `∃ms0 b. ms = BAG_INSERT b ms0 ∧ BAG_CARD ms0 = n`
+    by metis_tac[BCARD_SUC] >>
+  fs[COMMUTING_ITBAG_INSERT, ddel_commutes] >>
+  Cases_on `a = b` >> simp[] >>
+  first_x_assum (qspec_then `ms0` mp_tac) >> simp[] >>
+  simp[ddel_def, BAG_DIFF_INSERT, COMMUTING_ITBAG_INSERT, ddel_commutes,
+       FINITE_BAG_DIFF]);
+
+val wave_add = store_thm(
+  "wave_add",
+  ``wave n (a <+ d) = if n = 0 then BAG_INSERT a (BAG_FILTER (λb. a ≁ₜ b) (wave0 d))
+                      else wave (n - 1) (d - BAG_FILTER (λb. a ≁ₜ b) (wave0 d))``,
+  Cases_on `n` >> simp[wave_def, wave0_def, COMMUTING_ITBAG_INSERT, ddel_commutes,
+                       FINITE_BAG_FILTER])
+
+val dagsize_subtraction = store_thm(
+  "dagsize_subtraction",
+  ``b ≤ nodebag d ⇒ dagsize (d - b) = dagsize d - BAG_CARD b``,
+  strip_tac >>
+  `FINITE_BAG b` by metis_tac[FINITE_SUB_BAG, FINITE_nodebag] >>
+  Q.UNDISCH_THEN `b ≤ nodebag d` mp_tac >> qid_spec_tac `d` >>
+  pop_assum mp_tac >> qid_spec_tac `b` >>
+  ho_match_mp_tac STRONG_FINITE_BAG_INDUCT >> simp[] >>
+  qx_gen_tac `b` >> strip_tac >> qx_genl_tac [`e`, `d`] >>
+  strip_tac >>
+  simp[ddel_commutes, COMMUTING_ITBAG_INSERT, BAG_CARD_THM] >>
+  imp_res_tac BAG_INSERT_SUB_BAG_E >>
+  first_x_assum (qspec_then `ddel e d` mp_tac) >>
+  simp[nodebag_ddel] >>
+  `{|e|} ≤ nodebag d` by simp[] >>
+  simp[SUB_BAG_UNION_DIFF, BAG_UNION_INSERT, IN_nodeset_ddel_size])
+
+val IN_ddel_I = store_thm(
+  "IN_ddel_I",
+  ``∀d x y. x ∈ d ∧ x ≠ y ⇒ x ∈ ddel y d``,
+  ho_match_mp_tac dag_ind >> dsimp[ddel_def, BAG_IN_DIFF_I]);
+
+val IN_dagsubtract = prove(
+  ``∀b. FINITE_BAG b ⇒ ∀a d:(α,β)dag. a ∈ d ∧ ¬BAG_IN a b ⇒ a ∈ d - b``,
+  ho_match_mp_tac STRONG_FINITE_BAG_INDUCT >>
+  simp[ddel_commutes, COMMUTING_ITBAG_INSERT] >> rpt strip_tac >>
+  first_x_assum match_mp_tac >> simp[IN_ddel_I]);
+
+val IN_dagsubtract_I = save_thm(
+  "IN_dagsubtract_I",
+  IN_dagsubtract |> SIMP_RULE (srw_ss()) [PULL_FORALL, AND_IMP_INTRO])
+
+val waves_cover_all_nodes = store_thm(
+  "waves_cover_all_nodes",
+  ``∀d a. a ∈ d ⇒ ∃n. BAG_IN a (wave n d)``,
+  gen_tac >> completeInduct_on `dagsize d` >> qx_gen_tac `d` >>
+  strip_tac >>
+  Cases_on `d = ε` >> simp[] >> qx_gen_tac `a` >> strip_tac >>
+  Cases_on `BAG_IN a (wave 0 d)` >- metis_tac[] >>
+  Q.REFINE_EXISTS_TAC `SUC n` >> simp[wave_def] >>
+  fs[PULL_FORALL, AND_IMP_INTRO] >>
+  first_x_assum match_mp_tac >>
+  simp[wave_SUBBAG, dagsize_subtraction] >>
+  `0 < BAG_CARD (wave0 d)`
+    by (spose_not_then assume_tac >> fs[BCARD_0]) >>
+  `0 < dagsize d` by (spose_not_then assume_tac >> fs[]) >>
+  fs[wave_def, IN_dagsubtract_I]);
 
 val _ = export_theory();
