@@ -1,0 +1,29 @@
+# These commands will run the HPCCG-csrOMP executable on 1 processor 
+# at increasing numbers of OMP threads for the given size of n.
+# n = nx=ny=nz. 
+# For 25% of 32GB memory, use n = 225.
+# For 75% pf 32GB memory, use n = 324.  
+# Below are invocations for same problem size, 
+#    but increasing number of OMP threads
+#
+# How to use:
+# >source csrOMPScalingRunScript "YYYYMMDD-HHMM-Machine" n
+#
+
+
+setenv OMP_NUM_THREADS "1"
+../../HPCCG-1.0-mod/HPCCG-csrOMP $2 $2 $2 > HPCCG-csrOMP-$1-$2-01
+setenv OMP_NUM_THREADS "2"
+../../HPCCG-1.0-mod/HPCCG-csrOMP $2 $2 $2 > HPCCG-csrOMP-$1-$2-02
+setenv OMP_NUM_THREADS "3"
+../../HPCCG-1.0-mod/HPCCG-csrOMP $2 $2 $2 > HPCCG-csrOMP-$1-$2-03
+setenv OMP_NUM_THREADS "4"
+../../HPCCG-1.0-mod/HPCCG-csrOMP $2 $2 $2 > HPCCG-csrOMP-$1-$2-04
+setenv OMP_NUM_THREADS "5"
+../../HPCCG-1.0-mod/HPCCG-csrOMP $2 $2 $2 > HPCCG-csrOMP-$1-$2-05
+setenv OMP_NUM_THREADS "6"
+../../HPCCG-1.0-mod/HPCCG-csrOMP $2 $2 $2 > HPCCG-csrOMP-$1-$2-06
+setenv OMP_NUM_THREADS "7"
+../../HPCCG-1.0-mod/HPCCG-csrOMP $2 $2 $2 > HPCCG-csrOMP-$1-$2-07
+setenv OMP_NUM_THREADS "8"
+../../HPCCG-1.0-mod/HPCCG-csrOMP $2 $2 $2 > HPCCG-csrOMP-$1-$2-08

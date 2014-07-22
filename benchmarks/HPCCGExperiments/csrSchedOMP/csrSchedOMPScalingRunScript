@@ -1,0 +1,37 @@
+# These commands will run the HPCCG-csrSchedOMP executable on 1 processor 
+# at increasing numbers of OMP threads for the given size of n.
+# n = nx=ny=nz. 
+# For 25% of 32GB memory, use n = 225.
+# For 75% pf 32GB memory, use n = 324.  
+# Below are invocations for same problem size, 
+#    but increasing number of OMP threads
+#
+# How to use:
+# >source csrSchedOMPScalingRunScript YYYYMMDD-HHMM-Machine-etc n sched chunk
+#
+# some "sched" examples:
+#
+# "static,10"  -- can set chunksize to be any integer, but this is better
+#                 to be stipulated within the code, so compiler can do work
+# "dynamic,10" -- each thread grabs chunksize until none left
+# "guided,10"  -- threads dynamically grab blocks of iterations, 
+#                 starting large and shrinking down to chunksize
+
+
+setenv OMP_SCHEDULE "$3,$4"
+setenv OMP_NUM_THREADS "1"
+../../HPCCG-1.0-mod/HPCCG-csrSchedOMP $2 $2 $2 > HPCCG-csrSchedOMP-$1-$2-$3-$4-01
+setenv OMP_NUM_THREADS "2"
+../../HPCCG-1.0-mod/HPCCG-csrSchedOMP $2 $2 $2 > HPCCG-csrSchedOMP-$1-$2-$3-$4-02
+setenv OMP_NUM_THREADS "3"
+../../HPCCG-1.0-mod/HPCCG-csrSchedOMP $2 $2 $2 > HPCCG-csrSchedOMP-$1-$2-$3-$4-03
+setenv OMP_NUM_THREADS "4"
+../../HPCCG-1.0-mod/HPCCG-csrSchedOMP $2 $2 $2 > HPCCG-csrSchedOMP-$1-$2-$3-$4-04
+setenv OMP_NUM_THREADS "5"
+../../HPCCG-1.0-mod/HPCCG-csrSchedOMP $2 $2 $2 > HPCCG-csrSchedOMP-$1-$2-$3-$4-05
+setenv OMP_NUM_THREADS "6"
+../../HPCCG-1.0-mod/HPCCG-csrSchedOMP $2 $2 $2 > HPCCG-csrSchedOMP-$1-$2-$3-$4-06
+setenv OMP_NUM_THREADS "7"
+../../HPCCG-1.0-mod/HPCCG-csrSchedOMP $2 $2 $2 > HPCCG-csrSchedOMP-$1-$2-$3-$4-07
+setenv OMP_NUM_THREADS "8"
+../../HPCCG-1.0-mod/HPCCG-csrSchedOMP $2 $2 $2 > HPCCG-csrSchedOMP-$1-$2-$3-$4-08

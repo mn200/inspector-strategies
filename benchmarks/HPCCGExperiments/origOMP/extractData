@@ -1,0 +1,13 @@
+#Extracts Total, DDOT, WAXPBY, and SPMV from 8 files with suffix '-0n'
+#User will provide filename prefix and redirect output as needed
+#
+#Sample usage:
+#
+# source extractData HPCCG-20140709-1303-carson-city-324 > data.csv
+#
+
+echo "threads,1,2,3,4,5,6,7,8"
+awk -f getTotal.awk $1-01 $1-02 $1-03 $1-04 $1-05 $1-06 $1-07 $1-08
+awk -f getDDOT.awk $1-01 $1-02 $1-03 $1-04 $1-05 $1-06 $1-07 $1-08
+awk -f getWAXPBY.awk $1-01 $1-02 $1-03 $1-04 $1-05 $1-06 $1-07 $1-08
+awk -f getSPMV.awk $1-01 $1-02 $1-03 $1-04 $1-05 $1-06 $1-07 $1-08

@@ -1,0 +1,38 @@
+# These commands will run the HPCCG-origSchedOMP executable on 1 processor 
+# at increasing numbers of OMP threads for the given size of n.
+# n = nx=ny=nz. 
+# For 25% of 32GB memory, use nx = 225.
+# For 75% pf 32GB memory, use nx = 324.  
+# Below are invocations for same problem size, 
+#    but increasing number of OMP threads
+#
+# How to use:
+# >source origSchedOMPGuidedgRunScript8threadsHundreds YYYYMMDD-HHMM-Machine-etc nx
+#
+# some "sched" examples:
+#
+# "static,10"  -- can set chunksize to be any integer, but this is better
+#                 to be stipulated within the code, so compiler can do work
+# "dynamic,10" -- each thread grabs chunksize until none left
+# "guided,10"  -- threads dynamically grab blocks of iterations, 
+#                 starting large and shrinking down to chunksize
+
+setenv OMP_NUM_THREADS "8"
+
+
+setenv OMP_SCHEDULE "guided, 100"
+../../HPCCG-1.0-mod/HPCCG-origSchedOMP $2 $2 $2 > HPCCG-origSchedOMP-$1-$2-guided-100
+setenv OMP_SCHEDULE "guided, 200"
+../../HPCCG-1.0-mod/HPCCG-origSchedOMP $2 $2 $2 > HPCCG-origSchedOMP-$1-$2-guided-200
+setenv OMP_SCHEDULE "guided, 300"
+../../HPCCG-1.0-mod/HPCCG-origSchedOMP $2 $2 $2 > HPCCG-origSchedOMP-$1-$2-guided-300
+setenv OMP_SCHEDULE "guided, 400"
+../../HPCCG-1.0-mod/HPCCG-origSchedOMP $2 $2 $2 > HPCCG-origSchedOMP-$1-$2-guided-400
+setenv OMP_SCHEDULE "guided, 500"
+../../HPCCG-1.0-mod/HPCCG-origSchedOMP $2 $2 $2 > HPCCG-origSchedOMP-$1-$2-guided-500
+setenv OMP_SCHEDULE "guided, 600"
+../../HPCCG-1.0-mod/HPCCG-origSchedOMP $2 $2 $2 > HPCCG-origSchedOMP-$1-$2-guided-600
+setenv OMP_SCHEDULE "guided, 700"
+../../HPCCG-1.0-mod/HPCCG-origSchedOMP $2 $2 $2 > HPCCG-origSchedOMP-$1-$2-guided-700
+setenv OMP_SCHEDULE "guided, 800"
+../../HPCCG-1.0-mod/HPCCG-origSchedOMP $2 $2 $2 > HPCCG-origSchedOMP-$1-$2-guided-800

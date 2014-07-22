@@ -1,0 +1,26 @@
+# These commands will run the HPCCG executable on 1 processor at increasing
+# numbers of OMP threads.  nx=ny=nz=225 for 25% of 32GB system memory.
+# For 75%, use nx=ny=nz=324.  So, same problem size, but increasing number
+# of OMP threads
+#
+# How to use:
+# >source OMPScalingRunScript "YYRRMMDD-HHMM-Machine" n
+#
+
+
+setenv OMP_NUM_THREADS "1"
+../../test_HPCCG $2 $2 $2 > HPCCG-$1-$2-01
+setenv OMP_NUM_THREADS "2"
+../../test_HPCCG $2 $2 $2 > HPCCG-$1-$2-02
+setenv OMP_NUM_THREADS "3"
+../../test_HPCCG $2 $2 $2 > HPCCG-$1-$2-03
+setenv OMP_NUM_THREADS "4"
+../../test_HPCCG $2 $2 $2 > HPCCG-$1-$2-04
+setenv OMP_NUM_THREADS "5"
+../../test_HPCCG $2 $2 $2 > HPCCG-$1-$2-05
+setenv OMP_NUM_THREADS "6"
+../../test_HPCCG $2 $2 $2 > HPCCG-$1-$2-06
+setenv OMP_NUM_THREADS "7"
+../../test_HPCCG $2 $2 $2 > HPCCG-$1-$2-07
+setenv OMP_NUM_THREADS "8"
+../../test_HPCCG $2 $2 $2 > HPCCG-$1-$2-08

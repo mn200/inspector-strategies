@@ -1,0 +1,81 @@
+# This script will run all of the scripts in the underlying subdirectories
+# but will not have the correct time within the titles of the output
+# files.
+#
+# usage:
+#
+# source runAll YYYYDDMM-HHMM-machine-etc nx
+#
+
+
+
+################################
+cd origOMP
+source origOMPScalingRunScript $1 $2
+rm -f *.yaml
+source extractData HPCCG-origOMP-$1-$2 > HPCCG-origOMP-$1-$2-ALL.csv
+
+################################
+cd ../csrOMP
+source csrOMPScalingRunScript $1 $2
+rm -f *.yaml
+source extractData HPCCG-csrOMP-$1-$2 > HPCCG-csrOMP-$1-$2-ALL.csv
+
+################################
+cd ../origSchedOMP
+source origSchedOMPDynamicRunScript8threadsTens $1 $2t
+rm -f *.yaml
+source extractDataTens HPCCG-origSchedOMP-$1-$2t-dynamic > HPCCG-origSchedOMP-$1-$2t-dynamic-ALL.csv
+
+source origSchedOMPDynamicRunScript8threadsHundreds $1 $2h
+rm -f *.yaml
+source extractDataHundreds HPCCG-origSchedOMP-$1-$2h-dynamic > HPCCG-origSchedOMP-$1-$2h-dynamic-ALL.csv
+
+source origSchedOMPGuidedRunScript8threadsTens $1 $2t
+rm -f *.yaml
+source extractDataTens HPCCG-origSchedOMP-$1-$2t-guided > HPCCG-origSchedOMP-$1-$2t-guided-ALL.csv
+
+source origSchedOMPGuidedRunScript8threadsHundreds $1 $2h
+rm -f *.yaml
+source extractDataHundreds HPCCG-origSchedOMP-$1-$2h-guided > HPCCG-origSchedOMP-$1-$2h-guided-ALL.csv
+
+source origSchedOMPScalingRunScript $1 $2 dynamic 60
+rm -f *.yaml
+source extractData HPCCG-origSchedOMP-$1-$2-dynamic-60 > HPCCG-origSchedOMP-$1-$2-dynamic-60-ALL.csv
+
+#################################
+cd ../csrSchedOMP
+source csrSchedOMPDynamicRunScript8threadsTens $1 $2t
+rm -f *.yaml
+source extractDataTens HPCCG-csrSchedOMP-$1-$2t-dynamic > HPCCG-csrSchedOMP-$1-$2t-dynamic-ALL.csv
+
+source csrSchedOMPDynamicRunScript8threadsHundreds $1 $2h
+rm -f *.yaml
+source extractDataHundreds HPCCG-csrSchedOMP-$1-$2h-dynamic > HPCCG-csrSchedOMP-$1-$2h-dynamic-ALL.csv
+
+source csrSchedOMPGuidedRunScript8threadsTens $1 $2t
+rm -f *.yaml
+source extractDataTens HPCCG-csrSchedOMP-$1-$2t-guided > HPCCG-csrSchedOMP-$1-$2t-guided-ALL.csv
+
+source csrSchedOMPGuidedRunScript8threadsHundreds $1 $2h
+rm -f *.yaml
+source extractDataHundreds HPCCG-csrSchedOMP-$1-$2h-guided > HPCCG-csrSchedOMP-$1-$2h-guided-ALL.csv
+
+source csrSchedOMPScalingRunScript $1 $2 dynamic 60
+rm -f *.yaml
+source extractData HPCCG-csrSchedOMP-$1-$2-dynamic-60 > HPCCG-csrSchedOMP-$1-$2-dynamic-60-ALL.csv
+
+##################################
+cd ../origStaticOMP
+source origStaticOMPScalingRunScript $1 $2
+rm -f *.yaml
+source extractData HPCCG-origStaticOMP-$1-$2 > HPCCG-origStaticOMP-$1-$2-ALL.csv
+
+##################################
+cd ../csrStaticOMP
+source csrStaticOMPScalingRunScript $1 $2
+rm -f *.yaml
+source extractData HPCCG-csrStaticOMP-$1-$2 > HPCCG-csrStaticOMP-$1-$2-ALL.csv
+
+##################################
+cd ..

@@ -1,0 +1,13 @@
+#Extracts Total, DDOT, WAXPBY, and SPMV from 8 files with suffix '-n00'
+#User will provide filename prefix and redirect output as needed
+#
+#Sample usage:
+#
+# source extractDataHundred HPCCG-20140709-1303-carson-city-324 > data.csv
+#
+
+echo "chunk, 100, 200, 300, 400, 500, 600, 700, 800"
+awk -f getTotal.awk $1-100 $1-200 $1-300 $1-400 $1-500 $1-600 $1-700 $1-800
+awk -f getDDOT.awk $1-100 $1-200 $1-300 $1-400 $1-500 $1-600 $1-700 $1-800
+awk -f getWAXPBY.awk $1-100 $1-200 $1-300 $1-400 $1-500 $1-600 $1-700 $1-800
+awk -f getSPMV.awk $1-100 $1-200 $1-300 $1-400 $1-500 $1-600 $1-700 $1-800

@@ -1,0 +1,40 @@
+# These commands will run the HPCCG-csrSchedOMP executable on 1 processor 
+# at increasing numbers of OMP threads for the given size of n.
+# n = nx=ny=nz. 
+# For 25% of 32GB memory, use nx = 225.
+# For 75% pf 32GB memory, use nx = 324.  
+# Below are invocations for same problem size, 
+#    but increasing number of OMP threads
+#
+# How to use:
+# >source csrSchedOMPDynamicRunScript8threadsTens YYYYMMDD-HHMM-Machine-etc nx
+#
+# some "sched" examples:
+#
+# "static,10"  -- can set chunksize to be any integer, but this is better
+#                 to be stipulated within the code, so compiler can do work
+# "dynamic,10" -- each thread grabs chunksize until none left
+# "guided,10"  -- threads dynamically grab blocks of iterations, 
+#                 starting large and shrinking down to chunksize
+
+setenv OMP_NUM_THREADS "8"
+
+setenv OMP_SCHEDULE "dynamic, 10"
+../../HPCCG-1.0-mod/HPCCG-csrSchedOMP $2 $2 $2 > HPCCG-csrSchedOMP-$1-$2-dynamic-10
+setenv OMP_SCHEDULE "dynamic, 20"
+../../HPCCG-1.0-mod/HPCCG-csrSchedOMP $2 $2 $2 > HPCCG-csrSchedOMP-$1-$2-dynamic-20
+setenv OMP_SCHEDULE "dynamic, 30"
+../../HPCCG-1.0-mod/HPCCG-csrSchedOMP $2 $2 $2 > HPCCG-csrSchedOMP-$1-$2-dynamic-30
+setenv OMP_SCHEDULE "dynamic, 40"
+../../HPCCG-1.0-mod/HPCCG-csrSchedOMP $2 $2 $2 > HPCCG-csrSchedOMP-$1-$2-dynamic-40
+setenv OMP_SCHEDULE "dynamic, 50"
+../../HPCCG-1.0-mod/HPCCG-csrSchedOMP $2 $2 $2 > HPCCG-csrSchedOMP-$1-$2-dynamic-50
+setenv OMP_SCHEDULE "dynamic, 60"
+../../HPCCG-1.0-mod/HPCCG-csrSchedOMP $2 $2 $2 > HPCCG-csrSchedOMP-$1-$2-dynamic-60
+setenv OMP_SCHEDULE "dynamic, 70"
+../../HPCCG-1.0-mod/HPCCG-csrSchedOMP $2 $2 $2 > HPCCG-csrSchedOMP-$1-$2-dynamic-70
+setenv OMP_SCHEDULE "dynamic, 80"
+../../HPCCG-1.0-mod/HPCCG-csrSchedOMP $2 $2 $2 > HPCCG-csrSchedOMP-$1-$2-dynamic-80
+setenv OMP_SCHEDULE "dynamic, 90"
+../../HPCCG-1.0-mod/HPCCG-csrSchedOMP $2 $2 $2 > HPCCG-csrSchedOMP-$1-$2-dynamic-90
+
