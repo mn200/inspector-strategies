@@ -15,22 +15,49 @@ command: make all
   HPCCG-csrStaticOMP     using HPC_sparsemv-CSR-schedStatic.cpp
 
 
+The HPC_Sparse_Matrix_struct contains a number of arrays
+of information:  
+   nnz_in_row     ... int* with size of total nnz
+   list_of_inds     ... int* like the col[] array in CSR
+   list_of_vals     ... double* like the val[] array in CSR
+as well as a number of pointers into arrays:
+   ptr_to_vals_in_row   ... double ** 
+   ptr_to_inds_in_row   ... int **
+   ptr_to_diags             ... double **
+which are intialized based upon start_row and stop_row for for an
+MPI_Rank to allow zero-based indexing.
+ 
+   
+
+
 The following updates pertain to the HPC_sparsemv() routine.
 
 orig version:  HPC_sparsemv.cpp
 This file contains the original sparsemv function that works on the
 given HPC_Sparse_Matrix_struct, which contains pointers into the
-sparse matrix data files per non-zero 'row'
+sparse matrix data arrays per non-zero  (or 'row')
 
 CSR  version:  HPC_sparsemv-CSR.cpp
-This file contains a new function: HPC_sparsemv_CSR() It could be
-called from within the original: HPC_sparsemv() but it has been
-in-lined for efficiency.  The first time HPC_sparsemv() is called, a
-traditional rowStart array (a static local pointer) is allocated and
-filled with the rowStart indices into the exiting col and val arrays
-which exist as list_of_inds and list_of_vals respectively within the
-sparse matrix structure.  All other calls will simpley use the static
-rowStart array previously filled.
+
+This file contains a new function: HPC_sparsemv_CSR(). It could be
+called from within the original HPC_sparsemv() function, but instead,
+the sparsemv_CSR code has been in-lined into the original sparsemv
+function for efficiency. The sparse matrix structure given above is
+almost in CSR format. The list_of_inds is essentially the col[] array,
+and the list_of_vals is essentially the val[] array. What we need is
+the rowStart[] array, which we can create using the given nnz_in_row[]
+array. The first time HPC_sparsemv() is called with the in-lined code,
+a traditional rowStart array (a static local pointer) is allocated and
+filled with the rowStart indices as calculated using the accumulation
+of nnz_in_row values up to the current row. Thus, we are not copying
+data values (found in the list_of_vals), just adding a one-time pass
+over an integer array which is of the size of the number of non-zeros
+in the matrix. This rowStart array will contain starting indices into
+the exiting col and val arrays which exist as list_of_inds and
+list_of_vals respectively within the sparse matrix structure. All
+subsequent calls to HPC_sparsemv() will simply use the static rowStart
+array previously filled. The rest of the in-lined code is a
+traditional implementation of a CSR sparsemv computation.
 
 
 Changes for OMP Schedule:
