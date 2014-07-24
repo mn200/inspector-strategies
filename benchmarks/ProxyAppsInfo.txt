@@ -110,7 +110,7 @@ I think 324 came from using 1000 instead of 1024
 
 -- Computing for 20MB L3 cache  --
 Given:
-   Total number of bytes memory per MPI-Rank:
+   Total number of bytes memory per MPI-Rank: (and we use 1 MPI-Rank)
        720 * n bytes     (when using a 27-point stencil)
 
 25% of 20MB L3 cache
@@ -146,6 +146,46 @@ Given:
    nx = 30.77 ==>                   30 (rounded down)              
   
 
+-- Computing for L2 cache (8 x 256KB)
+
+100% of 2MB L2 cache
+==> 2MB 
+    n = 2MB / 720B
+       = 2,097,152B / 720B
+       = 2912.71
+   nx = CubedRoot(2,912.71)
+   nx = 14.28 ==>                   14 (rounded down)              
+
+75% of 2MB L2 cache
+==> 1.5MB 
+    n = 1.5MB / 720B
+       = 1,572,864B / 720B
+       = 2184.53
+   nx = CubedRoot(2,184.53)
+   nx = 12.98==>                   13 (rounded up)              
+
+
+-- Computing for L1 cache (8 x 32KB)
+
+100% of 512KB L1 cache
+==> 512KB 
+    n = 512KB / 720B
+       = 524,288B / 720B
+       = 728.17
+   nx = CubedRoot(728.17)
+   nx = 8.99==>                   9 (rounded up) or 8 (rounded down)              
+
+384KB
+393,216B
+546.13
+8.17
+75% of 512KB L1 cache
+==> 384KB 
+    n = 384KB / 720B
+       = 393,216B / 720B
+       = 546.13
+   nx = CubedRoot(546.13)
+   nx = 8.17==>                   8 (rounded down)              
 
 -----------------------
 mini-MD:

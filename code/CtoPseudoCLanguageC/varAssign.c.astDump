@@ -1,0 +1,18 @@
+TranslationUnitDecl 0x1028218d0 <<invalid sloc>>
+|-TypedefDecl 0x102821dd0 <<invalid sloc>> __int128_t '__int128'
+|-TypedefDecl 0x102821e30 <<invalid sloc>> __uint128_t 'unsigned __int128'
+|-TypedefDecl 0x102822180 <<invalid sloc>> __builtin_va_list '__va_list_tag [1]'
+`-FunctionDecl 0x102822220 <varAssign.c:3:1, line:9:1> main 'int ()'
+  `-CompoundStmt 0x102822500 <line:3:12, line:9:1>
+    |-DeclStmt 0x102822348 <line:4:3, col:12>
+    | `-VarDecl 0x1028222d0 <col:3, col:11> x 'int'
+    |   `-IntegerLiteral 0x102822328 <col:11> 'int' 5
+    |-DeclStmt 0x102822400 </Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/5.1/include/stdbool.h:31:14, varAssign.c:5:16>
+    | `-VarDecl 0x102822370 </Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/5.1/include/stdbool.h:31:14, line:32:14> y '_Bool'
+    |   `-ImplicitCastExpr 0x1028223e8 <col:14> '_Bool' <IntegralToBoolean>
+    |     `-IntegerLiteral 0x1028223c8 <col:14> 'int' 1
+    |-DeclStmt 0x1028224a8 <varAssign.c:6:3, col:18>
+    | `-VarDecl 0x102822430 <col:3, col:14> z 'double'
+    |   `-FloatingLiteral 0x102822488 <col:14> 'double' 3.140000e+00
+    `-ReturnStmt 0x1028224e0 <line:8:3, col:10>
+      `-IntegerLiteral 0x1028224c0 <col:10> 'int' 0

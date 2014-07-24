@@ -260,7 +260,10 @@ val dagmerge_ASSOC = store_thm(
 val (dagREL_rules, dagREL_ind, dagREL_cases) = Hol_reln`
   dagREL R ε ε ∧
 
-  ∀a1 a2. R a1 a2 ∧ dagREL R d1 d2 ⇒ dagREL R (a1 <+ d1) (a2 <+ d2)
+  ∀a1 a2. R a1.data a2.data ∧ a1.reads = a2.reads ∧ a1.writes = a2.writes ∧
+          dagREL R d1 d2
+        ⇒
+          dagREL R (a1 <+ d1) (a2 <+ d2)
 `
 
 val dagREL_monotone = store_thm(
@@ -775,5 +778,63 @@ val waves_cover_all_nodes = store_thm(
     by (spose_not_then assume_tac >> fs[BCARD_0]) >>
   `0 < dagsize d` by (spose_not_then assume_tac >> fs[]) >>
   fs[wave_def, IN_dagsubtract_I]);
+
+val dagmap_EQ = store_thm(
+  "dagmap_EQ",
+  ``∀d. (∀x. x ∈ IMAGE adata (nodeset d) ⇒ f x = g x) ⇒
+        dagmap f d = dagmap g d``,
+  ho_match_mp_tac dag_ind >> dsimp[polydata_upd_def]);
+
+val dagREL_empty = store_thm(
+  "dagREL_empty[simp]",
+  ``(dagREL R d ε ⇔ d = ε) ∧ (dagREL R ε d' ⇔ d' = ε)``,
+  ONCE_REWRITE_TAC [dagREL_cases] >> simp[]);
+
+val dagREL_elim_add = store_thm(
+  "dagREL_elim_add",
+  ``dagREL R (a <+ d1) d2 ⇔
+      ∃b d0. d2 = b <+ d0 ∧ R a.data b.data ∧ dagREL R d1 d0 ∧
+             b.writes = a.writes ∧ b.reads = a.reads``,
+  reverse eq_tac >- (rw[] >> metis_tac[dagREL_rules]) >>
+  `∀d1 d2. dagREL R d1 d2 ⇒
+           ∀a d10. d1 = a <+ d10 ⇒
+                   ∃b d20. d2 = b <+ d20 ∧ R a.data b.data ∧
+                           b.writes = a.writes ∧ b.reads = a.reads ∧
+                           dagREL R d10 d20` suffices_by metis_tac[] >>
+  Induct_on `dagREL` >> simp[] >>
+  qx_genl_tac [`d1`, `d2`, `a1`, `a2`] >> strip_tac >>
+  qx_genl_tac [`a`, `d10`] >> simp[SimpL ``$==>``, dagAdd_11_thm] >>
+  strip_tac >- (rw[] >> metis_tac[]) >>
+  qmatch_assum_rename_tac `d1 = a <+ d10'` [] >>
+  `∃b d20. d2 = b <+ d20 ∧ R a.data b.data ∧ b.writes = a.writes ∧
+           b.reads = a.reads ∧ dagREL R d10' d20` by metis_tac[] >>
+  rw[] >> map_every qexists_tac [`b`, `a2 <+ d20`] >> simp[] >>
+  reverse conj_tac >- metis_tac[dagREL_rules] >>
+  `a2 ≁ₜ b` by (fs[touches_def] >> metis_tac[]) >> simp[]);
+
+val dagREL_O = store_thm(
+  "dagREL_O",
+  ``dagREL R1 O dagREL R2 RSUBSET dagREL (R1 O R2)``,
+  simp[relationTheory.O_DEF, relationTheory.RSUBSET, PULL_EXISTS] >>
+  ho_match_mp_tac dag_ind >> simp[] >> qx_gen_tac `d1` >> strip_tac >>
+  qx_genl_tac [`a`, `d3`, `d2`] >> strip_tac >>
+  Q.UNDISCH_THEN `dagREL R2 (a <+ d1) d2` mp_tac >>
+  simp[dagREL_elim_add] >> rw[] >>
+  qpat_assum `dagREL R1 (aa <+ dd) YY` mp_tac >> simp[dagREL_elim_add] >>
+  rw[]>> simp[relationTheory.O_DEF] >> metis_tac[]);
+
+val dagSIGMA_def = new_specification(
+  "dagSIGMA_def", ["dagSIGMA"],
+  dag_recursion |> ISPEC ``λa:(α,β)node b:num. b + f a.data``
+                |> SPEC ``0:num``
+                |> SIMP_RULE (srw_ss() ++ ARITH_ss) []
+                |> GEN_ALL |> CONV_RULE SKOLEM_CONV);
+val _ = export_rewrites ["dagSIGMA_def"]
+
+val dagSIGMA_map = store_thm(
+  "dagSIGMA_map[simp]",
+  ``∀d. dagSIGMA f (dagmap g d) = dagSIGMA (f o g) d``,
+  ho_match_mp_tac dag_ind >> simp[]);
+
 
 val _ = export_theory();
