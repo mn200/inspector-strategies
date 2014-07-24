@@ -26,7 +26,8 @@ H_FILES = CmdParams.h timer.h COO_mat.h mmio.h
 CPP_FILES = CmdParams.cpp timer.cpp COO_mat.cpp mmio.cpp wavebench-driver.cpp
 OBJS = CmdParams.o timer.o COO_mat.o mmio.o wavebench-driver.o
 
-%.o : %.cpp PIESgen.c
+# PIESgen.c will want to go back on list
+%.o : %.cpp 
 	$(CC) -c $(CCFLAGS) $< -o $@
 
 wavebench: $(H_FILES) $(OBJS)
