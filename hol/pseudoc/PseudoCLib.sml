@@ -77,40 +77,51 @@ end;
 
 val _ = overload_on ("VInt", ``\i. Value (Int i)``)
 
+datatype ('a,'b) chainResult = OK of 'a | Error of 'b
+fun resmap f (OK x) = OK (f x) | resmap f (Error e) = Error e
 fun chain m eq (f: 'a -> 'b list) (d: 'b -> 'a) s0 = let
   fun history_to_next h =
       case h of
           (bs as (b::_), a) =>
           (case f (d b) of
                [] => [h]
-                   | newbs => map (fn b' => (b'::bs, a)) newbs)
+             | newbs => map (fn b' => (b'::bs, a)) newbs)
         | ([], a) => map (fn b => ([b], a)) (f a)
 
   fun pluralise n str =
       Int.toString n ^ " " ^ str ^ (if n = 1 then "" else "s")
 
   fun recurse n hs =
-    if n <= 0 then hs
+    if n <= 0 then OK hs
     else let
-      val acc' = op_mk_set eq (List.concat (map history_to_next hs))
-      val _ = print ("Stage " ^ Int.toString (m - n + 1) ^ ": " ^
-                     pluralise (length acc')  "result" ^ "\n")
+      val acc' = OK (op_mk_set eq (List.concat (map history_to_next hs)))
+                 handle Interrupt => raise Interrupt
+                      | e => Error(e, hs)
+      val _ = case acc' of
+                  OK acc' =>
+                  print ("Stage " ^ Int.toString (m - n + 1) ^ ": " ^
+                         pluralise (length acc')  "result" ^ "\n")
+                | Error e => print ("Stage " ^ Int.toString (m - n + 1) ^
+                                    " has an error!\n")
     in
-      recurse (n - 1) acc'
+      case acc' of
+          OK x => recurse (n - 1) x
+        | Error e => Error e
     end
 in
-  map (fn (bs, a) => (a, List.rev bs)) (recurse m [([], s0)])
+  resmap (map (fn (bs, a) => (a, List.rev bs))) (recurse m [([], s0)])
 end
 
 fun chaineval n t = let
   val d = rand o concl
 in
-  map (fn (a, bs) => d (last bs))
-      (chain n
-             (fn (bs1,a1) => fn (bs2, a2) => aconv (d (hd bs1)) (d (hd bs2)))
-             eval1
-             d
-             t)
+  resmap
+    (map (fn (a, bs) => d (last bs)))
+    (chain n
+           (fn (bs1,a1) => fn (bs2, a2) => aconv (d (hd bs1)) (d (hd bs2)))
+           eval1
+           d
+           t)
 end
 
 end (* struct *)
