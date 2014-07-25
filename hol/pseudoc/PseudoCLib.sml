@@ -56,7 +56,7 @@ fun subeval t =
                PULL_EXISTS :: dvalues_def :: ssubst_def :: esubst_def ::
                dsubst_def :: listTheory.APPEND_EQ_CONS ::
                minusval_def :: plusval_def :: cmpGTEval_def ::
-               bb ::
+               bb :: maxval_def ::
                lookup_array_def :: upd_array_def :: listTheory.LUPDATE_compute::
                evalths) THENC
      SIMP_CONV (srw_ss() ++ INT_REDUCE_ss)
