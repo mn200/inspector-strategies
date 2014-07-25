@@ -7,6 +7,8 @@ open indexedListsTheory
 
 val _ = new_theory "action";
 
+
+val _ = IndDefLib.export_rule_induction "relation.TC_STRONG_INDUCT"
 val _ = Hol_datatype`
   action = <|
     writes : 'rw list;
