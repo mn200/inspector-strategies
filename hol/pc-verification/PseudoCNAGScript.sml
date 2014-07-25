@@ -4,56 +4,101 @@ open lcsymtacs boolSimps
 open pred_setTheory listTheory pairTheory optionTheory
 open monadsyntax
 
-open nagTheory
 open PseudoCTheory
 open PseudoCPropsTheory
-open actionTheory actionGraphTheory
+open actionTheory dagTheory ndagTheory
 open indexedListsTheory
 
 val _ = new_theory "PseudoCNAG";
 
+val ap_action_def = Define`
+  ap_action rs ws vf m_opt =
+    apply_action <| reads := rs; writes := ws; data := vf;
+                    ident := () |> m_opt
+`;
+
+val nnode_eval_def = new_specification(
+  "nnode_eval_def", ["nnode_eval"],
+  nnode_Axiom
+    |> INST_TYPE [alpha |-> ``:value list -> value``,
+                  gamma |-> ``:actionRW``]
+    |> Q.ISPEC `λvf rs ws. ap_action rs ws vf`
+    |> SPEC
+         ``λ(g:(value list -> value, actionRW) ndag0)
+            (r:(actionRW list -> actionRW list -> memory option -> memory option,
+                actionRW) dag)
+            (rs : actionRW list)
+            (ws : actionRW list)
+            (m:memory option).
+            dagFOLD (λa. a.data a.reads a.writes) m r``
+    |> SIMP_RULE (srw_ss()) [FUN_EQ_THM]
+    |> CONV_RULE (BINDER_CONV (EVERY_CONJ_CONV
+                                 (BINDER_CONV (RENAME_VARS_CONV ["rs", "ws", "m_opt"])))))
+
+val dagFOLD_dagmap = store_thm(
+  "dagFOLD_dagmap",
+  ``(∀a b r. a ≁ₜ b ⇒ f a (f b r) = f b (f a r)) ⇒
+    ∀d a. dagFOLD f a (dagmap g d) = dagFOLD (f o polydata_upd g) a d``,
+  strip_tac >>
+  `∀a b r. a ≁ₜ b ⇒
+     (f o polydata_upd g) a ((f o polydata_upd g) b r) =
+     (f o polydata_upd g) b ((f o polydata_upd g) a r)`
+   by (rpt strip_tac >> simp[] >> first_x_assum match_mp_tac >>
+       simp[]) >>
+  POP_ASSUM_LIST (MAP_EVERY (strip_assume_tac o MATCH_MP dagFOLD_def)) >>
+  ho_match_mp_tac dag_ind >> simp[]);
+
+val ndag_eval_def =
+    dag_recursion
+      |> INST_TYPE [alpha |-> ``:(actionRW,value list -> value) nnode``,
+                    beta |-> ``:actionRW``,
+                    gamma |-> ``:memory option -> memory option``]
+      |> SPEC ``λ(a:((actionRW,value list -> value)nnode,actionRW) node)
+                 (r:memory option -> memory option)
+                 (m:memory option). r (nnode_eval a.data a.reads a.writes m)``
+      |> Q.SPEC `λm.m`
+      |> SIMP_RULE (srw_ss()) [FUN_EQ_THM]
+
 val (nagER_rules,nagER_ind,nagER_cases) = Hol_reln`
   (∀m.
-      nagER m emptyG m)
+      nagER m ε m)
 
       ∧
 
   (∀a g d m0 m.
-      a.ident ∉ idents g ∧
       a.data = DN d ∧
       nagER (apply_action (polydata_upd (K d) a) m0) g m
      ⇒
-      nagER m0 (a ⊕ g) m)
+      nagER m0 (a <+ g) m)
 
       ∧
 
   (∀a g g0 m0 m' m.
-      a.ident ∉ idents g ∧
       a.data = DG g0 ∧
       nagER m0 g0 m' ∧
       nagER m' g m
      ⇒
-      nagER m0 (a ⊕ g) m)
+      nagER m0 (a <+ g) m)
 `;
 
 val gwrites_def = Define`
-  gwrites g = BIGUNION (IMAGE (λa. set a.writes) (ag_nodes g))
+  gwrites g = BIGUNION (IMAGE (λa. set a.writes) (nodeset g))
 `;
 
 val gwrites_thm = store_thm(
   "gwrites_thm[simp]",
-  ``gwrites emptyG = ∅ ∧
-    (a.ident ∉ idents g ⇒ gwrites (a ⊕ g) = set a.writes ∪ gwrites g)``,
+  ``gwrites ε = ∅ ∧
+    gwrites (a <+ g) = set a.writes ∪ gwrites g``,
   simp[gwrites_def] >> dsimp[Once EXTENSION]);
 
 val greads_def = Define`
-  greads g = BIGUNION (IMAGE (λa. set a.reads) (ag_nodes g))
+  greads g = BIGUNION (IMAGE (λa. set a.reads) (nodeset g))
 `;
 
 val greads_thm = store_thm(
   "greads_thm[simp]",
-  ``greads emptyG = ∅ ∧
-    (a.ident ∉ idents g ⇒ greads (a ⊕ g) = set a.reads ∪ greads g)``,
+  ``greads ε = ∅ ∧
+    greads (a <+ g) = set a.reads ∪ greads g``,
   simp[greads_def] >> dsimp[Once EXTENSION]);
 
 
@@ -72,44 +117,39 @@ val wfnnode_def = Define`
                            set a.reads = greads g
 `
 
-val graph_CASES = store_thm(
-  "graph_CASES",
-  ``∀g. g = emptyG ∨ ∃a g0. a.ident ∉ idents g0 ∧ g = a ⊕ g0``,
-  ho_match_mp_tac graph_ind >> simp[] >> metis_tac[]);
-
 val nagER_total = store_thm(
   "nagER_total",
   ``∀g m0. ∃m. nagER m0 g m``,
   gen_tac >> completeInduct_on `nagSize g` >>
   gen_tac >> fs[PULL_FORALL] >>
-  Q.ISPEC_THEN `g` strip_assume_tac graph_CASES
+  Q.ISPEC_THEN `g` strip_assume_tac dag_CASES
   >- simp[Once nagER_cases] >>
   simp[] >> gen_tac >> rw[] >>
   Cases_on `a.data`
-  >- (first_x_assum (qspecl_then [`g0`, `apply_action (polydata_upd (K d) a) m0`]
+  >- (first_x_assum (qspecl_then [`d0`, `apply_action (polydata_upd (K d) a) m0`]
                                  mp_tac) >> simp[] >>
       metis_tac[nagER_rules]) >>
   first_assum (qspecl_then [`g`,`m0`]
                            (mp_tac o SIMP_RULE (srw_ss() ++ ARITH_ss) [])) >>
   disch_then (qx_choose_then `m'` assume_tac) >>
-  first_x_assum (qspecl_then [`g0`, `m'`] mp_tac) >> simp[] >>
+  first_x_assum (qspecl_then [`d0`, `m'`] mp_tac) >> simp[] >>
   metis_tac[nagER_rules]);
 
 val wfnag_empty = store_thm(
   "wfnag_empty[simp]",
-  ``wfnag emptyG``,
+  ``wfnag ε``,
   simp[Once wfnag_cases])
 
 val wfnag_add_action = store_thm(
   "wfnag_add_action",
-  ``a.ident ∉ idents g ⇒ (wfnag (a ⊕ g) ⇔ wfnag g ∧ wfnnode a)``,
+  ``wfnag (a <+ g) ⇔ wfnag g ∧ wfnnode a``,
   simp[wfnnode_def] >> simp[Once wfnag_cases, SimpLHS] >> dsimp[] >>
   simp[Once wfnag_cases, SimpRHS, SimpL ``$/\``] >>
   Cases_on `a.data` >> dsimp[] >> metis_tac[]);
 
 val nagER_empty = store_thm(
   "nagER_empty[simp]",
-  ``nagER m0 emptyG m ⇔ m = m0``,
+  ``nagER m0 ε m ⇔ m = m0``,
   simp[Once nagER_cases]);
 
 val gtouches_lemma = prove(
@@ -124,6 +164,7 @@ val gtouches_lemma = prove(
         dsimp[] >> metis_tac[]) >>
   metis_tac[]);
 
+(*
 val gtouches_lemma2 = prove(
   ``adata a = DG g1 ∧ gwrites g1 = set a.writes ∧ greads g1 = set a.reads ∧
     (∀b. b ∈ g2 ⇒ a ≁ₜ b) ⇒ ¬gtouches g1 g2``,
@@ -1175,5 +1216,6 @@ rpt (pop_assum kall_tac)
 
 
 assign_lemma
+*)
 *)
 val _ = export_theory();
