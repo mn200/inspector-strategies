@@ -109,7 +109,6 @@ val add_postaction0_def = Define`
                              src ∈ G.nodes ∧ touches src tgt ∧ tgt = a) |>
 `;
 
-val _ = IndDefLib.export_rule_induction "relation.TC_STRONG_INDUCT"
 val TC_in_R = store_thm(
   "TC_in_R",
   ``∀x y. R⁺ x y ⇒ (∃z. R x z) ∧ (∃z. R z y)``,

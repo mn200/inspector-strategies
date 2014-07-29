@@ -781,7 +781,7 @@ val waves_cover_all_nodes = store_thm(
 
 val dagmap_EQ = store_thm(
   "dagmap_EQ",
-  ``∀d. (∀x. x ∈ IMAGE adata (nodeset d) ⇒ f x = g x) ⇒
+  ``∀d. (∀x. x ∈ IMAGE action_data (nodeset d) ⇒ f x = g x) ⇒
         dagmap f d = dagmap g d``,
   ho_match_mp_tac dag_ind >> dsimp[polydata_upd_def]);
 

@@ -52,7 +52,7 @@
 #define MAX(x,y) ((x)>(y)?(x):(y))
 
 // Useful global flags
-bool debug = false;
+bool debug = true;
 bool diff = true;
 
 // Variable declarations from fields file.
