@@ -19,8 +19,6 @@ val initstate =
 
 in
 
-val results = chaineval 29 initstate;
-
 val results = chaineval 100 initstate;
 
 end
