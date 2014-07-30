@@ -2,153 +2,146 @@ open HolKernel Parse boolLib bossLib;
 
 open pred_setTheory listTheory pairTheory
 open lcsymtacs
-open ndagTheory actionTheory dagTheory
+open actionTheory
 open bagTheory
+open quotientLib
 
 val _ = new_theory "hidag";
 
-val (wfnag_rules, wfnag_ind, wfnag_cases) = Hol_reln`
-  wfnag ε ∧
+val _ = type_abbrev("node", ``:(β,α,unit)action``)
 
-  (∀a g0 g.
-      a.data = DG g0 ∧ wfnag g0 ∧
-      a.writes = [] ∧ a.reads = [] ∧
-      wfnag g
-     ⇒
-      wfnag (a <+ g)) ∧
+val _ = Datatype`hn0 = HD0 ((α,β) node) | HG0 hg0 ;
+                 hg0 = emptyHDG0 | hadd0 hn0 hg0`
 
-  (∀a d g.
-      a.data = DN d ∧ wfnag g ⇒ wfnag(a <+ g))
+val greads0_def = Define`
+  greads0 emptyHDG0 = ∅ ∧
+  greads0 (hadd0 n g) = nreads0 n ∪ greads0 g ∧
+  nreads0 (HD0 n) = set n.reads ∧
+  nreads0 (HG0 g) = greads0 g
 `;
 
-val wfnag_empty = prove(
-  ``wfnag ε``,
-  simp[wfnag_rules])
-val _ = augment_srw_ss [rewrites [wfnag_empty]]
-
-val wfnag_rule = prove(
-  ``wfnag (a <+ ε) ∧ wfnag g ⇒ wfnag (a <+ g)``,
-  Cases_on `wfnag g` >> simp[] >>
-  ONCE_REWRITE_TAC [wfnag_cases] >> simp[] >> metis_tac[]);
-
-
-(*val (wfgEQ0_rules, wfgEQ0_ind, wfgEQ0_cases) = Hol_reln`
-  wfgEQ0 ε ε ∧
-
-  (∀a1 a2 d1:(α,β)ndag0 d2.
-      wfnEQ0 a1 a2 ∧ wfgEQ0 d1 d2
-    ⇒
-      wfgEQ0 (a1 <+ d1) (a2 <+ d2)) ∧
-
-  (∀a1 a2.
-     set a1.writes = set a2.writes ∧
-     set a1.reads = set a2.reads ∧
-     (∀g01. a1.data = DG g01 ⇒
-            ∃g02. a2.data = DG g02 ∧ wfgEQ0 g01 g02) ∧
-     (∀d. a1.data = DN d ⇒ a2.data = DN d)
-    ⇒
-     wfnEQ0 a1 a2)
+val gwrites0_def = Define`
+  gwrites0 emptyHDG0 = ∅ ∧
+  gwrites0 (hadd0 n g) = nwrites0 n ∪ gwrites0 g ∧
+  nwrites0 (HD0 n) = set n.writes ∧
+  nwrites0 (HG0 g) = gwrites0 g
 `;
 
-val wfgEQ0_refl = prove(
-  ``∀d. wfgEQ0 d d``,
-  gen_tac >> completeInduct_on `nagSize d` >> qx_gen_tac `d` >>
-  rw[] >>
-  Q.ISPEC_THEN `d` strip_assume_tac dag_CASES >>
-  simp[wfgEQ0_rules]);
-
-val wfgEQ0_sym = prove(
-  ``(∀d1:(α,β)ndag0 d2. wfgEQ0 d1 d2 ⇒ wfgEQ0 d2 d1) ∧
-    (∀n1:((β,α)nnode,β)node n2. wfnEQ0 n1 n2 ⇒ wfnEQ0 n2 n1)``,
-  Induct_on `wfgEQ0` >> simp[wfgEQ0_rules] >> rpt strip_tac >>
-  match_mp_tac (last (CONJUNCTS wfgEQ0_rules)) >> simp[] >>
-  Cases_on `n1.data` >> fs[]);
-
-val wfgEQ0_empty = prove(
-  ``(wfgEQ0 ε d ⇔ d = ε) ∧ (wfgEQ0 d ε ⇔ d = ε)``,
-  ONCE_REWRITE_TAC [wfgEQ0_cases] >> simp[]);
-
-val wfn_rws = prove(
-  ``wfnEQ0 a1 a2 ⇒
-    set a1.reads = set a2.reads ∧ set a1.writes = set a2.writes``,
-  simp[Once wfgEQ0_cases]);
-
-val eq_add_rule = List.nth(CONJUNCTS wfgEQ0_rules, 1)
-
-val wfgEQ0_dagadd_elim = SIMP_RULE (srw_ss()) [PULL_FORALL]
-                                   (CONJUNCT1 (prove(
-  ``(∀d1:(α,β)ndag0 d2.
-       wfgEQ0 d1 d2 ⇒
-       ∀a1 d10.
-         d1 = a1 <+ d10 ⇒
-         ∃a2 d20. d2 = a2 <+ d20 ∧ wfgEQ0 d10 d20 ∧
-                  wfnEQ0 a1 a2) ∧
-    (∀n1 n2:((β,α)nnode,β)node. wfnEQ0 n1 n2 ⇒ T)``,
-  Induct_on `wfgEQ0` >> simp[] >> qx_genl_tac [`n1`, `n2`, `d1`, `d2`] >>
-  strip_tac >> qx_genl_tac [`a1`, `d10`] >>
-  simp[dagAdd_11_thm] >> strip_tac >> dsimp[] >- rw[] >>
-  disj2_tac >>
-  first_x_assum (qspecl_then [`a1`, `g0`] mp_tac) >> simp[] >>
-  disch_then (qx_choosel_then [`a2'`, `d20`] strip_assume_tac) >>
-  rw[] >> map_every qexists_tac [`a2'`, `d20`] >> simp[] >> reverse conj_tac
-  >- (match_mp_tac eq_add_rule >> simp[]) >>
-  qpat_assum `x ≁ₜ y` mp_tac >> imp_res_tac wfn_rws >>
-  simp[touches_def])))
-
-val wfgEQ0_trans = prove(
-  ``(∀d1:(α,β)ndag0 d2. wfgEQ0 d1 d2 ⇒ ∀d3. wfgEQ0 d2 d3 ⇒ wfgEQ0 d1 d3) ∧
-    (∀n1 n2:((β,α)nnode,β)node.
-      wfnEQ0 n1 n2 ⇒ ∀n3. wfnEQ0 n2 n3 ⇒ wfnEQ0 n1 n3)``,
-  Induct_on `wfgEQ0` >> simp[wfgEQ0_empty] >> rpt strip_tac
-  >- (imp_res_tac wfgEQ0_dagadd_elim >> rw[] >>
-      match_mp_tac eq_add_rule >> metis_tac[]) >>
-  pop_assum mp_tac >> ONCE_REWRITE_TAC [wfgEQ0_cases] >> simp[] >>
-  rpt strip_tac >> fs[] >> REV_FULL_SIMP_TAC (srw_ss()) []);
-*)
-val wfnag_add = SIMP_RULE (srw_ss()) [PULL_FORALL] (prove(
-  ``∀d. wfnag d ⇒ ∀a d0. d = a <+ d0 ⇒ wfnag (a <+ ε) ∧ wfnag d0``,
-  Induct_on `wfnag` >> simp[dagAdd_11_thm] >> rw[] >> simp[] >>
-  metis_tac [wfnag_rules]))
-
-val wfgEQ_def = Define`wfgEQ g1 g2 ⇔ g1 = g2 ∧ wfnag g1`;
-
-val wfnEQ_def = Define`wfnEQ n1 n2 ⇔ n1 = n2 ∧ wfnag (n1 <+ ε)`;
-
-val wfgEQ_equiv = store_thm(
-  "wfgEQ_equiv",
-  ``(∃g:(α,β)ndag0. wfgEQ g g) ∧
-    (∀x y:(α,β)ndag0. wfgEQ x y ⇔ wfgEQ x x ∧ wfgEQ y y ∧ wfgEQ x = wfgEQ y)``,
-  simp[wfgEQ_def, FUN_EQ_THM, EQ_IMP_THM] >> metis_tac[wfnag_rules])
-
-val hinode_ty = ``:((β,α)nnode, β) node``
-val hinode_aty = ty_antiq hinode_ty
-
-val wfnEQ_equiv = prove(
-  ``(∃n:^hinode_aty. wfnEQ n n) ∧
-    (∀x y:^hinode_aty.
-           wfnEQ x y ⇔ wfnEQ x x ∧ wfnEQ y y ∧ wfnEQ x = wfnEQ y)``,
-  simp[wfnEQ_def, FUN_EQ_THM, EQ_IMP_THM] >>
-  qexists_tac `<| reads := []; writes := []; data := DN ARB; ident := () |>` >>
-  simp[wfnag_rules])
-
-val wfnag_dagmerge0 = prove(
-  ``∀d1 d2. wfnag d1 ∧ wfnag d2 ⇒ wfnag (dagmerge d1 d2)``,
-  `∀d1. wfnag d1 ⇒ ∀d2. wfnag d2 ⇒ wfnag (dagmerge d1 d2)`
-    suffices_by metis_tac[] >>
-  Induct_on `wfnag` >> simp[] >> metis_tac[wfnag_rules]);
-
-val wfg_dagmerge = prove(
-  ``wfgEQ (d1:(α,β)ndag0) d1' ∧ wfgEQ d2 d2' ⇒ wfgEQ (dagmerge d1 d2) (dagmerge d1' d2')``,
-  rw[wfnag_dagmerge0, wfgEQ_def]);
-
-val wf_dagadd = prove(
-  ``wfnEQ a1 a2 ∧ wfgEQ (g1:(α,β)ndag0) g2 ⇒ wfgEQ (a1 <+ g1) (a2 <+ g2)``,
-  simp[wfnEQ_def, wfgEQ_def] >> rw[] >> simp[wfnag_rule]);
+val htouches0_def = Define`
+  htouches0 n1 n2 ⇔
+    (∃w. w ∈ nwrites0 n1 ∧ w ∈ nwrites0 n2) ∨
+    (∃w. w ∈ nwrites0 n1 ∧ w ∈ nreads0 n2) ∨
+    (∃w. w ∈ nwrites0 n2 ∧ w ∈ nreads0 n1)
+`;
 
 
-(*val wfg_nodebag = prove(
-  ``wfgEQ (g1:(α,β)ndag0) g2 ∧ wfnEQ a1 a2 ⇒ nodebag g1 a1 = nodebag g2 a2``,
-  simp[wfgEQ_def, wfnEQ_def])*)
+val (heq_rules, heq_ind, heq_cases) = Hol_reln`
+  (heq emptyHDG0 emptyHDG0) ∧
+  (∀n1 n2 g1 g2.
+     neq n1 n2 ∧ heq g1 g2 ⇒
+     heq (hadd0 n1 g1) (hadd0 n2 g2)) ∧
+  (∀g1 g2. heq g1 g2 ⇒ heq g2 g1) ∧
+  (∀g1 g2 g3. heq g1 g2 ∧ heq g2 g3 ⇒ heq g1 g3) ∧
+  (∀n1 n2 g. ¬htouches0 n1 n2 ⇒
+             heq (hadd0 n1 (hadd0 n2 g)) (hadd0 n2 (hadd0 n1 g))) ∧
+
+  (∀n. neq n n) ∧
+  (∀n1 n2. neq n1 n2 ⇒ neq n2 n1) ∧
+  (∀n1 n2 n3. neq n1 n2 ∧ neq n2 n3 ⇒ neq n1 n3) ∧
+  (∀g1 g2. heq g1 g2 ⇒ neq (HG0 g1) (HG0 g2))
+`;
+
+val neq_refl = List.nth(CONJUNCTS heq_rules, 5)
+val heq_refl = prove(
+  ``(∀g. heq g g)``,
+  Induct >> metis_tac[heq_rules]);
+
+val heq_sym = List.nth(CONJUNCTS heq_rules, 2)
+val heq_trans = List.nth (CONJUNCTS heq_rules, 3)
+
+val heq_equiv = prove(
+  ``∀g1 g2. heq g1 g2 ⇔ (heq g1 = heq g2)``,
+  simp[FUN_EQ_THM] >> metis_tac[heq_refl, heq_sym, heq_trans]);
+val hadd0_commutes = List.nth(CONJUNCTS heq_rules, 4)
+
+val neq_equiv = prove(
+  ``∀n1 n2. neq n1 n2 ⇔ (neq n1 = neq n2)``,
+  simp[FUN_EQ_THM] >> metis_tac[heq_rules]);
+
+val ax = TypeBase.axiom_of ``:(α,β)hn0``
+            |> INST_TYPE [gamma |-> delta, delta |-> gamma]
+            |> Q.SPEC `df`
+            |> Q.SPEC `gf`
+            |> Q.SPEC `e`
+            |> Q.SPEC `af`
+            |> BETA_RULE
+
+val gtouches0_def = Define`
+  gtouches0 g1 g2 ⇔
+    (∃w. w ∈ gwrites0 g1 ∧ w ∈ gwrites0 g2) ∨
+    (∃w. w ∈ gwrites0 g1 ∧ w ∈ greads0 g2) ∨
+    (∃w. w ∈ gwrites0 g2 ∧ w ∈ greads0 g1)
+`;
+
+val gentouches_def = Define`
+  gentouches rf wf g1 g2 ⇔
+    (∃w. w ∈ wf g1 ∧ w ∈ wf g2) ∨
+    (∃w. w ∈ wf g1 ∧ w ∈ rf g2) ∨
+    (∃w. w ∈ wf g2 ∧ w ∈ rf g1)
+`;
+
+val recursion = prove(
+  ``∀   (e : γ)
+        (af :: respects (neq ===> heq ===> (=) ===> (=)))
+        (gf :: respects (heq ===> (=) ===> (=)))
+        (df : (α,β)node -> δ)
+        (nrr : δ -> α -> bool)
+        (nrw : δ -> α -> bool)
+        (grr : γ -> α -> bool)
+        (grw : γ -> α -> bool).
+      (∀m : (α,β)node. nrr (df m) ⊆ set m.reads) ∧
+      (∀m : (α,β)node. nrw (df m) ⊆ set m.writes) ∧
+      (∀g : (α,β)hg0 gr : γ. grr gr ⊆ greads0 g ⇒ nrr (gf g gr) ⊆ greads0 g) ∧
+      (∀g : (α,β)hg0 gr : γ. grw gr ⊆ gwrites0 g ⇒ nrw (gf g gr) ⊆ gwrites0 g) ∧
+
+      (∀n : (α,β)hn0 g:(α,β)hg0 nr:δ gr:γ.
+        grr gr ⊆ greads0 g ∧ nrr nr ⊆ nreads0 n ⇒
+        grr (af n g nr gr) ⊆ nreads0 n ∪ greads0 g) ∧
+      (∀n : (α,β)hn0 g:(α,β)hg0 nr:δ gr:γ.
+        grw gr ⊆ gwrites0 g ∧ nrw nr ⊆ nwrites0 n ⇒
+        grw (af n g nr gr) ⊆ nwrites0 n ∪ gwrites0 g) ∧
+      grr e = ∅ ∧ grw e = ∅ ∧
+
+      (∀m n mr nr g r.
+         ¬htouches0 m n ∧ ¬gentouches nrr nrw mr nr ⇒
+           af m (hadd0 n g) mr (af n g nr r) =
+           af n (hadd0 m g) nr (af m g mr r)) ⇒
+      ∃(hf :: respects (heq ===> (=)))
+       (nf :: respects (neq ===> ((=) : δ -> δ -> bool))).
+        hf emptyHDG0 = e ∧
+        (∀n g. hf (hadd0 n g : (α,β)hg0) = af n g (nf n : δ) (hf g) : γ) ∧
+        (∀n. nf (HD0 n : (α,β)hn0) = df n : δ) ∧
+        (∀g. nf (HG0 g) = gf g (hf g))``,
+  simp[respects_def, combinTheory.W_DEF, RES_EXISTS_THM, FUN_REL,
+       RES_FORALL_THM] >>
+  rpt strip_tac >>
+  qx_choosel_then [`nfn`, `hfn`] strip_assume_tac ax >>
+  qexists_tac `hfn` >> simp[] >>
+  `(∀n. nrr (nfn n) ⊆ nreads0 n ∧ nrw (nfn n) ⊆ nwrites0 n) ∧
+   (∀g. grr (hfn g) ⊆ greads0 g ∧ grw (hfn g) ⊆ gwrites0 g)`
+    by (ho_match_mp_tac (TypeBase.induction_of ``:(α,β)hg0``) >>
+        simp[greads0_def, gwrites0_def]) >>
+  `(∀g1 g2. heq g1 g2 ⇒ hfn g1 = hfn g2) ∧
+   (∀n1 n2. neq n1 n2 ⇒ nfn n1 = nfn n2)`
+    by (Induct_on `heq` >> simp[] >> rpt strip_tac
+        >- fs[FUN_EQ_THM] >>
+        first_x_assum match_mp_tac >> simp[] >>
+        simp[gentouches_def] >> fs[htouches0_def] >>
+        metis_tac[SUBSET_DEF]) >>
+  simp[] >> qexists_tac `nfn` >> simp[])
+
+val hadd0_rsp = List.nth(CONJUNCTS heq_rules, 1)
+val HG0_rsp = last (CONJUNCTS heq_rules)
 
 fun define_quotient {types,defs,thms,poly_preserves,poly_respects,respects} =
     let
@@ -165,436 +158,232 @@ fun define_quotient {types,defs,thms,poly_preserves,poly_respects,respects} =
       map save_thm named_new
     end
 
-val ndinst = INST_TYPE [alpha |-> ``:(β,α)nnode``]
-
-val HD0_def = Define`
-  HD0 rs ws d = <| reads := rs; writes := ws; data := DN d; ident := () |>
-`;
-
-val wfnEQ_HD0 = prove(
-  ``wfnEQ (HD0 rs ws d) (HD0 rs ws d)``,
-  simp[wfnEQ_def, HD0_def, Once wfnag_cases]);
-
-val HG0_def = Define`
-  HG0 (g:(α,β)ndag0) : ^hinode_aty =
-   <| reads := []; writes := []; data := DG g; ident := () |>
-`;
-
-val wfnEQ_HG0 = prove(
-  ``wfgEQ (g1:(α,β)ndag0) g2 ⇒ wfnEQ (HG0 g1) (HG0 g2)``,
-  simp[wfgEQ_def, wfnEQ_def] >> rw[] >>
-  simp[Once wfnag_cases, HG0_def]);
+val neq_pull_hg = prove(
+  ``(∀g1:(α,β)hg0 g2. heq g1 g2 ⇒ T) ∧
+    (∀n1:(α,β)hn0 n2.
+       neq n1 n2 ⇒
+       (∀g1. n1 = HG0 g1 ⇒ ∃g2. n2 = HG0 g2 ∧ heq g1 g2) ∧
+       (∀g2. n2 = HG0 g2 ⇒ ∃g1. n1 = HG0 g1 ∧ heq g1 g2))``,
+  Induct_on `heq` >> simp[] >> rpt strip_tac >> rw[] >>
+  metis_tac[heq_rules, heq_refl])
+    |> CONJUNCT2
+    |> SIMP_RULE (srw_ss()) [IMP_CONJ_THM, FORALL_AND_THM,
+                             GSYM RIGHT_FORALL_IMP_THM]
 
 val HG0_11 = prove(
-  ``wfnEQ (HG0 g1) (HG0 g2) ⇔ wfgEQ g1 g2``,
-  simp[HG0_def, EQ_IMP_THM, RES_FORALL_THM, wfnEQ_def, wfgEQ_def] >> rw[]
-  >- (pop_assum mp_tac >> simp[Once wfnag_cases, SimpL ``$==>``]) >>
-  simp[Once wfnag_cases]);
+  ``neq (HG0 g1) (HG0 g2) ⇔ heq g1 g2``,
+  simp[EQ_IMP_THM, HG0_rsp] >> strip_tac >>
+  imp_res_tac (CONJUNCT1 neq_pull_hg) >> fs[]);
+
+val neq_pull_hd = prove(
+  ``(∀g1:(α,β)hg0 g2. heq g1 g2 ⇒ T) ∧
+    (∀n1:(α,β)hn0 n2.
+       neq n1 n2 ⇒
+       (∀a1. n1 = HD0 a1 ⇒ n2 = HD0 a1) ∧
+       (∀a2. n2 = HD0 a2 ⇒ n1 = HD0 a2))``,
+  Induct_on `heq` >> simp[])
+   |> CONJUNCT2
+   |> SIMP_RULE (srw_ss()) [IMP_CONJ_THM, FORALL_AND_THM,
+                            GSYM RIGHT_FORALL_IMP_THM]
 
 val HD0_11 = prove(
-  ``wfnEQ (HD0 rs1 ws1 d1 : ^hinode_aty) (HD0 rs2 ws2 d2) ⇔
-      rs1 = rs2 ∧ ws1 = ws2 ∧ d1 = d2``,
-  simp[wfnEQ_def, HD0_def, wfnag_rules, EQ_IMP_THM]);
+  ``neq (HD0 n1) (HD0 n2) ⇔ n1 = n2``,
+  simp[EQ_IMP_THM, neq_refl] >> strip_tac >>
+  imp_res_tac neq_pull_hd >> fs[]);
 
-val dagAdd_11' = prove(
-  ``∀(g2::respects wfgEQ) (g1::respects wfgEQ) (g::respects wfgEQ)
-     (b::respects wfnEQ) (a::respects wfnEQ).
-       (wfgEQ (a <+ g) (b <+ g) ⇔ wfnEQ a b) ∧
-       (wfgEQ (a <+ g1) (a <+ g2) ⇔ wfgEQ g1 g2)``,
-  simp[wfgEQ_def, wfnEQ_def, quotientTheory.respects_def,
-       combinTheory.W_DEF, RES_FORALL_THM, wfnag_rule]);
+val heq_empty = prove(
+  ``(∀g1:(α,β)hg0 g2.
+      heq g1 g2 ⇒ (g1 = emptyHDG0 ⇔ g2 = emptyHDG0)) ∧
+    (∀n1:(α,β)hn0 n2. neq n1 n2 ⇒ T)``,
+  Induct_on `heq` >> simp[]) |> CONJUNCT1
 
-val hidag_ind0 = prove(
-  ``∀ (P :: respects (wfgEQ ===> $=)) (Q :: respects (wfnEQ ===> $=)).
-     P ε ∧
-     (∀(a::respects wfnEQ) (d::respects wfgEQ). Q a ∧ P d ⇒ P (a <+ d)) ∧
-     (∀rs ws d. Q (HD0 rs ws d)) ∧
-     (∀d::respects wfgEQ. P d ⇒ Q (HG0 d)) ⇒
-     (∀d::respects wfgEQ. P d) ∧ (∀a::respects wfnEQ. Q a)``,
-  simp[RES_FORALL_THM, combinTheory.W_DEF, quotientTheory.respects_def,
-       quotientTheory.FUN_REL, wfgEQ_def, wfnEQ_def, HD0_def, HG0_def,
-       GSYM RIGHT_FORALL_IMP_THM, AND_IMP_INTRO] >>
-  rpt gen_tac >> strip_tac >>
-  `∀d. wfnag d ⇒ P d`
-    by (Induct_on `wfnag` >> simp[] >> rpt strip_tac >>
-        first_x_assum match_mp_tac >>
-        simp[Once wfnag_cases, SimpL ``$/\``] >>
-        Q.ISPEC_THEN `a` strip_assume_tac action_literal_nchotomy >>
-        rw[] >> fs[oneTheory.one]) >> simp[] >>
-  `∀d. wfnag d ⇒ ∀a. d = a <+ ε ⇒ Q a` suffices_by metis_tac[] >>
-  Induct_on `wfnag` >> simp[] >> rpt strip_tac >>
-  Q.ISPEC_THEN `a` strip_assume_tac action_literal_nchotomy >>
-  fs[oneTheory.one]);
-
-val empty_not_hidagAdd0 = prove(
-  ``¬wfgEQ ε (a <+ d)``,
-  simp[wfgEQ_def]);
+val empty_not_hadd0 = prove(
+  ``¬heq emptyHDG0 (hadd0 a d)``,
+  strip_tac >> imp_res_tac heq_empty >> fs[]);
 
 val HD_not_HG0 = prove(
-  ``¬wfnEQ (HD0 rs ws d) (HG0 g)``,
-  simp[wfnEQ_def, HD0_def, HG0_def, action_component_equality]);
+  ``¬neq (HD0 n) (HG0 g)``,
+  strip_tac >> imp_res_tac neq_pull_hd >> fs[]);
 
-val nnode_measure_def = Define`
-  nnode_measure =
-    nnodeREC (K 1) (λg r. BAG_CARD (nodebag g) + (dagSIGMA I r + 1))
-`;
+val gnrws0_rsp0 = prove(
+  ``(∀g1 : (α,β)hg0 g2.
+      heq g1 g2 ⇒ greads0 g1 = greads0 g2 ∧ gwrites0 g1 = gwrites0 g2) ∧
+    (∀n1 : (α,β)hn0 n2.
+      neq n1 n2 ⇒ nreads0 n1 = nreads0 n2 ∧ nwrites0 n1 = nwrites0 n2)``,
+  Induct_on `heq` >>
+  simp[greads0_def, gwrites0_def, AC UNION_ASSOC UNION_COMM])
+    |> SIMP_RULE (srw_ss()) [FORALL_AND_THM, IMP_CONJ_THM,
+                             GSYM RIGHT_FORALL_IMP_THM]
 
-val nag_measure_def = Define`
-  nag_measure = dagSIGMA (λn. 1 + nnode_measure n)
-`;
-
-val nag_measure_thm = prove(
-  ``nag_measure ε = 0 ∧
-    nag_measure (a <+ d) =
-      nag_measure d + 1 +
-      case a.data of
-          DN d => 1
-        | DG g => 1 + nag_measure g``,
-  simp[nag_measure_def,nnode_measure_def] >>
-  Cases_on `a.data` >> simp[] >>
-  simp[GSYM nnode_measure_def] >>
-  simp[GSYM arithmeticTheory.ADD1,
-       arithmeticTheory.ADD_CLAUSES] >>
-  simp[arithmeticTheory.ADD1] >>
-  qid_spec_tac `g` >> pop_assum kall_tac >>
-  simp[Once EQ_SYM_EQ] >>
-  ho_match_mp_tac dag_ind >> simp[BAG_CARD_THM])
-
-val hinode_size0_def = Define`
-  hinode_size0 a = case a.data of DN v => 1 | DG g => 1 + nag_measure g
-`;
-
-val hinode_size0_thm = prove(
-  ``hinode_size0 (HD0 rs ws d : ^hinode_aty) = 1 ∧
-    hinode_size0 (HG0 (g:(α,β)ndag0)) = 1 + nag_measure g``,
-  simp[hinode_size0_def, HD0_def, HG0_def]);
-
-val nag_measure_rsp = prove(
-  ``wfgEQ (d1:(α,β)ndag0) d2 ⇒ nag_measure d1 = nag_measure d2``,
-  simp[wfgEQ_def]);
-
-val hinode_size0_rsp = prove(
-  ``wfnEQ (n1: ^hinode_aty) n2 ⇒ hinode_size0 n1 = hinode_size0 n2``,
-  simp[wfnEQ_def]);
-
-val nag_measure_thm' = prove(
-  ``nag_measure ε = 0 ∧
-    nag_measure (a <+ d : (α,β)ndag0) = hinode_size0 a + nag_measure d + 1``,
-  simp[nag_measure_thm, hinode_size0_def] >> Cases_on `a.data` >> simp[]);
-
-val (allnodes_rules, allnodes_ind, allnodes_cases) = Hol_reln`
-  (∀a n d. nnodes a n ⇒ allnodes (a <+ d) n) ∧
-  (∀a n d. allnodes d n ⇒ allnodes (a <+ d) n) ∧
-  (∀a v. a.data = DN v ⇒ nnodes a <| reads := a.reads; writes := a.writes;
-                                      data := v; ident := ()|>) ∧
-  (∀a n g. a.data = DG g ∧ allnodes g n ⇒ nnodes a n)
-`;
-
-val allnodes_rsp = prove(
-  ``wfgEQ (g1:(α,β)ndag0) g2 ⇒ allnodes g1 = allnodes g2``,
-  simp[wfgEQ_def]);
-
-val nnodes_rsp = prove(
-  ``wfnEQ (n1 : ^hinode_aty) n2 ⇒ nnodes n1 = nnodes n2``,
-  simp[wfnEQ_def]);
-
-val allnodes_empty = prove(
-  ``(∀(d:(α,β)ndag0) n. allnodes d n ⇒ d <> ε) ∧
-    (∀(a:^hinode_aty) n. nnodes a n ⇒ T)``,
-  Induct_on `allnodes` >> simp[]) |> CONJUNCT1 |> SIMP_RULE (srw_ss()) []
-
-val allnodes_add_E = prove(
-  ``(∀(d:(α,β)ndag0) n.
-      allnodes d n ⇒ ∀a d0. d = a <+ d0 ⇒ nnodes a n ∨ allnodes d0 n) ∧
-    (∀(a:^hinode_aty) n. nnodes a n ⇒ T)``,
-  Induct_on `allnodes` >> simp[dagAdd_11_thm] >> rpt strip_tac >> rw[] >>
-  metis_tac[allnodes_rules]) |> CONJUNCT1 |> SIMP_RULE (srw_ss()) [PULL_FORALL]
-
-val allnodes_add = prove(
-  ``allnodes (a <+ d) n ⇔ nnodes a n ∨ allnodes d n``,
-  metis_tac[allnodes_rules, allnodes_add_E]);
-
-val allnodes_UNION = prove(
-  ``allnodes (a <+ d) = nnodes a ∪ allnodes d``,
-  simp[EXTENSION, allnodes_add, SPECIFICATION]);
-
-val allnodes_emptyset = prove(
-  ``allnodes ε = ∅``,
-  simp[EXTENSION, SPECIFICATION, allnodes_empty]);
-
-val nnodes_thm = prove(
-  ``nnodes (HD0 rs ws d : ^hinode_aty) =
-      {<| reads := rs; writes := ws; data := d; ident := () |>} ∧
-    nnodes (HG0 g : ^hinode_aty) = allnodes g``,
-  conj_tac >> simp[HD0_def, HG0_def, Once allnodes_cases, FUN_EQ_THM]);
-
-val greads_def = Define`
-  greads d = BIGUNION (IMAGE (λa. set a.reads) (allnodes d))
-`;
-
-val gwrites_def = Define`
-  gwrites d = BIGUNION (IMAGE (λa. set a.writes) (allnodes d))
-`;
-
-val nreads_def = Define`
-  nreads n = BIGUNION (IMAGE (λa. set a.reads) (nnodes n))
-`;
-
-val nwrites_def = Define`
-  nwrites n = BIGUNION (IMAGE (λa. set a.writes) (nnodes n))
-`
-
-val greads_rsp = prove(
-  ``wfgEQ (g1 : (α,β)ndag0) g2 ⇒ greads g1 = greads g2``,
-  simp[wfgEQ_def]);
-
-val gwrites_rsp = prove(
-  ``wfgEQ (g1 : (α,β)ndag0) g2 ⇒ gwrites g1 = gwrites g2``,
-  simp[wfgEQ_def]);
-
-val nreads_rsp = prove(
-  ``wfnEQ (n1 : ^hinode_aty) n2 ⇒ nreads n1 = nreads n2``,
-  simp[wfnEQ_def]);
-
-val nwrites_rsp = prove(
-  ``wfnEQ (n1 : ^hinode_aty) n2 ⇒ nwrites n1 = nwrites n2``,
-  simp[wfnEQ_def]);
-
-val greads_thm = prove(
-  ``greads ε = ∅ ∧
-    greads (a <+ d) = nreads a ∪ greads d``,
-  simp[nreads_def, greads_def, allnodes_emptyset, allnodes_UNION]);
-
-val gwrites_thm = prove(
-  ``gwrites ε = ∅ ∧
-    gwrites (a <+ d) = nwrites a ∪ gwrites d``,
-  simp[nwrites_def, gwrites_def, allnodes_emptyset, allnodes_UNION]);
-
-val nreads_thm = prove(
-  ``nreads (HD0 rs ws d) = set rs ∧ nreads (HG0 g) = greads g``,
-  simp[nnodes_thm, nreads_def, greads_def]);
-
-val nwrites_thm = prove(
-  ``nwrites (HD0 rs ws d) = set ws ∧ nwrites (HG0 g) = gwrites g``,
-  simp[nwrites_def, nnodes_thm, gwrites_def]);
-
-val htouches0_def = Define`
-  htouches0 (n1:^hinode_aty) n2 ⇔
-    (∃w. w ∈ nwrites n1 ∧ w ∈ nwrites n2) ∨
-    (∃w. w ∈ nwrites n1 ∧ w ∈ nreads n2) ∨
-    (∃w. w ∈ nwrites n2 ∧ w ∈ nreads n1)
-`;
+val (greads_rsp, gwrites_rsp, nreads_rsp, nwrites_rsp) =
+    case CONJUNCTS gnrws0_rsp0 of
+        [a,b,c,d] => (a,b,c,d)
+      | _ => raise mk_HOL_ERR "hidagScript" "" "rws_rsp theorem failed"
 
 val htouches_rsp = prove(
-  ``wfnEQ (n1:^hinode_aty) n1' ∧ wfnEQ (n2:^hinode_aty) n2' ⇒
+  ``neq (n1:(α,β)hn0) n1' ∧ neq (n2:(α,β)hn0) n2' ⇒
     (htouches0 n1 n2 ⇔ htouches0 n1' n2')``,
-  simp[wfnEQ_def]);
+  simp[htouches0_def] >> metis_tac[nreads_rsp, nwrites_rsp]);
 
-val
+val gnchotomy0 = prove(
+  ``∀d. heq d emptyHDG0 ∨
+        ∃(n::respects neq) (d0::respects heq). heq d (hadd0 n d0)``,
+  simp[RES_EXISTS_THM, respects_def, combinTheory.W_DEF] >> Cases >>
+  simp[heq_refl, neq_refl] >> metis_tac[heq_refl]);
 
-val dagAdd_11_thm' = prove(
-  ``wfgEQ (a <+ g) (b <+ h) ⇔
-      wfnEQ a b ∧ wfgEQ g h ∨
-      a ≁ₜ b ∧ ∃g0::respects wfgEQ. wfgEQ g (b <+ g0) ∧ wfgEQ h (a <+ g0)``,
-  simp[wfgEQ_def, dagAdd_11_thm, wfnEQ_def, quotientTheory.respects_def,
-       combinTheory.W_DEF, RES_EXISTS_THM] >>
-  metis_tac [wfnag_rule, wfnag_add])
-
-val touches_SYM' = prove(
-  ``a1 : ^hinode_aty ∼ₜ a2 : ^hinode_aty ⇒ a2 ∼ₜ a1``,
-  simp[touches_SYM]);
-
-
-val [hidagmerge_def, hidagAdd_commutes, hidagAdd_11, HG_11, HD_11, hidag_ind,
-     empty_not_hidagadd, HD_not_HG, hidagAdd_11_thm, hinode_measure_thm,
-     hidag_measure_thm, htouches_SYM, hnnodes_thm, hdnodes_add, hdnodes_empty, hdreads_thm,
-     hnreads_thm] =
+val [HG_11, HD_11, hidag_ind, empty_not_hidagadd, HD_not_HG,
+     hidag_recursion, reads_thm, writes_thm, hidagAdd_commutes,
+     htouches_def, hidag_nchotomy] =
 define_quotient {
-  types = [{name = "hidag", equiv = wfgEQ_equiv},
-           {name = "hinode", equiv = wfnEQ_equiv}],
-  defs = [("emptyHDG",``emptydag : (α,β)ndag0``),
-          ("hidagmerge", ``dagmerge : (α,β)ndag0 -> (α,β)ndag0 -> (α,β)ndag0``),
-          ("hidagAdd", ``dagAdd : ^hinode_aty -> (α,β) ndag0 -> (α,β) ndag0``),
-          ("HD", ``HD0 : β list -> β list -> α -> ((β,α)nnode,β)node``),
-          ("HG", ``HG0 : (α,β)ndag0 -> ((β,α)nnode,β)node``),
-          ("htouches",
-           ``touches : ^hinode_aty -> ((β,α)nnode,β)node -> bool``),
-          ("hinode_measure", ``hinode_size0 : ^hinode_aty -> num``),
-          ("hidag_measure", ``nag_measure : (α,β)ndag0 -> num``),
-          ("hdnodes", ``allnodes : (α,β)ndag0 -> (α,β)node set``),
-          ("hnnodes", ``nnodes : ^hinode_aty -> (α,β)node set``),
-          ("hdreads", ``greads : (α,β)ndag0 -> β set``),
-          ("hnreads", ``nreads : ^hinode_aty -> β set``)
-          (* ("hinodebag", ``nodebag : (α,β)ndag0 -> ((β,α)nnode,β)node bag``) *)],
-  thms = [("hidagmerge_def", ndinst dagmerge_def),
-          ("hidagAdd_commutes", ndinst dagAdd_commutes),
-          ("hidagAdd_11[simp]", dagAdd_11'),
-          ("HG_11[simp]", HG0_11),
+  types = [{name = "hidag", equiv = heq_equiv},
+           {name = "hinode", equiv = neq_equiv}],
+  defs = [("emptyHDG",``emptyHDG0 : (α,β)hg0``),
+          ("hidagAdd", ``hadd0 : (α,β)hn0 -> (α,β) hg0 -> (α,β) hg0``),
+          ("HD", ``HD0 : (α,β)node -> (α,β)hn0``),
+          ("HG", ``HG0 : (α,β)hg0 -> (α,β)hn0``),
+          ("htouches", ``htouches0 : (α,β)hn0 -> (α,β)hn0 -> bool``),
+          ("greads", ``greads0 : (α,β)hg0 -> α set``),
+          ("gwrites", ``gwrites0 : (α,β)hg0 -> α set``),
+          ("nreads", ``nreads0 : (α,β)hn0 -> α set``),
+          ("nwrites", ``nwrites0 : (α,β)hn0 -> α set``)],
+  thms = [("HG_11[simp]", HG0_11),
           ("HD_11[simp]", HD0_11),
-          ("hidag_ind", hidag_ind0),
-          ("empty_not_hidagAdd[simp]", empty_not_hidagAdd0),
+          ("hidag_ind", TypeBase.induction_of ``:(α,β)hg0``),
+          ("empty_not_hidagAdd[simp]", empty_not_hadd0),
           ("HD_not_HG[simp]", HD_not_HG0),
-          ("hidagAdd_11_thm", dagAdd_11_thm'),
-          ("hinode_measure_thm[simp]", hinode_size0_thm),
-          ("hidag_measure_thm[simp]", nag_measure_thm'),
-          ("htouches_SYM", touches_SYM'),
-          ("hnnodes_thm[simp]", nnodes_thm),
-          ("hdnodes_add[simp]", allnodes_UNION),
-          ("hdnodes_empty[simp]", allnodes_emptyset),
-          ("hdreads_thm[simp]", greads_thm),
-          ("hnreads_thm[simp]", nreads_thm)
-          (* ("hinodebag_def", ndinst nodebag_def), *)],
+          ("hidag_recursion", recursion),
+          ("reads_thm[simp]", greads0_def),
+          ("writes_thm[simp]", gwrites0_def),
+          ("hidagAdd_commutes", hadd0_commutes),
+          ("htouches_def", INST_TYPE [gamma |-> beta] htouches0_def),
+          ("hidag_nchotomy", gnchotomy0)],
   poly_preserves = [],
   poly_respects = [],
-  respects = [wfg_dagmerge, wfgEQ_emptydag, wf_dagadd, wfn_touches,
-              wfnEQ_HD0, wfnEQ_HG0, nag_measure_rsp, hinode_size0_rsp,
-              allnodes_rsp, nnodes_rsp, greads_rsp, nreads_rsp]}
+  respects = [hadd0_rsp, HG0_rsp, htouches_rsp,
+              greads_rsp, nreads_rsp, nwrites_rsp, gwrites_rsp]}
 
-val _ = remove_ovl_mapping "ε" {Name = "emptydag", Thy = "dag"}
 val _ = overload_on("ε", ``emptyHDG``)
-val _ = remove_termtok {term_name = "dagAdd", tok = "<+"}
-
 val _ = set_mapped_fixity { fixity = Infixr 501, term_name = "hidagAdd",
                             tok = "<+" }
 
-val (hidagR_rules, hidagR_ind, hidagR_cases) = Hol_reln`
-  hidagR e af df gf ε e
+fun firstn_conjs_under_exists n th = let
+  val (v, body) = dest_exists (concl th)
+  val body_th = ASSUME body
+  val wanted_body = LIST_CONJ (List.take(CONJUNCTS body_th, n))
+  val wanted = mk_exists(v, concl wanted_body)
+  val ex_th0 = EXISTS(wanted, v) wanted_body
+in
+  CHOOSE(v,th) ex_th0
+end
 
-    ∧
+val hnodebag_def = new_specification(
+  "hnodebag_def", ["hnodebag"],
+  hidag_recursion
+    |> INST_TYPE [gamma |-> ``:(α,β)hinode bag``, delta |-> bool]
+    |> Q.SPECL[`{||}`, `λn g nr gr. BAG_INSERT n gr`, `ARB`,
+               `ARB`, `K ∅`, `K ∅`, `K ∅`, `K ∅`]
+    |> SIMP_RULE (srw_ss()) [BAG_INSERT_commutes, RIGHT_EXISTS_AND_THM]
+    |> firstn_conjs_under_exists 2);
+val _ = export_rewrites ["hnodebag_def"]
 
-  (∀a g ar gr.
-     hinodeR e af df gf a ar ∧
-     hidagR e af df gf g gr
-    ⇒
-     hidagR e af df gf (a <+ g) (af a g ar gr))
+val _ = overload_on("IN", ``λa d. BAG_IN a (hnodebag d)``)
 
-    ∧
+val hidag_ind0 = save_thm(
+  "hidag_ind0",
+  hidag_ind |> Q.SPECL [`K T`, `P`] |> SIMP_RULE (srw_ss()) []
+            |> Q.GEN `P`);
 
-  (∀g gr.
-     hidagR e af df gf g gr
-    ⇒
-     hinodeR e af df gf (HG g) (gf g gr))
+val _ = TypeBase.write [
+  TypeBasePure.mk_nondatatype_info
+          (``:(α,β)hidag``,
+           {encode = NONE, induction = SOME hidag_ind0,
+            nchotomy = SOME hidag_nchotomy, size = NONE})
+]
 
-    ∧
+val _ = adjoin_to_theory
+          {sig_ps = NONE,
+           struct_ps = SOME (fn pps =>
+            (PP.add_string pps
+             "val _ = TypeBase.write [\n\
+             \  TypeBasePure.mk_nondatatype_info (\n\
+             \    Type.mk_thy_type{Args = [alpha,beta], Thy = \"hidag\", Tyop = \"hidag\"},\n\
+             \    {encode = NONE, induction = SOME hidag_ind0,\n\
+             \     nchotomy = SOME hidag_nchotomy, size = NONE})]";
+             PP.add_newline pps))}
 
-  (∀rs ws d.
-     hinodeR e af df gf (HD rs ws d) (df rs ws d))
-`;
+val hnodebag_FINITE = store_thm(
+  "hnodebag_FINITE[simp]",
+  ``∀d. FINITE_BAG (hnodebag d)``,
+  Induct >> simp[]);
 
-val hidagR_total = prove(
-  ``(∀d. ∃dr. hidagR e af df gf d dr) ∧
-    (∀n. ∃nr. hinodeR e af df gf n nr)``,
-  ho_match_mp_tac hidag_ind >> metis_tac[hidagR_rules]);
+val hnodebag_EQ_empty = store_thm(
+  "hnodebag_EQ_empty[simp]",
+  ``(hnodebag d = {||} ⇔ d = ε) ∧ ({||} = hnodebag d ⇔ d = ε)``,
+  Cases_on `d` >> simp[]);
 
-val hidagR_unique0 = prove(
-  ``(∀n1 n2 g gr nr1 nr2.
-      ¬htouches n1 n2 ⇒
-      af n1 (n2 <+ g) nr1 (af n2 g nr2 gr) =
-      af n2 (n1 <+ g) nr2 (af n1 g nr1 gr)) ⇒
-    ∀N.
-      (∀g gr1 gr2.
-         hidag_measure g < N ∧
-         hidagR e af df gf g gr1 ∧ hidagR e af df gf g gr2
-        ⇒
-         (gr2 = gr1)) ∧
-      (∀n nr1 nr2.
-         hinode_measure n < N ∧ hinodeR e af df gf n nr1 ∧
-         hinodeR e af df gf n nr2 ⇒ (nr1 = nr2))``,
-  strip_tac >> gen_tac >> completeInduct_on `N` >>
-  conj_tac
-  >- (qx_genl_tac [`g`, `gr1`, `gr2`] >> strip_tac >>
-      Q.UNDISCH_THEN `hidagR e af df gf g gr1` mp_tac >>
-      ONCE_REWRITE_TAC [hidagR_cases] >> strip_tac
-      >- (rw[] >> pop_assum mp_tac >> simp[Once hidagR_cases]) >>
-      qabbrev_tac `RR = hidagR e af df gf` >>
-      qabbrev_tac `RN = hinodeR e af df gf` >>
-      qmatch_assum_rename_tac `g = a1 <+ g1` [] >> rw[] >>
-      qmatch_assum_rename_tac `RN a1 ar1` [] >>
-      Q.UNDISCH_THEN `RR (a1 <+ g1) gr2` mp_tac >>
-      simp[Once hidagR_cases, Abbr`RR`] >>
-      simp[hidagAdd_11_thm] >> strip_tac >> rw[] >> fs[]
-      >- (`hinode_measure a < hinode_measure a + hidag_measure g + 1`
-            by simp[] >> metis_tac[DECIDE ``y < x + y + 1n``]) >>
-      qmatch_assum_rename_tac `¬htouches a1 a2` [] >>
-      qmatch_assum_rename_tac `RN a2 ar2` [] >>
-      qabbrev_tac `RR = hidagR e af df gf` >>
-      qmatch_assum_rename_tac `RR (a2 <+ g0) gr2` [] >>
-      qmatch_assum_rename_tac `RR (a1 <+ g0) gr1` [] >>
-      `∃gr0. RR g0 gr0` by metis_tac[hidagR_total] >>
-      `RR (a1 <+ g0) (af a1 g0 ar1 gr0)` by metis_tac[hidagR_rules] >>
-      `hidag_measure (a1 <+ g0) <
-         hinode_measure a1 + (hinode_measure a2 + hidag_measure g0 + 1) + 1`
-        by simp[] >>
-      `gr1 = af a1 g0 ar1 gr0` by metis_tac[] >> rw[] >>
-      `RR (a2 <+ g0) (af a2 g0 ar2 gr0)` by metis_tac[hidagR_rules] >>
-      `hidag_measure (a2 <+ g0) <
-         hinode_measure a1 + (hinode_measure a2 + hidag_measure g0 + 1) + 1`
-        by simp[] >>
-      `gr2 = af a2 g0 ar2 gr0` by metis_tac[] >> rw[] >>
-      first_x_assum match_mp_tac >> metis_tac[htouches_SYM]) >>
-  rpt strip_tac >>
-  Q.UNDISCH_THEN `hinodeR e af df gf n nr1` mp_tac >>
-  simp[Once hidagR_cases] >> reverse strip_tac >> rw[]
-  >- (pop_assum mp_tac >> simp[Once hidagR_cases]) >>
-  fs[] >>
-  qpat_assum `hinodeR xx yy zz aa bb cc` mp_tac >>
-  simp[Once hidagR_cases] >> rw[] >>
-  `hidag_measure g < 1 + hidag_measure g` by simp[] >>
-  metis_tac[])
+val gentouches_htouches = store_thm(
+  "gentouches_htouches[simp]",
+  ``gentouches nreads nwrites = htouches``,
+  simp[gentouches_def, htouches_def, FUN_EQ_THM]);
 
-val hidagR_unique = prove(
-  ``(∀n1 n2 g gr nr1 nr2.
-      ¬htouches n1 n2 ⇒
-      af n1 (n2 <+ g) nr1 (af n2 g nr2 gr) =
-      af n2 (n1 <+ g) nr2 (af n1 g nr1 gr)) ⇒
-    (∀g gr1 gr2.
-       hidagR e af df gf g gr1 ∧ hidagR e af df gf g gr2 ⇒
-       gr2 = gr1) ∧
-    ∀n nr1 nr2.
-       hinodeR e af df gf n nr1 ∧ hinodeR e af df gf n nr2 ⇒
-       nr1 = nr2``,
-  metis_tac[hidagR_unique0, DECIDE ``x < x + 1n``])
+val hdmap_def = new_specification("hdmap_def",
+  ["hdmap", "nmap"],
+  hidag_recursion
+    |> INST_TYPE [gamma |-> ``:(α,γ)hidag``,
+                  delta |-> ``:(α,γ)hinode``]
+    |> Q.SPECL [`ε`, `λn g nr gr. nr <+ gr`, `λg gr. HG gr`,
+                `λn. HD (polydata_upd f n)`, `nreads`, `nwrites`,
+                `greads`, `gwrites`]
+    |> SIMP_RULE (srw_ss()) []
+    |> SIMP_RULE (srw_ss()) [SUBSET_DEF, Once hidagAdd_commutes]
+    |> Q.GEN `f` |> SIMP_RULE (srw_ss()) [SKOLEM_THM])
+val _ = export_rewrites ["hdmap_def"]
 
-val hidag_Axiom = store_thm(
-  "hidag_Axiom",
-  ``∀e af df gf.
-     (∀n1 n2 g gr nr1 nr2.
-       ¬htouches n1 n2 ⇒
-       af n1 (n2 <+ g) nr1 (af n2 g nr2 gr) =
-       af n2 (n1 <+ g) nr2 (af n1 g nr1 gr)) ⇒
-     ∃hf nf.
-       (hf ε = e) ∧
-       (∀n d. hf (n <+ d) = af n d (nf n) (hf d)) ∧
-       (∀rs ws d. nf (HD rs ws d) = df rs ws d) ∧
-       (∀d. nf (HG d) = gf d (hf d))``,
-  rpt gen_tac >> strip_tac >>
-  map_every qexists_tac [
-    `λd. @r. hidagR e af df gf d r`,
-    `λn. @r. hinodeR e af df gf n r`] >>
-  rpt strip_tac >> simp[]
-  >- simp[Once hidagR_cases]
-  >- (`∃nr. hinodeR e af df gf n nr` by metis_tac[hidagR_total] >>
-      `∀nr'. hinodeR e af df gf n nr' ⇔ (nr' = nr)`
-        by metis_tac[hidagR_unique] >> simp[] >>
-      `∃dr. hidagR e af df gf d dr` by metis_tac[hidagR_total] >>
-      `∀dr'. hidagR e af df gf d dr' ⇔ (dr' = dr)`
-        by metis_tac[hidagR_unique] >> simp[] >>
-      `hidagR e af df gf (n <+ d) (af n d nr dr)`
-        by metis_tac[hidagR_rules] >>
-      metis_tac[hidagR_unique])
-  >- simp[Once hidagR_cases]
-  >- (`∃dr. hidagR e af df gf d dr` by metis_tac[hidagR_total] >>
-      `∀dr'. hidagR e af df gf d dr' ⇔ dr' = dr`
-        by metis_tac[hidagR_unique] >> simp[] >>
-      `hinodeR e af df gf (HG d) (gf d dr)`
-        by metis_tac[hidagR_rules] >>
-      metis_tac[hidagR_unique]))
+val hdmerge_def = new_specification("hdmerge_def",
+  ["hdmerge"],
+  hidag_recursion
+    |> INST_TYPE [gamma |-> ``:(α,β)hidag -> (α,β)hidag``]
+    |> Q.SPECL [`λg2. g2`, `λn g nr gr g2. n <+ gr g2`, `ARB`, `ARB`,
+                `K ∅`, `K ∅`, `K ∅`, `K ∅`]
+    |> SIMP_RULE (srw_ss()) []
+    |> SIMP_RULE (srw_ss()) [FUN_EQ_THM, Once hidagAdd_commutes]
+    |> SIMP_RULE (srw_ss()) [RIGHT_EXISTS_AND_THM]
+    |> firstn_conjs_under_exists 2)
+val _ = export_rewrites ["hdmerge_def"]
 
-val hnode_bag_def = new_specification(
-  "hnode_bag_def", ["hnodebag
+val _ = set_mapped_fixity {fixity = Infixl 500, term_name = "hdmerge",
+                           tok = "⊕"}
 
+val hdmerge_EQ_empty = store_thm(
+  "hdmerge_EQ_empty[simp]",
+  ``g1 ⊕ g2 = ε ⇔ g1 = ε ∧ g2 = ε``,
+  Cases_on `g1` >> simp[]);
 
+val hdmerge_ASSOC = store_thm(
+  "hdmerge_ASSOC",
+  ``∀g1 g2 g3. g1 ⊕ (g2 ⊕ g3) = (g1 ⊕ g2) ⊕ g3``,
+  Induct >> simp[]);
 
+val DISJ_CONG = prove(
+  ``(¬q ==> p = p') ⇒ (~p' ⇒ q = q') ⇒ (p ∨ q ⇔ p' ∨ q')``,
+  decide_tac)
 
+val hddel_def = new_specification("hddel_def",
+  ["hddel"],
+  hidag_recursion
+    |> INST_TYPE [gamma |-> ``:(α,β)hidag``]
+    |> Q.SPECL [`ε`, `λn g nr gr. if m = n then g
+                                  else n <+ gr`,
+                `ARB`, `ARB`, `K ∅`, `K ∅`,
+                `greads`, `gwrites`]
+    |> CONV_RULE (LAND_CONV (SIMP_CONV (srw_ss() ++ boolSimps.COND_elim_ss) []))
+    |> SIMP_RULE (srw_ss()) [Cong DISJ_CONG]
+    |> SIMP_RULE (srw_ss()) [Once hidagAdd_commutes]
+    |> SIMP_RULE (srw_ss()) [SUBSET_DEF, RIGHT_EXISTS_AND_THM]
+    |> Q.GEN `m` |> SIMP_RULE (srw_ss()) [SKOLEM_THM]
+    |> SIMP_RULE (srw_ss()) [FORALL_AND_THM]
+    |> firstn_conjs_under_exists 2)
+
+val _ = app delete_type ["hg0", "hn0"]
 
 val _ = export_theory();
