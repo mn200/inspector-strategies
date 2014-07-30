@@ -64,3 +64,6 @@
 .	small_test_5x5.mm	wavebench.dat	1	byhandfast_inspector	unknown.home	Tue Jun 10 15:09:54 2014	1	5	13	10	 1.30000000e+00	 4.58257569e-01	1	2	 9.35077667e-04	 3.81469727e-06	 2.88105011e-03
 .	small_test_5x5.mm	wavebench.dat	1	byhandfast_inspector	Michelles-MacBook-Air-2.local	Fri Jun 13 14:30:31 2014	1	5	13	10	 1.30000000e+00	 4.58257569e-01	1	2	 4.54902649e-04	 2.86102295e-06	 5.78880310e-04
 /Users/mstrout/Data/Davis	ldoor.mm	wavebench.dat	1	byhandfast_inspector	Michelles-MacBook-Air-2.local	Fri Jun 13 14:31:42 2014	1	952203	23737339	16533	 1.43575510e+03	 7.04289426e+03	1	89370	 4.22563076e-01	 4.78902102e-01	 1.56203508e+00
+.	small_test_5x5.mm	wavebench.dat	1	byhandfast_inspector	Michelles-MacBook-Air-2.local	Thu Jul 10 14:10:34 2014	1	5	13	10	 1.30000000e+00	 4.58257569e-01	1	2	 4.87804413e-04	 2.14576721e-06	 6.23941422e-04
+.	small_test_5x5.mm	wavebench.dat	1	byhandfast_inspector	Michelles-MacBook-Air-2.local	Thu Jul 10 14:11:16 2014	1	5	13	10	 1.30000000e+00	 4.58257569e-01	1	2	 7.16924667e-04	 5.79357147e-05	 1.11699104e-03
+.	small_test_5x5.mm	wavebench.dat	4	byhandfast_inspector	Michelles-MacBook-Air-2.local	Thu Jul 10 14:11:48 2014	1	5	13	10	 1.30000000e+00	 4.58257569e-01	1	2	 7.10010529e-04	 3.19480896e-05	 8.02993774e-04
