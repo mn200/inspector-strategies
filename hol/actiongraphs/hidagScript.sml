@@ -110,21 +110,6 @@ val wfnag_add = SIMP_RULE (srw_ss()) [PULL_FORALL] (prove(
   Induct_on `wfnag` >> simp[dagAdd_11_thm] >> rw[] >> simp[] >>
   metis_tac [wfnag_rules]))
 
-(*val wfgEQ0_grws = prove(
-  ``(∀d1:(α,β)ndag0 d2.
-       wfgEQ0 d1 d2 ⇒ wfnag d1 ⇒
-       wfnag d2 ∧ greads d2 = greads d1 ∧ gwrites d2 = gwrites d1) ∧
-    (∀n1 n2:((β,α)nnode, β)node. wfnEQ0 n1 n2 ⇒ wfnag (n1 <+ ε) ⇒ wfnag (n2 <+ ε))``,
-  Induct_on `wfgEQ0` >> simp[] >> conj_tac
-  >- (qx_genl_tac [`n1`, `n2`, `d1`, `d2`] >> rpt (disch_then strip_assume_tac) >>
-      `wfnag d1 ∧ wfnag (n1 <+ ε) ∧ wfnag (n2 <+ ε)` by metis_tac[wfnag_add] >>
-      `wfnag d2 ∧ wfnag (n2 <+ d2)` by metis_tac[wfnag_rule] >> simp[] >>
-      imp_res_tac wfnag_rws >> simp[] >>
-      imp_res_tac wfnag_nreadswrites >> simp[] >>
-      imp_res_tac wfn_rws >> simp[]) >>
-  rpt gen_tac >> strip_tac >> ONCE_REWRITE_TAC [wfnag_cases] >> simp[] >>
-  strip_tac >> fs[]);
-*)
 val wfgEQ_def = Define`wfgEQ g1 g2 ⇔ g1 = g2 ∧ wfnag g1`;
 
 val wfnEQ_def = Define`wfnEQ n1 n2 ⇔ n1 = n2 ∧ wfnag (n1 <+ ε)`;
@@ -182,10 +167,6 @@ fun define_quotient {types,defs,thms,poly_preserves,poly_respects,respects} =
 
 val ndinst = INST_TYPE [alpha |-> ``:(β,α)nnode``]
 
-val wfn_touches = prove(
-  ``wfnEQ a1 a2 ∧ wfnEQ b1 b2 ⇒ (a1 ∼ₜ b1 ⇔ a2 ∼ₜ b2)``,
-  simp[wfnEQ_def]);
-
 val HD0_def = Define`
   HD0 rs ws d = <| reads := rs; writes := ws; data := DN d; ident := () |>
 `;
@@ -222,14 +203,6 @@ val dagAdd_11' = prove(
        (wfgEQ (a <+ g1) (a <+ g2) ⇔ wfgEQ g1 g2)``,
   simp[wfgEQ_def, wfnEQ_def, quotientTheory.respects_def,
        combinTheory.W_DEF, RES_FORALL_THM, wfnag_rule]);
-
-val dagAdd_11_thm' = prove(
-  ``wfgEQ (a <+ g) (b <+ h) ⇔
-      wfnEQ a b ∧ wfgEQ g h ∨
-      a ≁ₜ b ∧ ∃g0::respects wfgEQ. wfgEQ g (b <+ g0) ∧ wfgEQ h (a <+ g0)``,
-  simp[wfgEQ_def, dagAdd_11_thm, wfnEQ_def, quotientTheory.respects_def,
-       combinTheory.W_DEF, RES_EXISTS_THM] >>
-  metis_tac [wfnag_rule, wfnag_add])
 
 val hidag_ind0 = prove(
   ``∀ (P :: respects (wfgEQ ===> $=)) (Q :: respects (wfnEQ ===> $=)).
@@ -309,10 +282,6 @@ val nag_measure_thm' = prove(
     nag_measure (a <+ d : (α,β)ndag0) = hinode_size0 a + nag_measure d + 1``,
   simp[nag_measure_thm, hinode_size0_def] >> Cases_on `a.data` >> simp[]);
 
-val touches_SYM' = prove(
-  ``a1 : ^hinode_aty ∼ₜ a2 : ^hinode_aty ⇒ a2 ∼ₜ a1``,
-  simp[touches_SYM]);
-
 val (allnodes_rules, allnodes_ind, allnodes_cases) = Hol_reln`
   (∀a n d. nnodes a n ⇒ allnodes (a <+ d) n) ∧
   (∀a n d. allnodes d n ⇒ allnodes (a <+ d) n) ∧
@@ -353,20 +322,42 @@ val allnodes_emptyset = prove(
   ``allnodes ε = ∅``,
   simp[EXTENSION, SPECIFICATION, allnodes_empty]);
 
+val nnodes_thm = prove(
+  ``nnodes (HD0 rs ws d : ^hinode_aty) =
+      {<| reads := rs; writes := ws; data := d; ident := () |>} ∧
+    nnodes (HG0 g : ^hinode_aty) = allnodes g``,
+  conj_tac >> simp[HD0_def, HG0_def, Once allnodes_cases, FUN_EQ_THM]);
+
 val greads_def = Define`
   greads d = BIGUNION (IMAGE (λa. set a.reads) (allnodes d))
+`;
+
+val gwrites_def = Define`
+  gwrites d = BIGUNION (IMAGE (λa. set a.writes) (allnodes d))
 `;
 
 val nreads_def = Define`
   nreads n = BIGUNION (IMAGE (λa. set a.reads) (nnodes n))
 `;
 
+val nwrites_def = Define`
+  nwrites n = BIGUNION (IMAGE (λa. set a.writes) (nnodes n))
+`
+
 val greads_rsp = prove(
   ``wfgEQ (g1 : (α,β)ndag0) g2 ⇒ greads g1 = greads g2``,
   simp[wfgEQ_def]);
 
+val gwrites_rsp = prove(
+  ``wfgEQ (g1 : (α,β)ndag0) g2 ⇒ gwrites g1 = gwrites g2``,
+  simp[wfgEQ_def]);
+
 val nreads_rsp = prove(
   ``wfnEQ (n1 : ^hinode_aty) n2 ⇒ nreads n1 = nreads n2``,
+  simp[wfnEQ_def]);
+
+val nwrites_rsp = prove(
+  ``wfnEQ (n1 : ^hinode_aty) n2 ⇒ nwrites n1 = nwrites n2``,
   simp[wfnEQ_def]);
 
 val greads_thm = prove(
@@ -374,15 +365,45 @@ val greads_thm = prove(
     greads (a <+ d) = nreads a ∪ greads d``,
   simp[nreads_def, greads_def, allnodes_emptyset, allnodes_UNION]);
 
-val nnodes_thm = prove(
-  ``nnodes (HD0 rs ws d : ^hinode_aty) =
-      {<| reads := rs; writes := ws; data := d; ident := () |>} ∧
-    nnodes (HG0 g : ^hinode_aty) = allnodes g``,
-  conj_tac >> simp[HD0_def, HG0_def, Once allnodes_cases, FUN_EQ_THM]);
+val gwrites_thm = prove(
+  ``gwrites ε = ∅ ∧
+    gwrites (a <+ d) = nwrites a ∪ gwrites d``,
+  simp[nwrites_def, gwrites_def, allnodes_emptyset, allnodes_UNION]);
 
 val nreads_thm = prove(
   ``nreads (HD0 rs ws d) = set rs ∧ nreads (HG0 g) = greads g``,
   simp[nnodes_thm, nreads_def, greads_def]);
+
+val nwrites_thm = prove(
+  ``nwrites (HD0 rs ws d) = set ws ∧ nwrites (HG0 g) = gwrites g``,
+  simp[nwrites_def, nnodes_thm, gwrites_def]);
+
+val htouches0_def = Define`
+  htouches0 (n1:^hinode_aty) n2 ⇔
+    (∃w. w ∈ nwrites n1 ∧ w ∈ nwrites n2) ∨
+    (∃w. w ∈ nwrites n1 ∧ w ∈ nreads n2) ∨
+    (∃w. w ∈ nwrites n2 ∧ w ∈ nreads n1)
+`;
+
+val htouches_rsp = prove(
+  ``wfnEQ (n1:^hinode_aty) n1' ∧ wfnEQ (n2:^hinode_aty) n2' ⇒
+    (htouches0 n1 n2 ⇔ htouches0 n1' n2')``,
+  simp[wfnEQ_def]);
+
+val
+
+val dagAdd_11_thm' = prove(
+  ``wfgEQ (a <+ g) (b <+ h) ⇔
+      wfnEQ a b ∧ wfgEQ g h ∨
+      a ≁ₜ b ∧ ∃g0::respects wfgEQ. wfgEQ g (b <+ g0) ∧ wfgEQ h (a <+ g0)``,
+  simp[wfgEQ_def, dagAdd_11_thm, wfnEQ_def, quotientTheory.respects_def,
+       combinTheory.W_DEF, RES_EXISTS_THM] >>
+  metis_tac [wfnag_rule, wfnag_add])
+
+val touches_SYM' = prove(
+  ``a1 : ^hinode_aty ∼ₜ a2 : ^hinode_aty ⇒ a2 ∼ₜ a1``,
+  simp[touches_SYM]);
+
 
 val [hidagmerge_def, hidagAdd_commutes, hidagAdd_11, HG_11, HD_11, hidag_ind,
      empty_not_hidagadd, HD_not_HG, hidagAdd_11_thm, hinode_measure_thm,
