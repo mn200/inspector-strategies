@@ -263,6 +263,8 @@ define_quotient {
               greads_rsp, nreads_rsp, nwrites_rsp, gwrites_rsp]}
 
 val _ = overload_on("ε", ``emptyHDG``)
+val _ = overload_on ("touches", ``htouches``)
+val _ = overload_on ("not_touches", ``λn1 n2. ¬htouches n1 n2``)
 val _ = set_mapped_fixity { fixity = Infixr 501, term_name = "hidagAdd",
                             tok = "<+" }
 
@@ -286,12 +288,11 @@ val hnodebag_def = new_specification(
     |> firstn_conjs_under_exists 2);
 val _ = export_rewrites ["hnodebag_def"]
 
-val _ = overload_on("IN", ``λa d. BAG_IN a (hnodebag d)``)
-
-val hidag_ind0 = save_thm(
+val hidag_ind0 = store_thm(
   "hidag_ind0",
-  hidag_ind |> Q.SPECL [`K T`, `P`] |> SIMP_RULE (srw_ss()) []
-            |> Q.GEN `P`);
+  ``∀P. P ε ∧ (∀g. P g ⇒ ∀a. P (a <+ g)) ⇒ ∀g. P g``,
+  metis_tac [hidag_ind |> Q.SPECL [`K T`, `P`] |> SIMP_RULE (srw_ss()) []
+                       |> Q.GEN `P`]);
 
 val _ = TypeBase.write [
   TypeBasePure.mk_nondatatype_info
@@ -311,10 +312,12 @@ val _ = adjoin_to_theory
              \     nchotomy = SOME hidag_nchotomy, size = NONE})]";
              PP.add_newline pps))}
 
-val hnodebag_FINITE = store_thm(
-  "hnodebag_FINITE[simp]",
+val FINITE_hnodebag = store_thm(
+  "FINITE_hnodebag[simp]",
   ``∀d. FINITE_BAG (hnodebag d)``,
-  Induct >> simp[]);
+  Induct >> simp[])
+
+val _ = overload_on("IN", ``λa d. BAG_IN a (hnodebag d)``)
 
 val hnodebag_EQ_empty = store_thm(
   "hnodebag_EQ_empty[simp]",
@@ -325,6 +328,10 @@ val gentouches_htouches = store_thm(
   "gentouches_htouches[simp]",
   ``gentouches nreads nwrites = htouches``,
   simp[gentouches_def, htouches_def, FUN_EQ_THM]);
+
+val _ = overload_on("gtouches", ``gentouches greads gwrites``)
+val _ = set_mapped_fixity { fixity = Infix(NONASSOC, 450),
+                            tok = "∼ᵍ", term_name = "gtouches" }
 
 val hdmap_def = new_specification("hdmap_def",
   ["hdmap", "nmap"],
@@ -384,6 +391,82 @@ val hddel_def = new_specification("hddel_def",
     |> SIMP_RULE (srw_ss()) [FORALL_AND_THM]
     |> firstn_conjs_under_exists 2)
 
-val _ = app delete_type ["hg0", "hn0"]
+val hddel_simp = store_thm(
+  "hddel_simp[simp]",
+  ``hddel a ε = ε ∧ hddel a (a <+ d) = d``,
+  simp[hddel_def]);
+
+val hidagAdd_11 = store_thm(
+  "hidagAdd_11[simp]",
+  ``(a <+ g1 = a <+ g2 ⇔ g1 = g2) ∧ (a1 <+ g = a2 <+ g ⇔ a1 = a2)``,
+  simp[EQ_IMP_THM] >> conj_tac
+  >- (disch_then (mp_tac o Q.AP_TERM `hddel a`) >> simp[hddel_def]) >>
+  disch_then (mp_tac o Q.AP_TERM `hnodebag`) >> simp[])
+
+val BAG_FILTER_FILTER = prove(
+  ``BAG_FILTER P (BAG_FILTER Q b) = BAG_FILTER (λa. P a ∧ Q a) b``,
+  simp[BAG_FILTER_DEF] >> simp[FUN_EQ_THM] >> rw[] >> fs[]);
+
+val htouches_SYM = store_thm(
+  "htouches_SYM",
+  ``htouches n1 n2 ⇔ htouches n2 n1``,
+  simp[htouches_def] >> metis_tac[]);
+
+val wave0_def = new_specification("wave0_def",
+  ["wave0"],
+  hidag_recursion
+    |> INST_TYPE [gamma |-> ``:(α,β)hinode bag``]
+    |> Q.SPECL [`{||}`,
+                `λn g nr gr. BAG_INSERT n (BAG_FILTER (λb. ¬htouches n b) gr)`,
+                `ARB`, `ARB`, `K ∅`, `K ∅`, `K ∅`, `K ∅`]
+    |> SIMP_RULE (srw_ss()) [BAG_FILTER_FILTER, htouches_SYM,
+                             CONJ_COMM, BAG_INSERT_commutes,
+                             RIGHT_EXISTS_AND_THM]
+    |> firstn_conjs_under_exists 2);
+
+val wave0_empty = store_thm(
+  "wave0_empty[simp]",
+  ``wave0 ε = {||}``,
+  simp[wave0_def]);
+
+val BAG_FILTER_SUB_BAG = store_thm(
+  "BAG_FILTER_SUB_BAG[simp]",
+  ``∀P b. BAG_FILTER P b ≤ b``,
+  dsimp[BAG_FILTER_DEF, SUB_BAG]);
+
+val wave0_SUBBAG = store_thm(
+  "wave0_SUBBAG[simp]",
+  ``∀d. wave0 d ≤ hnodebag d``,
+  Induct >> simp[wave0_def, SUB_BAG_INSERT] >>
+  qx_gen_tac `d` >> strip_tac >> gen_tac >>
+  match_mp_tac SUB_BAG_TRANS >> qexists_tac `wave0 d` >> simp[]);
+
+val wave0_FINITE = store_thm(
+  "wave0_FINITE[simp]",
+  ``FINITE_BAG (wave0 d)``,
+  metis_tac[FINITE_SUB_BAG, FINITE_hnodebag, wave0_SUBBAG]);
+
+val wave0_ddel = store_thm(
+  "wave0_ddel[simp]",
+  ``∀d a. BAG_IN a (wave0 d) ⇒ a <+ (hddel a d) = d``,
+  Induct >> simp[wave0_def] >> dsimp[] >>
+  simp[hddel_def] >> rw[] >> metis_tac[hidagAdd_commutes]);
+
+val wave0_EQ_EMPTY = store_thm(
+  "wave0_EQ_EMPTY[simp]",
+  ``(wave0 g = {||} ⇔ g = ε) ∧ ({||} = wave0 g ⇔ g = ε)``,
+  Cases_on `g` >> simp[wave0_def]);
+
+val allnodes_def = new_specification("allnodes_def",
+  ["allnodes", "nnodes"],
+  hidag_recursion
+    |> INST_TYPE [gamma |-> ``:(α,β)node bag``,
+                  delta |-> ``:(α,β)node bag``]
+    |> Q.SPECL [`{||}`, `λn g nr gr. nr + gr`,
+                `λg gr. gr`, `λn. {|n|}`, `K ∅`, `K ∅`,
+                `K ∅`, `K ∅`]
+    |> SIMP_RULE (srw_ss()) [AC COMM_BAG_UNION ASSOC_BAG_UNION])
+
+(* val _ = app delete_type ["hg0", "hn0"] *)
 
 val _ = export_theory();

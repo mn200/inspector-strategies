@@ -280,10 +280,6 @@ val dagFOLD_def = new_specification("dagFOLD_def",
 
 val touches_SYM' = prove(``a ∼ₜ b ⇔ b ∼ₜ a``, metis_tac[touches_SYM])
 
-val BAG_FILTER_FILTER = prove(
-  ``BAG_FILTER P (BAG_FILTER Q b) = BAG_FILTER (λa. P a ∧ Q a) b``,
-  simp[BAG_FILTER_DEF] >> simp[FUN_EQ_THM] >> rw[] >> fs[]);
-
 val wave0_def = new_specification("wave0_def",
   ["wave0"],
   dag_recursion |> ISPEC ``λa:(α,β)node b:(α,β)node bag.
@@ -298,11 +294,6 @@ val wave0_empty = store_thm(
   "wave0_empty[simp]",
   ``wave0 ε = {||}``,
   simp[wave0_def]);
-
-val BAG_FILTER_SUB_BAG = store_thm(
-  "BAG_FILTER_SUB_BAG[simp]",
-  ``∀P b. BAG_FILTER P b ≤ b``,
-  dsimp[BAG_FILTER_DEF, SUB_BAG]);
 
 val wave0_SUBBAG = store_thm(
   "wave0_SUBBAG[simp]",
@@ -339,29 +330,6 @@ val IN_FOLDR_dagAdd = store_thm(
   ``(∀l. a ∈ FOLDR (dagAdd o f) ε l ⇔ ∃e. MEM e l ∧ a = f e) ∧
     (∀l. a ∈ FOLDR dagAdd ε l ⇔ MEM a l)``,
   conj_tac >> Induct_on`l` >> simp[] >> metis_tac[]);
-
-val EL_BAG_BAG_INSERT = store_thm(
-  "EL_BAG_BAG_INSERT[simp]",
-  ``{|x|} = BAG_INSERT y b ⇔ x = y ∧ b = {||}``,
-  simp[EQ_IMP_THM] >>
-  simp[bagTheory.BAG_EXTENSION, bagTheory.BAG_INN,
-       bagTheory.BAG_INSERT, bagTheory.EMPTY_BAG] >>
-  strip_tac >>
-  `x = y`
-    by (spose_not_then assume_tac >>
-        first_x_assum (qspecl_then [`1`, `y`] mp_tac) >>
-        simp[]) >> rw[] >>
-  simp[EQ_IMP_THM] >> spose_not_then strip_assume_tac >> Cases_on `e = x`
-  >- (rw[] >> first_x_assum (qspecl_then [`n+1`, `e`] mp_tac) >>
-      simp[]) >>
-  first_x_assum (qspecl_then [`n`, `e`] mp_tac) >> simp[]);
-
-val EL_BAG_SUB_BAG = store_thm(
-  "EL_BAG_SUB_BAG[simp]",
-  ``{| x |} ≤ b ⇔ BAG_IN x b``,
-  simp_tac (srw_ss() ++ COND_elim_ss ++ DNF_ss)
-           [SUB_BAG, BAG_INN, BAG_IN, BAG_INSERT, EMPTY_BAG, EQ_IMP_THM,
-            arithmeticTheory.GREATER_EQ] >> simp[]);
 
 val dagAdd_commute_simp = store_thm(
   "dagAdd_commute_simp[simp]",
@@ -582,20 +550,6 @@ val dagsize_CARD_nodebag = store_thm(
   ``∀d. dagsize d = BAG_CARD (nodebag d)``,
   ho_match_mp_tac dag_ind >> simp[BAG_CARD_THM]);
 
-val BAG_CARD_DIFF = store_thm(
-  "BAG_CARD_DIFF",
-  ``∀b. FINITE_BAG b ⇒
-        ∀c. c ≤ b ⇒ BAG_CARD (b - c) = BAG_CARD b - BAG_CARD c``,
-  Induct_on `FINITE_BAG` >> simp[BAG_CARD_THM] >> qx_gen_tac `b` >> strip_tac >>
-  map_every qx_gen_tac [`e`, `c`] >> strip_tac >>
-  `FINITE_BAG c` by metis_tac[FINITE_BAG_THM, FINITE_SUB_BAG] >>
-  Cases_on `BAG_IN e c`
-  >- (`∃c0. c = BAG_INSERT e c0` by metis_tac[BAG_DECOMPOSE] >>
-      lfs[BAG_CARD_THM, SUB_BAG_INSERT]) >>
-  simp[BAG_DIFF_INSERT, BAG_CARD_THM, FINITE_BAG_DIFF] >>
-  lfs[NOT_IN_SUB_BAG_INSERT] >>
-  `BAG_CARD c ≤ BAG_CARD b` by simp[SUB_BAG_CARD] >> simp[]);
-
 val empty_wave_exists = store_thm(
   "empty_wave_exists",
   ``∀d. ∃n. wave n d = {||}``,
@@ -619,13 +573,6 @@ val empty_wave_exists = store_thm(
 val wavedepth_def = Define`
   wavedepth g = LEAST n. wave n g = {||}
 `;
-
-val LEAST_T = store_thm(
-  "LEAST_T[simp]",
-  ``(LEAST n. T) = 0``,
-  numLib.LEAST_ELIM_TAC >> simp[] >>
-  spose_not_then strip_assume_tac >> first_x_assum (qspec_then `0` mp_tac) >>
-  simp[]);
 
 val wavedepth_empty = store_thm(
   "wavedepth_empty[simp]",
