@@ -28,13 +28,21 @@ val gwrites0_def = Define`
   nwrites0 (HG0 g) = gwrites0 g
 `;
 
-val htouches0_def = Define`
-  htouches0 n1 n2 ⇔
-    (∃w. w ∈ nwrites0 n1 ∧ w ∈ nwrites0 n2) ∨
-    (∃w. w ∈ nwrites0 n1 ∧ w ∈ nreads0 n2) ∨
-    (∃w. w ∈ nwrites0 n2 ∧ w ∈ nreads0 n1)
+val gentouches_def = Define`
+  gentouches rf1 wf1 rf2 wf2 g1 g2 ⇔
+    (∃w. w ∈ wf1 g1 ∧ w ∈ wf2 g2) ∨
+    (∃w. w ∈ wf1 g1 ∧ w ∈ rf2 g2) ∨
+    (∃w. w ∈ wf2 g2 ∧ w ∈ rf1 g1)
 `;
 
+val gentouches_SYM = store_thm(
+  "gentouches_SYM",
+  ``gentouches rf1 wf1 rf2 wf2 x1 x2 ⇔ gentouches rf2 wf2 rf1 wf1 x2 x1``,
+  simp[gentouches_def] >> metis_tac[]);
+
+val _ = overload_on ("sgentouches", ``λrf wf. gentouches rf wf rf wf``)
+val _ = temp_overload_on ("htouches0", ``sgentouches nreads0 nwrites0``)
+val _ = temp_overload_on ("gtouches0", ``sgentouches greads0 gwrites0``)
 
 val (heq_rules, heq_ind, heq_cases) = Hol_reln`
   (heq emptyHDG0 emptyHDG0) ∧
@@ -77,21 +85,6 @@ val ax = TypeBase.axiom_of ``:(α,β)hn0``
             |> Q.SPEC `af`
             |> BETA_RULE
 
-val gtouches0_def = Define`
-  gtouches0 g1 g2 ⇔
-    (∃w. w ∈ gwrites0 g1 ∧ w ∈ gwrites0 g2) ∨
-    (∃w. w ∈ gwrites0 g1 ∧ w ∈ greads0 g2) ∨
-    (∃w. w ∈ gwrites0 g2 ∧ w ∈ greads0 g1)
-`;
-
-val gentouches_def = Define`
-  gentouches rf1 wf1 rf2 wf2 g1 g2 ⇔
-    (∃w. w ∈ wf1 g1 ∧ w ∈ wf2 g2) ∨
-    (∃w. w ∈ wf1 g1 ∧ w ∈ rf2 g2) ∨
-    (∃w. w ∈ wf2 g2 ∧ w ∈ rf1 g1)
-`;
-
-val _ = overload_on ("sgentouches", ``λrf wf. gentouches rf wf rf wf``)
 
 val recursion = prove(
   ``∀   (e : γ)
@@ -139,7 +132,7 @@ val recursion = prove(
     by (Induct_on `heq` >> simp[] >> rpt strip_tac
         >- fs[FUN_EQ_THM] >>
         first_x_assum match_mp_tac >> simp[] >>
-        simp[gentouches_def] >> fs[htouches0_def] >>
+        fs[gentouches_def] >>
         metis_tac[SUBSET_DEF]) >>
   simp[] >> qexists_tac `nfn` >> simp[])
 
@@ -223,20 +216,59 @@ val (greads_rsp, gwrites_rsp, nreads_rsp, nwrites_rsp) =
         [a,b,c,d] => (a,b,c,d)
       | _ => raise mk_HOL_ERR "hidagScript" "" "rws_rsp theorem failed"
 
-val htouches_rsp = prove(
-  ``neq (n1:(α,β)hn0) n1' ∧ neq (n2:(α,β)hn0) n2' ⇒
-    (htouches0 n1 n2 ⇔ htouches0 n1' n2')``,
-  simp[htouches0_def] >> metis_tac[nreads_rsp, nwrites_rsp]);
-
 val gnchotomy0 = prove(
   ``∀d. heq d emptyHDG0 ∨
         ∃(n::respects neq) (d0::respects heq). heq d (hadd0 n d0)``,
   simp[RES_EXISTS_THM, respects_def, combinTheory.W_DEF] >> Cases >>
   simp[heq_refl, neq_refl] >> metis_tac[heq_refl]);
 
+val gentouches_PRS = store_thm(
+  "gentouches_PRS",
+  ``∀R1 (abs1:'a1 -> 'b1) rep1. QUOTIENT R1 abs1 rep1 ⇒
+    ∀R2 (abs2:'a2 -> 'b2) rep2. QUOTIENT R2 abs2 rep2 ⇒
+    ∀R3 (abs3:'a3 -> 'b3) rep3. QUOTIENT R3 abs3 rep3 ⇒
+    ∀ (x1 : ('b1 -> 'b2 -> bool))
+      (x2 : ('b1 -> 'b2 -> bool))
+      (x3 : ('b3 -> 'b2 -> bool))
+      (x4 : ('b3 -> 'b2 -> bool))
+      (x5 : 'b1)
+      (x6 : 'b3).
+      gentouches x1 x2 x3 x4 x5 x6 =
+      gentouches ((abs1 --> (abs2 --> I)) x1)
+                 ((abs1 --> (abs2 --> I)) x2)
+                 ((abs3 --> (abs2 --> I)) x3)
+                 ((abs3 --> (abs2 --> I)) x4)
+                 (rep1 x5)
+                 (rep3 x6)``,
+  simp[gentouches_def, quotientTheory.FUN_MAP,
+       quotientTheory.QUOTIENT_def] >>
+  simp[SPECIFICATION] >> metis_tac[]);
+
+val gentouches_RSP = store_thm(
+  "gentouches_RSP",
+  ``∀R1 (abs1:'a1 -> 'b1) rep1. QUOTIENT R1 abs1 rep1 ⇒
+    ∀R3 (abs3:'a3 -> 'b3) rep3. QUOTIENT R3 abs3 rep3 ⇒
+    ∀ (x1 : ('a1 -> 'a2 -> bool)) (y1 : ('a1 -> 'a2 -> bool))
+      (x2 : ('a1 -> 'a2 -> bool)) (y2 : ('a1 -> 'a2 -> bool))
+      (x3 : ('a3 -> 'a2 -> bool)) (y3 : ('a3 -> 'a2 -> bool))
+      (x4 : ('a3 -> 'a2 -> bool)) (y4 : ('a3 -> 'a2 -> bool))
+      (x5 : 'a1) (y5 : 'a1)
+      (x6 : 'a3) (y6 : 'a3).
+      (R1 ===> ((=) ===> (=))) x1 y1 ∧
+      (R1 ===> ((=) ===> (=))) x2 y2 ∧
+      (R3 ===> ((=) ===> (=))) x3 y3 ∧
+      (R3 ===> ((=) ===> (=))) x4 y4 ∧
+      R1 x5 y5 ∧
+      R3 x6 y6 ⇒
+        gentouches x1 x2 x3 x4 x5 x6 =
+        gentouches y1 y2 y3 y4 y5 y6``,
+  REWRITE_TAC[gentouches_def, quotientTheory.FUN_REL,
+              quotientTheory.QUOTIENT_def, SPECIFICATION] >>
+  metis_tac[])
+
 val [HG_11, HD_11, hidag_ind, empty_not_hidagadd, HD_not_HG,
      hidag_recursion, reads_thm, writes_thm, hidagAdd_commutes,
-     htouches_def, hidag_nchotomy] =
+     hidag_nchotomy] =
 define_quotient {
   types = [{name = "hidag", equiv = heq_equiv},
            {name = "hinode", equiv = neq_equiv}],
@@ -244,7 +276,6 @@ define_quotient {
           ("hidagAdd", ``hadd0 : (α,β)hn0 -> (α,β) hg0 -> (α,β) hg0``),
           ("HD", ``HD0 : (α,β)node -> (α,β)hn0``),
           ("HG", ``HG0 : (α,β)hg0 -> (α,β)hn0``),
-          ("htouches", ``htouches0 : (α,β)hn0 -> (α,β)hn0 -> bool``),
           ("greads", ``greads0 : (α,β)hg0 -> α set``),
           ("gwrites", ``gwrites0 : (α,β)hg0 -> α set``),
           ("nreads", ``nreads0 : (α,β)hn0 -> α set``),
@@ -258,16 +289,27 @@ define_quotient {
           ("reads_thm[simp]", greads0_def),
           ("writes_thm[simp]", gwrites0_def),
           ("hidagAdd_commutes", hadd0_commutes),
-          ("htouches_def", INST_TYPE [gamma |-> beta] htouches0_def),
           ("hidag_nchotomy", gnchotomy0)],
-  poly_preserves = [],
-  poly_respects = [],
-  respects = [hadd0_rsp, HG0_rsp, htouches_rsp,
+  poly_preserves = [gentouches_PRS],
+  poly_respects = [gentouches_RSP],
+  respects = [hadd0_rsp, HG0_rsp,
               greads_rsp, nreads_rsp, nwrites_rsp, gwrites_rsp]}
 
 val _ = overload_on("ε", ``emptyHDG``)
+val _ = overload_on ("htouches", ``sgentouches nreads nwrites``)
 val _ = overload_on ("touches", ``htouches``)
 val _ = overload_on ("not_touches", ``λn1 n2. ¬htouches n1 n2``)
+val _ = overload_on("gtouches", ``sgentouches greads gwrites``)
+val _ = set_mapped_fixity { fixity = Infix(NONASSOC, 450),
+                            tok = "∼ᵍ", term_name = "gtouches" }
+val _ = overload_on("not_gtouches",
+                    ``λg1 g2. ¬sgentouches greads gwrites g1 g2``)
+val _ = set_mapped_fixity { fixity = Infix(NONASSOC, 450),
+                            tok = "≁ᵍ", term_name = "not_gtouches"}
+val _ = overload_on("ngtouches", ``gentouches nreads nwrites greads gwrites``)
+val _ = overload_on("agtouches",
+  ``gentouches (set o action_reads) (set o action_writes) greads gwrites``);
+
 val _ = set_mapped_fixity { fixity = Infixr 501, term_name = "hidagAdd",
                             tok = "<+" }
 
@@ -362,15 +404,6 @@ val hnodebag_EQ_empty = store_thm(
   ``(hnodebag d = {||} ⇔ d = ε) ∧ ({||} = hnodebag d ⇔ d = ε)``,
   Cases_on `d` >> simp[]);
 
-val gentouches_htouches = store_thm(
-  "gentouches_htouches[simp]",
-  ``sgentouches nreads nwrites = htouches``,
-  simp[gentouches_def, htouches_def, FUN_EQ_THM]);
-
-val _ = overload_on("gtouches", ``sgentouches greads gwrites``)
-val _ = set_mapped_fixity { fixity = Infix(NONASSOC, 450),
-                            tok = "∼ᵍ", term_name = "gtouches" }
-
 val hdmap_def = new_specification("hdmap_def",
   ["hdmap", "nmap"],
   hidag_recursion
@@ -434,21 +467,17 @@ val hdmerge_empty = store_thm(
   ``∀g. g ⊕ ε = g``,
   Induct >> simp[]);
 
-val _ = overload_on("ngtouches", ``gentouches nreads nwrites greads gwrites``)
-
 val ngtouches_thm = store_thm(
   "ngtouches_thm[simp]",
   ``(ngtouches n ε ⇔ F) ∧
     (ngtouches n1 (n2 <+ g) ⇔ n1 ∼ₜ n2 ∨ ngtouches n1 g)``,
-  simp[gentouches_def, htouches_def] >> metis_tac[]);
+  simp[gentouches_def] >> metis_tac[]);
 
 val hidagAdd_gtouches = store_thm(
   "hidagAdd_gtouches[simp]",
   ``∀g2 a g1.
-      (a <+ g1 ∼ᵍ g2 ⇔
-       g1 ∼ᵍ g2 ∨ gentouches nreads nwrites greads gwrites a g2) ∧
-      (g2 ∼ᵍ a <+ g1 ⇔
-       g1 ∼ᵍ g2 ∨ gentouches nreads nwrites greads gwrites a g2)``,
+      (a <+ g1 ∼ᵍ g2 ⇔ g1 ∼ᵍ g2 ∨ ngtouches a g2) ∧
+      (g2 ∼ᵍ a <+ g1 ⇔ g1 ∼ᵍ g2 ∨ ngtouches a g2)``,
   simp[gentouches_def] >> rw[] >> metis_tac[]);
 
 val add_front_to_back = store_thm(
@@ -459,11 +488,11 @@ val add_front_to_back = store_thm(
 
 val hdmerge_COMM = store_thm(
   "hdmerge_COMM",
-  ``∀g1 g2. ¬(g1 ∼ᵍ g2) ⇒ g1 ⊕ g2 = g2 ⊕ g1``,
+  ``∀g1 g2. g1 ≁ᵍ g2 ⇒ g1 ⊕ g2 = g2 ⊕ g1``,
   Induct >> simp[] >> metis_tac[hdmerge_def, add_front_to_back, hdmerge_ASSOC])
 
 val flatten_lemma = prove(
-  ``¬(mr ∼ᵍ nr) ⇒ mr ⊕ (nr ⊕ g) = nr ⊕ (mr ⊕ g)``,
+  ``mr ≁ᵍ nr ⇒ mr ⊕ (nr ⊕ g) = nr ⊕ (mr ⊕ g)``,
   metis_tac[hdmerge_COMM, hdmerge_ASSOC]);
 
 val gflatten_def = new_specification(
@@ -489,7 +518,6 @@ val gwrites_gflatten = store_thm(
   ``(∀n:(α,β)hinode. gwrites (nflatten n) = nwrites n) ∧
     (∀g:(α,β)hidag. gwrites (gflatten g) = gwrites g)``,
   ho_match_mp_tac hidag_ind >> simp[]);
-
 
 val DISJ_CONG = prove(
   ``(¬q ==> p = p') ⇒ (~p' ⇒ q = q') ⇒ (p ∨ q ⇔ p' ∨ q')``,
@@ -530,7 +558,7 @@ val BAG_FILTER_FILTER = prove(
 val htouches_SYM = store_thm(
   "htouches_SYM",
   ``htouches n1 n2 ⇔ htouches n2 n1``,
-  simp[htouches_def] >> metis_tac[]);
+  simp[Once gentouches_SYM]);
 
 val wave0_def = new_specification("wave0_def",
   ["wave0"],
@@ -539,10 +567,13 @@ val wave0_def = new_specification("wave0_def",
     |> Q.SPECL [`{||}`,
                 `λn g nr gr. BAG_INSERT n (BAG_FILTER (λb. ¬htouches n b) gr)`,
                 `ARB`, `ARB`, `K ∅`, `K ∅`, `K ∅`, `K ∅`]
+    |> BETA_RULE
+    |> SIMP_RULE bool_ss [RIGHT_EXISTS_AND_THM]
+    |> UNDISCH_ALL
+    |> firstn_conjs_under_exists 2
+    |> DISCH_ALL
     |> SIMP_RULE (srw_ss()) [BAG_FILTER_FILTER, htouches_SYM,
-                             CONJ_COMM, BAG_INSERT_commutes,
-                             RIGHT_EXISTS_AND_THM]
-    |> firstn_conjs_under_exists 2);
+                             BAG_INSERT_commutes, CONJ_COMM]);
 
 val wave0_empty = store_thm(
   "wave0_empty[simp]",
@@ -744,7 +775,7 @@ val wave_subbag = store_thm(
   simp[hnodebag_subtraction]);
 
 val wavedepth_def = tDefine "wavedepth" `
-  wavedepth d = if d = ε then 0
+  wavedepth d = if d = ε then 0n
                 else wavedepth (d - wave0 d) + 1
 ` (WF_REL_TAC `measure hdsize` >> simp[dagsize_subtraction] >>
    Cases >> simp[wave0_def, BAG_CARD_THM])
@@ -851,12 +882,25 @@ val IN_hdbuild = store_thm(
   Induct >> simp[]);
 
 val move_nontouching_hdbuild_front = store_thm(
-  "move_nontouching_hdbuid_front",
+  "move_nontouching_hdbuild_front",
   ``∀n l. n < LENGTH l ∧ (∀i. i < n ⇒ EL i l ≁ₜ EL n l) ⇒
           hdbuild l = hdbuild (EL n l :: delN n l)``,
   Induct >- (Cases >> simp[delN_def]) >> dsimp[LT_SUC] >>
   qx_gen_tac `l` >> strip_tac >>
   `∃h t. l = h::t` by (Cases_on `l` >> fs[]) >> rw[] >>
   simp[delN_def] >> fs[])
+
+val htouches_rewrites = store_thm(
+  "htouches_rewrites[simp]",
+  ``gentouches nreads nwrites rf1 wf1 (HD a) =
+      gentouches (set o action_reads) (set o action_writes) rf1 wf1 a ∧
+    gentouches nreads nwrites rf2 wf2 (HG g) =
+      gentouches greads gwrites rf2 wf2 g ∧
+    gentouches rf3 wf3 nreads nwrites x (HD a) =
+      gentouches rf3 wf3 (set o action_reads) (set o action_writes) x a ∧
+    gentouches rf4 wf4 nreads nwrites x (HG g)=
+      gentouches rf4 wf4 greads gwrites x g``,
+  simp[FUN_EQ_THM, gentouches_def]);
+
 
 val _ = export_theory();
