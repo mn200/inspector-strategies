@@ -85,11 +85,13 @@ val gtouches0_def = Define`
 `;
 
 val gentouches_def = Define`
-  gentouches rf wf g1 g2 ⇔
-    (∃w. w ∈ wf g1 ∧ w ∈ wf g2) ∨
-    (∃w. w ∈ wf g1 ∧ w ∈ rf g2) ∨
-    (∃w. w ∈ wf g2 ∧ w ∈ rf g1)
+  gentouches rf1 wf1 rf2 wf2 g1 g2 ⇔
+    (∃w. w ∈ wf1 g1 ∧ w ∈ wf2 g2) ∨
+    (∃w. w ∈ wf1 g1 ∧ w ∈ rf2 g2) ∨
+    (∃w. w ∈ wf2 g2 ∧ w ∈ rf1 g1)
 `;
+
+val _ = overload_on ("sgentouches", ``λrf wf. gentouches rf wf rf wf``)
 
 val recursion = prove(
   ``∀   (e : γ)
@@ -114,7 +116,7 @@ val recursion = prove(
       grr e = ∅ ∧ grw e = ∅ ∧
 
       (∀m n mr nr g r.
-         ¬htouches0 m n ∧ ¬gentouches nrr nrw mr nr ⇒
+         ¬htouches0 m n ∧ ¬sgentouches nrr nrw mr nr ⇒
            af m (hadd0 n g) mr (af n g nr r) =
            af n (hadd0 m g) nr (af m g mr r)) ⇒
       ∃(hf :: respects (heq ===> (=)))
@@ -302,15 +304,50 @@ val _ = TypeBase.write [
             nchotomy = SOME hidag_nchotomy, size = NONE})
 ]
 
+val hinode_ind = store_thm(
+  "hinode_ind",
+  ``∀P. (∀a. P (HD a)) ∧ (∀g. P (HG g)) ⇒
+        ∀n:(α,β)hinode. P n``,
+  ntac 2 strip_tac >>
+  `(∀n. P n) ∧ (∀g:(α,β)hidag. T)` suffices_by metis_tac[] >>
+  ho_match_mp_tac hidag_ind >> simp[]);
+
+val hinode_ax = store_thm(
+  "hinode_ax",
+  ``∀(f0 : (α,β)node -> γ) f1.
+     ∃fn. (∀a. fn (HD a) = f0 a) ∧
+          (∀g. fn (HG g) = f1 g)``,
+  rpt strip_tac >>
+  qspecl_then [`ARB`, `λn g nr gr. ARB`, `λg gr. f1 g`,
+               `λa. f0 a`, `K ∅`, `K ∅`, `K ∅`, `K ∅`]
+    (strip_assume_tac o SIMP_RULE (srw_ss()) [])
+    (INST_TYPE [delta |-> gamma] hidag_recursion) >>
+  metis_tac[]);
+
+val hinode_CASE_def = new_specification(
+  "hinode_CASE_def", ["hinode_CASE"],
+  hinode_ax
+    |> INST_TYPE [gamma |-> ``:((α,β)node -> γ) -> ((α,β)hidag -> γ) -> γ``]
+    |> Q.SPECL [`λa f1 f2. f1 a`, `λg f1 f2. f2 g`]
+    |> SIMP_RULE bool_ss [FUN_EQ_THM]);
+
+val _ = TypeBase.write (
+          TypeBasePure.gen_datatype_info { ax = hinode_ax,
+                                           case_defs = [hinode_CASE_def],
+                                           ind = hinode_ind }
+        )
+
 val _ = adjoin_to_theory
           {sig_ps = NONE,
            struct_ps = SOME (fn pps =>
             (PP.add_string pps
-             "val _ = TypeBase.write [\n\
+             "val _ = TypeBase.write (\n\
              \  TypeBasePure.mk_nondatatype_info (\n\
              \    Type.mk_thy_type{Args = [alpha,beta], Thy = \"hidag\", Tyop = \"hidag\"},\n\
              \    {encode = NONE, induction = SOME hidag_ind0,\n\
-             \     nchotomy = SOME hidag_nchotomy, size = NONE})]";
+             \     nchotomy = SOME hidag_nchotomy, size = NONE}) ::\n\
+             \  TypeBasePure.gen_datatype_info {\n\
+             \    ax = hinode_ax, case_defs = [hinode_CASE_def], ind = hinode_ind})";
              PP.add_newline pps))}
 
 val FINITE_hnodebag = store_thm(
@@ -327,10 +364,10 @@ val hnodebag_EQ_empty = store_thm(
 
 val gentouches_htouches = store_thm(
   "gentouches_htouches[simp]",
-  ``gentouches nreads nwrites = htouches``,
+  ``sgentouches nreads nwrites = htouches``,
   simp[gentouches_def, htouches_def, FUN_EQ_THM]);
 
-val _ = overload_on("gtouches", ``gentouches greads gwrites``)
+val _ = overload_on("gtouches", ``sgentouches greads gwrites``)
 val _ = set_mapped_fixity { fixity = Infix(NONASSOC, 450),
                             tok = "∼ᵍ", term_name = "gtouches" }
 
@@ -382,6 +419,77 @@ val hdmerge_ASSOC = store_thm(
   "hdmerge_ASSOC",
   ``∀g1 g2 g3. g1 ⊕ (g2 ⊕ g3) = (g1 ⊕ g2) ⊕ g3``,
   Induct >> simp[]);
+
+val greads_merge = store_thm(
+  "greads_merge[simp]",
+  ``∀g1 g2. greads (g1 ⊕ g2) = greads g1 ∪ greads g2``,
+  Induct >> simp[AC UNION_COMM UNION_ASSOC]);
+val gwrites_merge = store_thm(
+  "gwrites_merge[simp]",
+  ``∀g1 g2. gwrites (g1 ⊕ g2) = gwrites g1 ∪ gwrites g2``,
+  Induct >> simp[AC UNION_COMM UNION_ASSOC]);
+
+val hdmerge_empty = store_thm(
+  "hdmerge_empty[simp]",
+  ``∀g. g ⊕ ε = g``,
+  Induct >> simp[]);
+
+val _ = overload_on("ngtouches", ``gentouches nreads nwrites greads gwrites``)
+
+val ngtouches_thm = store_thm(
+  "ngtouches_thm[simp]",
+  ``(ngtouches n ε ⇔ F) ∧
+    (ngtouches n1 (n2 <+ g) ⇔ n1 ∼ₜ n2 ∨ ngtouches n1 g)``,
+  simp[gentouches_def, htouches_def] >> metis_tac[]);
+
+val hidagAdd_gtouches = store_thm(
+  "hidagAdd_gtouches[simp]",
+  ``∀g2 a g1.
+      (a <+ g1 ∼ᵍ g2 ⇔
+       g1 ∼ᵍ g2 ∨ gentouches nreads nwrites greads gwrites a g2) ∧
+      (g2 ∼ᵍ a <+ g1 ⇔
+       g1 ∼ᵍ g2 ∨ gentouches nreads nwrites greads gwrites a g2)``,
+  simp[gentouches_def] >> rw[] >> metis_tac[]);
+
+val add_front_to_back = store_thm(
+  "add_front_to_back",
+  ``∀g a. ¬ngtouches a g ⇒
+          a <+ g = g ⊕ (a <+ ε)``,
+  Induct >> simp[] >> metis_tac[hidagAdd_commutes]);
+
+val hdmerge_COMM = store_thm(
+  "hdmerge_COMM",
+  ``∀g1 g2. ¬(g1 ∼ᵍ g2) ⇒ g1 ⊕ g2 = g2 ⊕ g1``,
+  Induct >> simp[] >> metis_tac[hdmerge_def, add_front_to_back, hdmerge_ASSOC])
+
+val flatten_lemma = prove(
+  ``¬(mr ∼ᵍ nr) ⇒ mr ⊕ (nr ⊕ g) = nr ⊕ (mr ⊕ g)``,
+  metis_tac[hdmerge_COMM, hdmerge_ASSOC]);
+
+val gflatten_def = new_specification(
+  "gflatten_def", ["gflatten", "nflatten"],
+  hidag_recursion |> INST_TYPE [gamma |-> ``:('a,'b)hidag``,
+                                delta |-> ``:('a,'b)hidag``]
+                  |> Q.SPECL [`ε`, `λn g nr gr. hdmerge nr gr`,
+                              `λg gr. gr`, `λa. HD a <+ ε`,
+                              `greads`, `gwrites`, `greads`,`gwrites`]
+                  |> SIMP_RULE (srw_ss()) []
+                  |> SIMP_RULE (srw_ss()) [SUBSET_DEF]
+                  |> SIMP_RULE (srw_ss()) [Once flatten_lemma])
+val _ = export_rewrites ["gflatten_def"]
+
+val greads_gflatten = store_thm(
+  "greads_gflatten[simp]",
+  ``(∀n:(α,β)hinode. greads (nflatten n) = nreads n) ∧
+    (∀g:(α,β)hidag. greads (gflatten g) = greads g)``,
+  ho_match_mp_tac hidag_ind >> simp[]);
+
+val gwrites_gflatten = store_thm(
+  "gwrites_gflatten[simp]",
+  ``(∀n:(α,β)hinode. gwrites (nflatten n) = nwrites n) ∧
+    (∀g:(α,β)hidag. gwrites (gflatten g) = gwrites g)``,
+  ho_match_mp_tac hidag_ind >> simp[]);
+
 
 val DISJ_CONG = prove(
   ``(¬q ==> p = p') ⇒ (~p' ⇒ q = q') ⇒ (p ∨ q ⇔ p' ∨ q')``,
