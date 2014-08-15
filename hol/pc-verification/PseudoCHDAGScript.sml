@@ -677,45 +677,37 @@ val graphOf_apply_action_diamond = store_thm(
       prove_tac[])
   >- ((* seq *) qx_gen_tac `cmds` >>
       simp[graphOf_def, FOLDL_FOLDR_REVERSE] >> rpt strip_tac >>
-      qmatch_assum_rename_tac
-        `FOLDR ff (SOME(m0,ε)) (REVERSE cmds) = SOME (m1,g)` [] >>
       qabbrev_tac `clist = REVERSE cmds` >>
       `∀x. MEM x cmds ⇔ MEM x clist` by simp[Abbr`clist`] >> fs[] >>
       ntac 2 (pop_assum kall_tac) >> rpt (pop_assum mp_tac) >>
       map_every qid_spec_tac [`g`, `m0`, `m1`, `m2`, `clist`] >>
       Induct >> simp[EXISTS_PROD, PULL_EXISTS, DISJ_IMP_THM,
                      FORALL_AND_THM] >> rpt strip_tac >>
+      qmatch_assum_rename_tac
+        `FOLDR ff (SOME(m0,ε)) clist = SOME (m1',g')` [] >>
+      rw[] >> fs[] >>
       first_x_assum ((fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) o
                      assert (is_forall o concl)) >>
       prove_tac[])
-
-ONCE_REWRITE_TAC [graphOf_def] >>
-      simp[PULL_EXISTS, EXISTS_PROD, DISJ_IMP_THM, FORALL_AND_THM] >>
-      map_every qx_gen_tac [`i`, `m1`, `m2`, `a`, `i1`, `m0'`, `g1`, `g2`] >>
-      strip_tac >> fs[] >>
-      qmatch_assum_rename_tac `graphOf i0 m0 c1 = SOME(i1,m0',g1)` [] >>
-      `∃m1'. graphOf i0 m2 c1 = SOME(i1,m1',g1) ∧
-             apply_action a (SOME m0') = SOME m1'` by metis_tac[] >>
-      simp[] >>
-      `i1 ≠ []` by metis_tac[graphOf_idents_apart, LENGTH_NIL] >>
-      `∀b. b ∈ g2 ⇒ b.ident ∉ idents g1`
-        by (gen_tac >> strip_tac >>
-            `b.ident ∈ idents g2` by simp[idents_thm] >>
-            metis_tac[graphOf_idents_apart, ilistLTE_trans, ilistLE_REFL])>>
-      full_simp_tac (srw_ss() ++ CONJ_ss) [] >>
-      metis_tac[])
   >- ((* parloop *)
       map_every qx_gen_tac [`vnm`, `d`, `body`] >> strip_tac >>
-      ONCE_REWRITE_TAC [graphOf_def] >> simp[PULL_EXISTS, EXISTS_PROD] >>
-      map_every qx_gen_tac [`i`, `m1`, `m2`, `a`, `dvs`, `g`] >> strip_tac >>
+      simp[PULL_EXISTS, EXISTS_PROD, graphOf_def] >>
+      map_every qx_gen_tac [`m1`, `m2`, `a`, `dvs`, `gs`] >> strip_tac >>
       fs[DISJ_IMP_THM, FORALL_AND_THM] >>
-      `i0 ∉ idents g`
-        by metis_tac[ilistLT_stackInc, ilistLTE_trans,
-                     stackInc_EQ_NIL, ilistLE_REFL, graphOf_idents_apart] >>
       `dvalues m2 d = dvalues m0 d ∧
-       domreadAction i0 m2 d = domreadAction i0 m0 d`
+       domreadAction () m2 d = domreadAction () m0 d`
         by metis_tac[apply_action_dvalues_commutes] >>
-      simp[] >> metis_tac[])
+      simp[] >>
+      qpat_assum `domreadAction x y z = u` kall_tac >>
+      qpat_assum `dvalues m2 d = dvalues m0 d` kall_tac >>
+      qpat_assum `a ≁ₜ domreadAction () m0 d` kall_tac >>
+      qpat_assum `dvalues m0 d = SOME dvs` kall_tac >>
+      CONV_TAC SWAP_EXISTS_CONV >> qexists_tac `gs` >> simp[] >>
+      `OPT_SEQUENCE
+         (MAP (λv. OPTION_MAP SND (graphOf (v::i0) m2 (ssubst vnm v body)))
+              dvs) =
+       SOME gs`
+        by (Induct_on `dvs` >> simp[]
   >- ((* par *)
       qx_gen_tac `cmds` >> strip_tac >> map_every qx_gen_tac [`i`, `m1`, `m2`, `a`, `g`] >>
       ONCE_REWRITE_TAC [graphOf_def] >>
