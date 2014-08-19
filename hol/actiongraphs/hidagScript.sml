@@ -454,6 +454,11 @@ val hdmerge_ASSOC = store_thm(
   ``∀g1 g2 g3. g1 ⊕ (g2 ⊕ g3) = (g1 ⊕ g2) ⊕ g3``,
   Induct >> simp[]);
 
+val hdmap_merge = store_thm(
+  "hdmap_merge[simp]",
+  ``hdmap f (g1 ⊕ g2) = hdmap f g1 ⊕ hdmap f g2``,
+  Induct_on `g1` >> simp[]);
+
 val greads_merge = store_thm(
   "greads_merge[simp]",
   ``∀g1 g2. greads (g1 ⊕ g2) = greads g1 ∪ greads g2``,
