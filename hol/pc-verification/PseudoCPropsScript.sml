@@ -38,7 +38,8 @@ val stmt_weight_def = tDefine "stmt_weight" `
   (stmt_weight (ParLoop v d s) = stmt_weight s + 1) ∧
   (stmt_weight (Seq stmts) = SUM (MAP stmt_weight stmts) + LENGTH stmts) ∧
   (stmt_weight (Par stmts) =
-    SUM (MAP stmt_weight stmts) + 1 + LENGTH stmts)
+    SUM (MAP stmt_weight stmts) + 1 + LENGTH stmts) ∧
+  (stmt_weight (Label v s) = stmt_weight s + 1)
 ` (WF_REL_TAC `measure stmt_size` >> simp[] >>
    Induct >> dsimp[stmt_size_def] >>
    rpt strip_tac >> res_tac >> simp[])
@@ -51,6 +52,7 @@ val seq_count_def = tDefine "seq_count" `
   (seq_count (ParLoop v d s) = seq_count s) ∧
   (seq_count (ForLoop v d s) = seq_count s) ∧
   (seq_count (IfStmt g t e) = seq_count t + seq_count e) ∧
+  (seq_count (Label v s) = seq_count s) ∧
   (seq_count _ = 0)
 `
   (WF_REL_TAC `measure stmt_size` >> simp[] >> Induct >> simp[] >>
@@ -60,6 +62,7 @@ val _ = export_rewrites ["seq_count_def"]
 val loopbag_def = tDefine "loopbag" `
   (loopbag Abort = {| |}) ∧
   (loopbag Done = {| |}) ∧
+  (loopbag (Label v s) = loopbag s) ∧
   (loopbag (Assign w ds v) = {| |}) ∧
   (loopbag (AssignVar v ds vf) = {| |}) ∧
   (loopbag (Malloc v d value) = {| |}) ∧

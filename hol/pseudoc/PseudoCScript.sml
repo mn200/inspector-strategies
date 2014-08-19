@@ -71,6 +71,7 @@ val _ = Datatype`
        | ParLoop vname domain stmt
        | Seq (stmt list)
        | Par (stmt list)
+       | Label value stmt
        | Abort
        | Done
 `
@@ -86,6 +87,7 @@ val stmt_induction = store_thm(
      (∀s d stmt. P stmt ⇒ P (ParLoop s d stmt)) ∧
      (∀stmts. (∀m s. MEM s stmts ⇒ P s) ⇒ P (Seq stmts)) ∧
      (∀stmts. (∀m s. MEM s stmts ⇒ P s) ⇒ P (Par stmts)) ∧
+     (∀v s. P s ⇒ P (Label v s)) ∧
      P Abort ∧ P Done
     ⇒
      ∀s. P s``,
@@ -196,6 +198,7 @@ val ssubst_def = tDefine "ssubst" `
              (if vnm = vnm' then s else ssubst vnm value s)) ∧
   (ssubst vnm value (Seq slist) = Seq (MAP (ssubst vnm value) slist)) ∧
   (ssubst vnm value (Par slist) = Par (MAP (ssubst vnm value) slist)) ∧
+  (ssubst vnm value (Label v s) = Label v (ssubst vnm value s)) ∧
   (ssubst vnm value Abort = Abort) ∧
   (ssubst vnm value Done = Done)
 `
@@ -331,7 +334,7 @@ val (eval_rules, eval_ind, eval_cases) = Hol_reln`
       dvalues m d = SOME iters
      ⇒
       eval (m, ForLoop vnm d body)
-           (m, Seq (MAP (λdv. ssubst vnm dv body) iters)))
+           (m, Seq (MAP (λdv. Label dv (ssubst vnm dv body)) iters)))
 
      ∧
 
@@ -346,7 +349,7 @@ val (eval_rules, eval_ind, eval_cases) = Hol_reln`
       dvalues m d = SOME iters
      ⇒
       eval (m, ParLoop vnm d body)
-           (m, Par (MAP (λdv. ssubst vnm dv body) iters)))
+           (m, Par (MAP (λdv. Label dv (ssubst vnm dv body)) iters)))
 
      ∧
 
@@ -386,6 +389,23 @@ val (eval_rules, eval_ind, eval_cases) = Hol_reln`
       eval (m0, Malloc anm sz_e iv)
            (m0 |+ (anm, Array (GENLIST (K iv) (Num sz_i))),
             Done))
+
+     ∧
+
+  (∀m0 c0 m c v.
+      eval (m0, c0) (m, c)
+     ⇒
+      eval (m0, Label v c0) (m, Label v c))
+
+     ∧
+
+  (∀m v.
+      eval (m, Label v Done) (m, Done))
+
+     ∧
+
+  (∀m v.
+      eval (m, Label v Abort) (m, Abort))
 `
 
 val _ = set_fixity "--->" (Infix(NONASSOC, 450))
