@@ -411,7 +411,11 @@ val (eval_rules, eval_ind, eval_cases) = Hol_reln`
 val _ = set_fixity "--->" (Infix(NONASSOC, 450))
 val _ = overload_on("--->", ``eval``)
 
+val _ = set_fixity "--->⁺" (Infix(NONASSOC, 450))
+val _ = overload_on ("--->⁺", ``TC eval``)
 
+val _ = set_fixity "--->*" (Infix(NONASSOC, 450))
+val _ = overload_on ("--->*", ``RTC eval``)
 
 
 val _ = export_theory()
