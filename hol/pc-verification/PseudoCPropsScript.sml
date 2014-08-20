@@ -10,6 +10,7 @@ open intLib
 open pairTheory listTheory rich_listTheory
 open boolSimps
 open indexedListsTheory
+open relationTheory
 
 val _ = new_theory "PseudoCProps";
 
@@ -167,11 +168,11 @@ val _ = overload_on (
 val WF_evalR = store_thm(
   "WF_evalR",
   ``WF evalR``,
-  simp[WF_LEX, relationTheory.WF_TC_EQN,
-       relationTheory.WF_inv_image, bagTheory.WF_mlt1]);
+  simp[WF_LEX, WF_TC_EQN,
+       WF_inv_image, bagTheory.WF_mlt1]);
 
 val WF_eval_induction =
-    relationTheory.WF_INDUCTION_THM
+    WF_INDUCTION_THM
       |> C MATCH_MP WF_evalR
       |> SIMP_RULE (srw_ss()) [FORALL_PROD, LEX_DEF]
       |> Q.SPEC `λms. Q (FST ms) (SND ms)`
@@ -195,14 +196,14 @@ val mlt_EMPTY_BAG = store_thm(
     suffices_by metis_tac[] >>
   Induct_on `FINITE_BAG` >> simp[] >> qx_gen_tac `b` >>
   strip_tac >> qx_gen_tac `e` >> Cases_on `b = {||}` >> fs[]
-  >- (match_mp_tac relationTheory.TC_SUBSET >> simp[mlt1_def]) >>
+  >- (match_mp_tac TC_SUBSET >> simp[mlt1_def]) >>
   `mlt R b (BAG_INSERT e b)`
-    by (match_mp_tac relationTheory.TC_SUBSET >>
+    by (match_mp_tac TC_SUBSET >>
         simp[mlt1_def] >> map_every qexists_tac [`e`, `{||}`, `b`] >>
         simp[] >> simp[BAG_EXTENSION, BAG_INN, BAG_INSERT, BAG_UNION,
                        EMPTY_BAG] >>
         map_every qx_gen_tac [`m`, `d`] >> Cases_on `d = e` >> simp[]) >>
-  metis_tac[relationTheory.TC_RULES]);
+  metis_tac[TC_RULES]);
 
 val FOLDR_KI = store_thm(
   "FOLDR_KI[simp]",
@@ -234,6 +235,229 @@ val eval_terminates = store_thm(
   >- (metis_tac[])
   >- (metis_tac[]));
 
+val strip_label_def = tDefine "strip_label" `
+  (strip_label (IfStmt gd t e) = IfStmt gd (strip_label t) (strip_label e)) ∧
+  (strip_label (ForLoop v dom s) = ForLoop v dom (strip_label s)) ∧
+  (strip_label (ParLoop v dom s) = ParLoop v dom (strip_label s)) ∧
+  (strip_label (Seq stmts) = Seq (MAP strip_label stmts)) ∧
+  (strip_label (Par stmts) = Par (MAP strip_label stmts)) ∧
+  (strip_label (Label v s) = strip_label s) ∧
+  (strip_label s = s)
+` (WF_REL_TAC `measure stmt_size` >> simp[] >>
+   Induct >> dsimp[stmt_size_def] >> rpt strip_tac >> res_tac >>
+   simp[]);
+val _ = export_rewrites ["strip_label_def"]
+
+val strip_label_idem = store_thm(
+  "strip_label_idem[simp]",
+  ``(!s. strip_label (strip_label s) = strip_label s) ∧
+    (strip_label o strip_label = strip_label)``,
+  simp[FUN_EQ_THM] >> ho_match_mp_tac stmt_induction >>
+  simp[MAP_MAP_o, combinTheory.o_DEF, MAP_EQ_f]);
+
+val eval_ind' = save_thm(
+  "eval_ind'",
+  PseudoCTheory.eval_strongind
+    |> SIMP_RULE (srw_ss()) [FORALL_PROD]
+    |> Q.SPEC `\a1 a2. P (FST a1) (SND a1) (FST a2) (SND a2)`
+    |> SIMP_RULE (srw_ss()) []);
+
+val evaltc_seq = store_thm(
+  "evaltc_seq",
+  ``EVERY ($= Done) pfx ∧ (m0,c0) --->⁺ (m,c) ⇒
+    (m0, Seq (pfx ++ [c0] ++ sfx)) --->⁺ (m, Seq (pfx ++ [c] ++ sfx))``,
+  Cases_on `EVERY ($= Done) pfx` >> simp[] >>
+  `(∃x0. (m0,c0) = x0) ∧ (∃x. (m,c) = x)` by simp[] >> simp[] >>
+  disch_then (fn th => ntac 2 (pop_assum mp_tac) >>
+                       map_every qid_spec_tac [`m0`, `m`, `c0`, `c`] >>
+                       mp_tac th) >>
+  map_every qid_spec_tac [`x`, `x0`] >>
+  Induct_on `TC` >> rw[] >- metis_tac[TC_SUBSET, eval_rules] >>
+  qmatch_assum_rename_tac `(m0,c0) --->⁺ y` [] >> Cases_on `y` >> fs[] >>
+  metis_tac[TC_RULES]);
+
+val evalrtc_seqpar = prove(
+  ``(m0,c0) --->* (m,c) ⇒
+    (ct = Seq ∧ EVERY ($= Done) pfx ∨ ct = Par) ⇒
+    (m0, ct (pfx ++ [c0] ++ sfx)) --->* (m, ct (pfx ++ [c] ++ sfx))``,
+  Cases_on `EVERY ($= Done) pfx` >> simp[] >>
+  `(∃x0. (m0,c0) = x0) ∧ (∃x. (m,c) = x)` by simp[] >> simp[] >>
+  disch_then (fn th => ntac 2 (pop_assum mp_tac) >>
+                       map_every qid_spec_tac [`m0`, `m`, `c0`, `c`] >>
+                       mp_tac th) >>
+  map_every qid_spec_tac [`x`, `x0`] >>
+  ho_match_mp_tac RTC_INDUCT >> simp[FORALL_PROD] >>
+  metis_tac[RTC_RULES, eval_rules]);
+
+val (evalrtc_seq, evalrtc_par) =
+    evalrtc_seqpar |> Q.GEN `ct`
+                   |> SIMP_RULE (srw_ss()) [DISJ_IMP_THM, FORALL_AND_THM,
+                                            AND_IMP_INTRO, LEFT_AND_OVER_OR]
+                   |> CONJ_PAIR
+
+val _ = augment_srw_ss [ETA_ss]
+
+val _ = overload_on("labelled", ``λvs s. FOLDR Label s vs``)
+
+val strip_label_labelled = store_thm(
+  "strip_label_labelled[simp]",
+  ``∀vs. strip_label (labelled vs s) = strip_label s``,
+  Induct >> simp[]);
+
+val s = mk_var("s", ``:stmt``)
+val vs = mk_var("vs", ``:value list``)
+val lvs_s = ``labelled vs s``
+fun mklabelled11_eqn c = let
+  val (argtys, _) = strip_fun (type_of c)
+  val args0 = map (fn ty => mk_var("x", ty)) argtys
+  val args = foldr (fn (a, acc) => variant acc a :: acc) [] args0
+  val c_args = list_mk_comb(c, args)
+  val eqn = mk_eq(c_args, lvs_s)
+  val iff = mk_eq(eqn, mk_conj(``^vs = []``, mk_eq(s, c_args)))
+in
+  prove(iff, Cases_on `^vs` >> simp[EQ_SYM_EQ])
+end
+
+val label_EQ_labelled = prove(
+  ``Label v s1 = labelled vs s2 ⇔
+      (∃t. vs = v::t ∧ s1 = labelled t s2) ∨ vs = [] ∧ s2 = Label v s1``,
+  Cases_on `vs` >> simp[EQ_SYM_EQ]);
+
+val labelled_EQ = save_thm(
+  "labelled_EQ[simp]",
+  LIST_CONJ
+    (label_EQ_labelled ::
+     map mklabelled11_eqn
+         (op_set_diff equal (TypeBase.constructors_of ``:stmt``) [``Label``])))
+
+val strip_label_EQ_Assign = store_thm(
+  "strip_label_EQ_Assign[simp]",
+  ``∀c x y z.
+      strip_label c = Assign x y z ⇔ ∃vs. c = labelled vs (Assign x y z)``,
+  ho_match_mp_tac stmt_induction >> simp[EQ_SYM_EQ]);
+
+val strip_label_EQ_Seq = store_thm(
+  "strip_label_EQ_Seq[simp]",
+  ``∀c stmts. strip_label c = Seq stmts ⇔
+              ∃vs sts'. c = labelled vs (Seq sts') ∧
+                        MAP strip_label sts' = stmts``,
+  ho_match_mp_tac stmt_induction >> simp[PULL_EXISTS] >> metis_tac[]);
+
+val strip_label_ssubst = store_thm(
+  "strip_label_ssubst[simp]",
+  ``∀s. strip_label (ssubst vnm v s) = ssubst vnm v (strip_label s)``,
+  ho_match_mp_tac stmt_induction >>
+  simp[ssubst_def, MAP_MAP_o, combinTheory.o_DEF, MAP_EQ_f, FORALL_domain] >>
+  rw[]);
+
+val etac =
+    match_mp_tac RTC_SUBSET >>
+    FIRST (List.mapPartial
+             (fn th => case total MATCH_MP_TAC th of
+                           NONE => SOME(MATCH_ACCEPT_TAC th)
+                         | SOME t => SOME(t >> simp[] >> NO_TAC))
+             (CONJUNCTS (SIMP_RULE bool_ss [] eval_rules)))
+
+val eval_strip_label_I = store_thm(
+  "eval_strip_label_I",
+  ``∀m0 c0 m c.
+       (m0, c0) ---> (m,c) ⇒
+       ∃c'. (m0, strip_label c0) --->* (m, c') ∧
+            strip_label c' = strip_label c``,
+  ho_match_mp_tac eval_ind' >> simp [] >> rpt strip_tac
+  >- (`MAP strip_label pfx = pfx` by (Induct_on `pfx` >> simp[]) >>
+      `(m0, Seq (pfx ++ [strip_label c0] ++ MAP strip_label sfx)) --->*
+       (m,  Seq (pfx ++ [c'] ++ MAP strip_label sfx))`
+         by metis_tac[evalrtc_seq] >>
+      qexists_tac `Seq (pfx ++ [c'] ++ MAP strip_label sfx)` >>
+      simp[MAP_MAP_o])
+  >- (`MAP strip_label cs = cs` by (Induct_on `cs` >> simp[]) >>
+      qexists_tac `Done` >> simp[] >> etac)
+  >- (qexists_tac `Seq [Done; if b then strip_label t else strip_label e]` >>
+      conj_tac >- etac >> simp[] >> rw[])
+  >- (qexists_tac `Abort` >> simp[] >> etac)
+  >- (qexists_tac `Done` >> simp[] >> etac)
+  >- (qexists_tac `Abort` >> simp[] >> etac)
+  >- (qexists_tac
+       `AssignVar vnm (pfx ++ [DARead anm (Value (evalexpr m0 e))] ++ sfx) vf`>>
+      simp[] >> etac)
+  >- (qexists_tac
+       `AssignVar vnm (pfx ++ [DValue (lookup_array m0 anm i)] ++ sfx) vf` >>
+      simp[] >> etac)
+  >- (qexists_tac
+        `AssignVar vnm (pfx ++ [DValue (lookup_v m0 vr)] ++ sfx) vf` >>
+      simp[] >> etac)
+  >- (qexists_tac `Done` >> simp[] >> etac)
+  >- (qexists_tac `Abort` >> simp[] >> etac)
+  >- (simp[PULL_EXISTS] >> qexists_tac `[]` >> simp[] >> etac)
+  >- (simp[PULL_EXISTS] >> qexists_tac `[]` >> simp[] >> etac)
+  >- (simp[PULL_EXISTS] >> qexists_tac `[]` >> simp[] >> etac)
+  >- (simp[PULL_EXISTS] >> qexists_tac `[]` >> simp[] >> etac)
+  >- (qexists_tac
+        `Seq (MAP (λdv. Label dv (ssubst vnm dv (strip_label body))) iters)` >>
+      simp[MAP_MAP_o, combinTheory.o_ABS_R] >> etac)
+  >- (qexists_tac `Abort` >> simp[] >> etac)
+  >- (qexists_tac
+        `Par (MAP (λdv. Label dv (ssubst vnm dv (strip_label body))) iters)` >>
+      simp[MAP_MAP_o, combinTheory.o_ABS_R] >> etac)
+  >- (qexists_tac `Abort` >> simp[] >> etac)
+  >- (qexists_tac `Par (MAP strip_label pfx ++ [c'] ++ MAP strip_label sfx)` >>
+      simp[MAP_MAP_o, combinTheory.o_DEF] >>
+      match_mp_tac evalrtc_par >> simp[])
+  >- (`MAP strip_label cs = cs` by (Induct_on `cs` >> simp[]) >>
+      qexists_tac `Done` >> simp[] >> etac)
+  >- (qexists_tac `Abort` >> simp[] >> match_mp_tac RTC_SUBSET >>
+      FIRST (List.mapPartial (total MATCH_MP_TAC) (CONJUNCTS eval_rules)) >>
+      simp[MEM_MAP] >> qexists_tac `Abort` >> simp[])
+  >- (qexists_tac `Done` >> simp[] >> etac)
+  >- (qexists_tac `Done` >> simp[])
+  >- (qexists_tac `Abort` >> simp[]))
+
+val MAP_EQ_CONS = prove(
+  ``MAP f l1 = h::t ⇔ ∃h0 t0. l1 = h0::t0 ∧ t = MAP f t0 ∧ h = f h0``,
+  Cases_on `l1` >> simp[EQ_SYM_EQ, CONJ_COMM]);
+
+val MAP_EQ_APPEND = prove(
+  ``∀l2 l1 l3. MAP f l1 = l2 ++ l3 ⇔
+               ∃l2' l3'. l1 = l2' ++ l3' ∧ l2 = MAP f l2' ∧ l3 = MAP f l3'``,
+  Induct >> simp[] >- simp[EQ_SYM_EQ] >> simp[MAP_EQ_CONS, PULL_EXISTS] >>
+  metis_tac[]);
+
+val labelled_eval_mono = store_thm(
+  "labelled_eval_mono",
+  ``∀m0 c0 m c. (m0,c0) ---> (m,c) ⇒
+                (m0, labelled vs c0) ---> (m, labelled vs c)``,
+  Induct_on `vs` >> simp[] >> metis_tac[eval_rules]);
+
+val labelled_RTC_mono = save_thm(
+  "labelled_RTC_mono",
+  prove(``∀x0 x. x0 --->* x ⇒
+                 ∀m0 m vs c0 c.
+                   x0 = (m0,c0) ∧ x = (m,c) ⇒
+                   (m0,labelled vs c0) --->* (m,labelled vs c)``,
+        ho_match_mp_tac RTC_INDUCT >> simp[] >>
+        simp[FORALL_PROD] >>
+        metis_tac[labelled_eval_mono, RTC_RULES])
+    |> SIMP_RULE (srw_ss()) [PULL_FORALL]);
+
+(*
+val strip_label_OK2_0 = prove(
+  ``∀m0 c0 m c.
+      (m0,c0) ---> (m,c) ⇒
+      ∀c0'. strip_label c0' = strip_label c0 ⇒
+            ∃c'. (m0,c0') --->* (m,c') ∧
+                 strip_label c' = strip_label c``,
+  ho_match_mp_tac eval_ind' >> simp[] >> rpt conj_tac
+  >- (simp[PULL_EXISTS, MAP_EQ_APPEND, MAP_EQ_CONS] >>
+      qx_genl_tac [`c`, `c0`, `pfx`, `sfx`, `m0`, `m`] >> strip_tac >>
+      qx_genl_tac [`vs`, `sf'`, `pf'`, `c0'`] >> strip_tac >>
+      `∃c'. (m0,c0') --->* (m,c') ∧ strip_label c' = strip_label c`
+        by metis_tac[] >>
+      map_every qexists_tac [`vs`, `sf'`, `pf'`, `c'`] >> simp[] >>
+      match_mp_tac labelled_RTC_mono >>
+      `MAP strip_label pfx = pfx` suffices_by metis_tac[evalrtc_seq]
+*)
+
 (* ----------------------------------------------------------------------
     Create an action graph from a PseudoC program.
 
@@ -263,7 +487,7 @@ val MEM_FOLDR_mlt = store_thm(
       disj1_tac >>
       qmatch_abbrev_tac `mlt $< (loopbag (f e)) (loopbag (f h) ⊎ FF)` >>
       `mlt $< FF (loopbag (f h) ⊎ FF)` by simp[Abbr`FF`] >>
-      metis_tac[relationTheory.TC_RULES]) >>
+      metis_tac[TC_RULES]) >>
   pop_assum SUBST_ALL_TAC >> simp[]);
 
 val _ = Datatype`actionRW = Array aname int | Variable vname`
