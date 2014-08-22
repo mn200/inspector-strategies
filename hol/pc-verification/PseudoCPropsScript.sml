@@ -336,11 +336,58 @@ val strip_label_EQ_Assign = store_thm(
       strip_label c = Assign x y z ⇔ ∃vs. c = labelled vs (Assign x y z)``,
   ho_match_mp_tac stmt_induction >> simp[EQ_SYM_EQ]);
 
+val strip_label_EQ_AssignVar = store_thm(
+  "strip_label_EQ_AssignVar[simp]",
+  ``∀c vn rds vf.
+      strip_label c = AssignVar vn rds vf ⇔
+      ∃vs. c = labelled vs (AssignVar vn rds vf)``,
+  ho_match_mp_tac stmt_induction >> simp[EQ_SYM_EQ]);
+
+val strip_label_EQ_ForLoop = store_thm(
+  "strip_label_EQ_ForLoop[simp]",
+  ``∀c vn d s.
+      strip_label c = ForLoop vn d s ⇔
+      ∃vs s'. c = labelled vs (ForLoop vn d s') ∧
+              strip_label s' = s``,
+  ho_match_mp_tac stmt_induction >> simp[PULL_EXISTS] >>
+  metis_tac[]);
+
+val strip_label_EQ_Par = store_thm(
+  "strip_label_EQ_Par[simp]",
+  ``∀c stmts. strip_label c = Par stmts ⇔
+              ∃vs sts'. c = labelled vs (Par sts') ∧
+                        MAP strip_label sts' = stmts``,
+  ho_match_mp_tac stmt_induction >> simp[PULL_EXISTS] >> metis_tac[]);
+
+val strip_label_EQ_ParLoop = store_thm(
+  "strip_label_EQ_ParLoop[simp]",
+  ``∀c vn d s.
+      strip_label c = ParLoop vn d s ⇔
+      ∃vs s'. c = labelled vs (ParLoop vn d s') ∧
+              strip_label s' = s``,
+  ho_match_mp_tac stmt_induction >> simp[PULL_EXISTS] >>
+  metis_tac[]);
+
 val strip_label_EQ_Seq = store_thm(
   "strip_label_EQ_Seq[simp]",
   ``∀c stmts. strip_label c = Seq stmts ⇔
               ∃vs sts'. c = labelled vs (Seq sts') ∧
                         MAP strip_label sts' = stmts``,
+  ho_match_mp_tac stmt_induction >> simp[PULL_EXISTS] >> metis_tac[]);
+
+val strip_label_EQ_Done = store_thm(
+  "strip_label_EQ_Done[simp]",
+  ``∀c. strip_label c = Done ⇔ ∃vs. c = labelled vs Done``,
+  ho_match_mp_tac stmt_induction >> simp[]);
+
+val strip_label_EQ_If = store_thm(
+  "strip_label_EQ_If[simp]",
+  ``∀c gd t e.
+      strip_label c = IfStmt gd t e ⇔
+      ∃vs t' e'.
+        c = labelled vs (IfStmt gd t' e') ∧
+        strip_label t' = t ∧
+        strip_label e' = e``,
   ho_match_mp_tac stmt_induction >> simp[PULL_EXISTS] >> metis_tac[]);
 
 val strip_label_ssubst = store_thm(
@@ -350,13 +397,36 @@ val strip_label_ssubst = store_thm(
   simp[ssubst_def, MAP_MAP_o, combinTheory.o_DEF, MAP_EQ_f, FORALL_domain] >>
   rw[]);
 
-val etac =
-    match_mp_tac RTC_SUBSET >>
+val eval_rules' = CONJUNCTS (SIMP_RULE bool_ss [FORALL_BOOL, FORALL_AND_THM] eval_rules)
+
+val e1tac =
     FIRST (List.mapPartial
              (fn th => case total MATCH_MP_TAC th of
                            NONE => SOME(MATCH_ACCEPT_TAC th)
                          | SOME t => SOME(t >> simp[] >> NO_TAC))
-             (CONJUNCTS (SIMP_RULE bool_ss [] eval_rules)))
+             eval_rules')
+val etac =
+    simp[] >> match_mp_tac RTC_SUBSET >> e1tac
+
+val eval_Done = store_thm(
+  "eval_Done[simp]",
+  ``(m, Done) ---> x ⇔ F``,
+  simp[Once eval_cases]);
+
+val eval_Abort = store_thm(
+  "eval_Abort[simp]",
+  ``(m,Abort) ---> x ⇔ F``,
+  simp[Once eval_cases]);
+
+val evalrtc_Done = store_thm(
+  "evalrtc_Done[simp]",
+  ``(m, Done) --->* x ⇔ x = (m,Done)``,
+  simp[Once RTC_CASES1, EQ_SYM_EQ]);
+
+val evalrtc_Abort = store_thm(
+  "evalrtc_Abort[simp]",
+  ``(m, Abort) --->* x ⇔ x = (m, Abort)``,
+  simp[Once RTC_CASES1, EQ_SYM_EQ]);
 
 val eval_strip_label_I = store_thm(
   "eval_strip_label_I",
@@ -364,7 +434,8 @@ val eval_strip_label_I = store_thm(
        (m0, c0) ---> (m,c) ⇒
        ∃c'. (m0, strip_label c0) --->* (m, c') ∧
             strip_label c' = strip_label c``,
-  ho_match_mp_tac eval_ind' >> simp [] >> rpt strip_tac
+  ho_match_mp_tac eval_ind' >> simp [] >> rpt strip_tac >>
+  TRY (simp[PULL_EXISTS] >> qexists_tac `[]` >> etac)
   >- (`MAP strip_label pfx = pfx` by (Induct_on `pfx` >> simp[]) >>
       `(m0, Seq (pfx ++ [strip_label c0] ++ MAP strip_label sfx)) --->*
        (m,  Seq (pfx ++ [c'] ++ MAP strip_label sfx))`
@@ -372,29 +443,15 @@ val eval_strip_label_I = store_thm(
       qexists_tac `Seq (pfx ++ [c'] ++ MAP strip_label sfx)` >>
       simp[MAP_MAP_o])
   >- (`MAP strip_label cs = cs` by (Induct_on `cs` >> simp[]) >>
-      qexists_tac `Done` >> simp[] >> etac)
+      simp[PULL_EXISTS] >> qexists_tac `[]` >> simp[] >> etac)
   >- (qexists_tac `Seq [Done; if b then strip_label t else strip_label e]` >>
-      conj_tac >- etac >> simp[] >> rw[])
+      conj_tac >- (Cases_on `b` >> simp[] >> etac) >> simp[] >> rw[])
+  >- (qexists_tac `Abort` >> etac)
   >- (qexists_tac `Abort` >> simp[] >> etac)
-  >- (qexists_tac `Done` >> simp[] >> etac)
-  >- (qexists_tac `Abort` >> simp[] >> etac)
-  >- (qexists_tac
-       `AssignVar vnm (pfx ++ [DARead anm (Value (evalexpr m0 e))] ++ sfx) vf`>>
-      simp[] >> etac)
-  >- (qexists_tac
-       `AssignVar vnm (pfx ++ [DValue (lookup_array m0 anm i)] ++ sfx) vf` >>
-      simp[] >> etac)
-  >- (qexists_tac
-        `AssignVar vnm (pfx ++ [DValue (lookup_v m0 vr)] ++ sfx) vf` >>
-      simp[] >> etac)
-  >- (qexists_tac `Done` >> simp[] >> etac)
-  >- (qexists_tac `Abort` >> simp[] >> etac)
-  >- (simp[PULL_EXISTS] >> qexists_tac `[]` >> simp[] >> etac)
-  >- (simp[PULL_EXISTS] >> qexists_tac `[]` >> simp[] >> etac)
-  >- (simp[PULL_EXISTS] >> qexists_tac `[]` >> simp[] >> etac)
-  >- (simp[PULL_EXISTS] >> qexists_tac `[]` >> simp[] >> etac)
-  >- (qexists_tac
-        `Seq (MAP (λdv. Label dv (ssubst vnm dv (strip_label body))) iters)` >>
+  >- (qexists_tac `Abort` >> etac)
+  >- (simp[PULL_EXISTS] >>
+      map_every qexists_tac [`[]`,
+        `MAP (λdv. Label dv (ssubst vnm dv (strip_label body))) iters`] >>
       simp[MAP_MAP_o, combinTheory.o_ABS_R] >> etac)
   >- (qexists_tac `Abort` >> simp[] >> etac)
   >- (qexists_tac
@@ -405,12 +462,10 @@ val eval_strip_label_I = store_thm(
       simp[MAP_MAP_o, combinTheory.o_DEF] >>
       match_mp_tac evalrtc_par >> simp[])
   >- (`MAP strip_label cs = cs` by (Induct_on `cs` >> simp[]) >>
-      qexists_tac `Done` >> simp[] >> etac)
+      simp[PULL_EXISTS] >> qexists_tac `[]` >> etac)
   >- (qexists_tac `Abort` >> simp[] >> match_mp_tac RTC_SUBSET >>
       FIRST (List.mapPartial (total MATCH_MP_TAC) (CONJUNCTS eval_rules)) >>
       simp[MEM_MAP] >> qexists_tac `Abort` >> simp[])
-  >- (qexists_tac `Done` >> simp[] >> etac)
-  >- (qexists_tac `Done` >> simp[])
   >- (qexists_tac `Abort` >> simp[]))
 
 val MAP_EQ_CONS = prove(
@@ -440,6 +495,170 @@ val labelled_RTC_mono = save_thm(
         metis_tac[labelled_eval_mono, RTC_RULES])
     |> SIMP_RULE (srw_ss()) [PULL_FORALL]);
 
+val seqseq_mono_1Done = store_thm(
+  "seqseq_mono_1Done[simp]",
+  ``∀m0 c0 m c.
+     (m0, Seq (Done::sts0)) ---> (m, res) ⇔
+       (∃sts. res = Seq (Done::sts) ∧ (m0, Seq sts0) ---> (m, Seq sts)) ∨
+       res = Done ∧ (m0, Seq sts0) ---> (m, Done)``,
+  simp [Once eval_cases, SimpLHS] >>
+  rpt gen_tac >> CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [eval_cases])) >>
+  simp[] >> Cases_on `res = Done` >> simp[] >>
+  rw[EQ_IMP_THM]
+  >- (fs[Once APPEND_EQ_CONS] >> rw[] >>
+      RULE_ASSUM_TAC (ONCE_REWRITE_RULE [APPEND_EQ_CONS]) >>
+      RULE_ASSUM_TAC (SIMP_RULE (srw_ss()) []) >>
+      POP_ASSUM_LIST (map_every strip_assume_tac) >>
+      rpt BasicProvers.VAR_EQ_TAC >> fs[] >> metis_tac[]) >>
+  map_every qexists_tac [`c`, `c0`, `Done::pfx`, `sfx`] >> simp[]);
+
+val seq_mono_Dones = store_thm(
+  "seq_mono_Dones[simp]",
+  ``∀m0 c0 m c pfx sts0 res.
+      EVERY ($= Done) pfx ⇒
+      ((m0, Seq (pfx ++ sts0)) ---> (m, res) ⇔
+         (∃sts. res = Seq (pfx ++ sts) ∧ (m0, Seq sts0) ---> (m, Seq sts)) ∨
+         res = Done ∧ (m0, Seq sts0) ---> (m, Done))``,
+  Induct_on `pfx` >> simp[]
+  >- (rpt gen_tac >> simp[SimpLHS, Once eval_cases] >> Cases_on `res = Done` >>
+      simp[] >> simp[SimpRHS, Once eval_cases] >> metis_tac[]) >>
+  Cases_on `res = Done` >> simp[PULL_EXISTS]);
+
+val rtc_mono1 = prove(
+  ``!x0 x. x0 --->* x ⇒
+           ∀m0 sts0 m sts pfx res.
+              EVERY ($= Done) pfx ∧ x0 = (m0, Seq(pfx ++ sts0)) ∧
+              x = (m, res) ⇒
+                (∃sts. res = Seq(pfx ++ sts) ∧
+                       (m0, Seq sts0) --->* (m, Seq sts)) ∨
+                res = Done ∧ (m0, Seq sts0) --->* (m, Done)``,
+  ho_match_mp_tac RTC_STRONG_INDUCT >> simp[] >> rw[] >>
+  qpat_assum `(m0, Seq (pfx ++ sts0)) ---> x` mp_tac >>
+  simp[Once eval_cases] >> reverse (rw[]) >- (fs[] >> etac) >>
+  `c0 ≠ Done` by (strip_tac >> fs[]) >>
+  first_x_assum
+    ((fn th => fs[APPEND_EQ_APPEND_MID, APPEND_EQ_CONS] >>
+               assume_tac th >>
+               rpt BasicProvers.VAR_EQ_TAC) o
+     assert(is_forall o concl)) >>
+  fs[] >>
+  pop_assum (qspecl_then [`l ++ [c] ++ sfx`, `pfx`] mp_tac) >>
+  simp[] >> reverse strip_tac >> simp[] >>
+  match_mp_tac (RTC_RULES |> SPEC_ALL |> CONJUNCT2) >>
+  qexists_tac `(m', Seq (l ++ [c] ++ sfx))` >> simp[] >> e1tac)
+  |> SIMP_RULE (srw_ss()) [PULL_FORALL]
+
+val rtc_mono2a = prove(
+  ``∀x0 x. x0 --->* x ⇒
+           ∀m0 sts0 m sts pfx.
+             EVERY ($= Done) pfx ∧ x0 = (m0, Seq sts0) ⇒
+             x = (m, Seq sts) ⇒
+             (m0, Seq(pfx ++ sts0)) --->* (m, Seq (pfx ++ sts))``,
+  ho_match_mp_tac RTC_STRONG_INDUCT >> simp[] >> rw[] >>
+  qpat_assum `(m0,Seq sts0) ---> y` mp_tac >>
+  simp[Once eval_cases] >> reverse (rw[]) >- fs[] >>
+  match_mp_tac (RTC_RULES |> SPEC_ALL |> CONJUNCT2) >>
+  qexists_tac `(m',Seq (pfx ++ pfx' ++ [c] ++ sfx))` >>
+  conj_tac >- (simp[] >> e1tac) >> metis_tac[]) |> SIMP_RULE (srw_ss()) [PULL_FORALL]
+
+val rtc_mono2b = prove(
+  ``∀x0 x.
+       x0 --->* x ⇒
+       ∀pfx sts m0 m.
+         x0 = (m0, Seq sts) ∧ x = (m, Done) ∧ EVERY ($= Done) pfx ⇒
+         (m0, Seq (pfx ++ sts)) --->* (m, Done)``,
+  ho_match_mp_tac RTC_STRONG_INDUCT >> simp[] >> rw[] >>
+  simp[Once RTC_CASES1, EXISTS_PROD, PULL_EXISTS] >> dsimp[] >>
+  qpat_assum `(m0, Seq sts) ---> x` mp_tac >>
+  simp[Once eval_cases, SimpL ``$==>``] >> rw[]
+  >- (disj1_tac >> map_every qexists_tac [`m'`, `pfx' ++ [c] ++ sfx`] >>
+      conj_tac >- e1tac >> simp[]) >>
+  disj2_tac >> fs[] >> e1tac) |> SIMP_RULE (srw_ss()) [PULL_FORALL]
+
+val seqDones_rtc = store_thm(
+  "seqDones_rtc[simp]",
+  ``EVERY ($= Done) pfx ⇒
+    ((m0, Seq (pfx ++ sts0)) --->* (m, res) ⇔
+     (∃sts. res = Seq(pfx ++ sts) ∧ (m0, Seq sts0) --->* (m, Seq sts)) ∨
+     res = Done ∧ (m0, Seq sts0) --->* (m, Done))``,
+  rw[EQ_IMP_THM] >> metis_tac[rtc_mono1, rtc_mono2a, rtc_mono2b]);
+
+val seqDone_rtc = save_thm(
+  "seqDone_rtc[simp]",
+  seqDones_rtc |> Q.INST[`pfx` |-> `[Done]`]
+               |> SIMP_RULE list_ss [])
+
+val general_rtcseq_cases = save_thm(
+  "general_rtcseq_cases",
+  seqDones_rtc |> Q.INST [`pfx` |-> `[]`]
+               |> SIMP_RULE list_ss []);
+
+val labelled_done = store_thm(
+  "labelled_done[simp]",
+  ``(m, labelled vs Done) --->* (m, Done)``,
+  Induct_on `vs` >> simp[] >> qx_gen_tac `v` >>
+  match_mp_tac (RTC_RULES_RIGHT1 |> SPEC_ALL |> CONJUNCT2) >>
+  qexists_tac `(m, Label v Done)` >> reverse conj_tac >- e1tac >>
+  simp[labelled_RTC_mono |> SPEC_ALL |> Q.INST [`vs` |-> `[v]`]
+                         |> SIMP_RULE (srw_ss()) []]);
+
+val labelled_abort1 = store_thm(
+  "labelled_abort1[simp]",
+  ``(m, labelled vs Abort) --->* (m, Abort)``,
+  Induct_on `vs` >> simp[] >> qx_gen_tac `v` >>
+  match_mp_tac (RTC_RULES_RIGHT1 |> SPEC_ALL |> CONJUNCT2) >>
+  qexists_tac `(m, Label v Abort)` >> reverse conj_tac >- e1tac >>
+  simp[labelled_RTC_mono |> SPEC_ALL |> Q.INST [`vs` |-> `[v]`]
+                         |> SIMP_RULE (srw_ss()) []]);
+
+val Label_abort = store_thm(
+  "Label_abort[simp]",
+  ``(m0, Label v s) --->* (m, Abort) ⇔ (m0, s) --->* (m, Abort)``,
+  eq_tac
+  >- (strip_tac >>
+      `(∃x0. (m0, Label v s) = x0) ∧ ∃x. (m,Abort) = x`  by simp[] >>
+      fs[] >> ntac 2 (pop_assum mp_tac) >>
+      map_every qid_spec_tac [`m0`, `v`, `s`, `m`] >> pop_assum mp_tac >>
+      map_every qid_spec_tac [`x`, `x0`] >>
+      ho_match_mp_tac RTC_STRONG_INDUCT >> simp[] >> rpt strip_tac >> rw[] >>
+      qpat_assum `(m0, Label v s) ---> x` mp_tac >>
+      simp[Once eval_cases] >> simp[] >> rw[] >> fs[] >> metis_tac[RTC_RULES]) >>
+  strip_tac >>
+  match_mp_tac (RTC_RULES_RIGHT1 |> SPEC_ALL |> CONJUNCT2) >>
+  qexists_tac `(m, Label v Abort)` >> reverse conj_tac >- e1tac >>
+  metis_tac[labelled_RTC_mono,FOLDR]);
+
+val labelled_abort2 = store_thm(
+  "labelled_abort2[simp]",
+  ``∀vs. (m0, labelled vs s) --->* (m, Abort) ⇔ (m0, s) --->* (m, Abort)``,
+  Induct >> simp[]);
+
+val ParDone = store_thm(
+  "ParDone[simp]",
+  ``(m0, Par(Done::sts)) ---> (m, res) ⇔
+      res = Done ∧ m = m0 ∧ EVERY ($= Done) sts ∨
+      res = Abort ∧ m = m0 ∧ MEM Abort sts ∨
+      ∃sts'. res = Par(Done::sts') ∧ (m0, Par sts) ---> (m, Par sts')``,
+  ONCE_REWRITE_TAC [eval_cases] >> simp[] >> Cases_on `res = Abort` >> simp[] >>
+  Cases_on `res = Done` >> simp[] >> eq_tac >> rw[]
+  >- (RULE_ASSUM_TAC (SIMP_RULE (srw_ss())[APPEND_EQ_CONS]) >>
+      POP_ASSUM_LIST (map_every strip_assume_tac) >> rw[] >> fs[] >>
+      metis_tac[]) >>
+  metis_tac[APPEND])
+
+val ParRTCDone_I = store_thm(
+  "ParRTCDone_I",
+  ``(m0, Par sts) --->* (m, Done) ⇒
+    (m0, Par(Done :: sts)) --->* (m, Done)``,
+  `∀x0 x. x0 --->* x ⇒
+          ∀m0 sts m. x0 = (m0, Par sts) ∧ x = (m, Done) ⇒
+                     (m0,Par(Done::sts)) --->* (m, Done)`
+    suffices_by metis_tac[] >>
+  ho_match_mp_tac RTC_STRONG_INDUCT >> simp[] >> rw[] >>
+  qpat_assum `(m0, Par sts) ---> x` mp_tac >>
+  simp[Once eval_cases] >> rw[] >> fs[] >>
+  metis_tac[eval_rules, RTC_RULES, APPEND]);
+
 (*
 val strip_label_OK2_0 = prove(
   ``∀m0 c0 m c.
@@ -447,14 +666,103 @@ val strip_label_OK2_0 = prove(
       ∀c0'. strip_label c0' = strip_label c0 ⇒
             ∃c'. (m0,c0') --->* (m,c') ∧
                  strip_label c' = strip_label c``,
-  ho_match_mp_tac eval_ind' >> simp[] >> rpt conj_tac
+  ho_match_mp_tac eval_ind' >> simp[] >> rpt conj_tac >>
+  TRY (simp[PULL_EXISTS] >> rpt strip_tac >> qexists_tac `vs` >>
+       match_mp_tac labelled_RTC_mono >> etac)
   >- (simp[PULL_EXISTS, MAP_EQ_APPEND, MAP_EQ_CONS] >>
-      qx_genl_tac [`c`, `c0`, `pfx`, `sfx`, `m0`, `m`] >> strip_tac >>
-      qx_genl_tac [`vs`, `sf'`, `pf'`, `c0'`] >> strip_tac >>
+      qx_genl_tac [`c`, `c0`, `pfx`, `sfx`, `m0`, `m`] >> rpt strip_tac >>
+      qmatch_assum_rename_tac `MAP strip_label pfx = MAP strip_label pf'` [] >>
+      qmatch_assum_rename_tac `MAP strip_label sfx = MAP strip_label sf'` [] >>
+      qmatch_assum_rename_tac `strip_label c0 = strip_label c0'` [] >>
       `∃c'. (m0,c0') --->* (m,c') ∧ strip_label c' = strip_label c`
         by metis_tac[] >>
-      map_every qexists_tac [`vs`, `sf'`, `pf'`, `c'`] >> simp[] >>
+      map_every qexists_tac [`vs`, `sf'`, `pfx`, `c'`] >> simp[] >>
       match_mp_tac labelled_RTC_mono >>
+      `(m0,Seq (pf' ++ [c0'] ++ sf')) --->* (m0, Seq (pfx ++ [c0'] ++ sf'))`
+        by (Q.UNDISCH_THEN `EVERY ($= Done) pfx` mp_tac >>
+            Q.UNDISCH_THEN `MAP strip_label pfx = MAP strip_label pf'` mp_tac >>
+            simp_tac bool_ss [GSYM APPEND_ASSOC] >>
+            qspec_tac (`[c0'] ++ sf'`, `tl`) >>
+            map_every qid_spec_tac [`pfx`, `pf'`] >>
+            rpt (pop_assum kall_tac) >> Induct >>
+            simp[MAP_EQ_CONS, PULL_EXISTS] >> qx_genl_tac [`tl`, `pft`, `vs`] >>
+            rpt strip_tac >>
+            `(m0, Seq(labelled vs Done::(pf' ++ tl))) --->*
+             (m0,Seq(Done::(pf'++tl)))`
+              by (match_mp_tac (evalrtc_seq |> Q.INST [`pfx` |-> `[]`]
+                                            |> SIMP_RULE (srw_ss()) []) >>
+                  Induct_on `vs` >> simp[] >> qx_gen_tac `v` >>
+                  `(m0, Label v Done) ---> (m0, Done)` by e1tac >>
+                  IMP_RES_THEN (qspec_then `[v]` mp_tac) labelled_RTC_mono >>
+                  simp[] >> metis_tac[RTC_RULES_RIGHT1]) >>
+            `(m0, Seq (Done::(pf' ++ tl))) --->* (m0, Seq(Done::(pft++tl)))`
+              suffices_by metis_tac[RTC_CASES_RTC_TWICE] >>
+            simp[]) >>
+      simp[Once RTC_CASES_RTC_TWICE] >>
+      qexists_tac `(m0,Seq(pfx ++ [c0'] ++ sf'))` >> simp[] >>
+      simp[evalrtc_seq])
+  >- (simp[PULL_EXISTS] >> rpt strip_tac >> qexists_tac `[]` >> simp[] >>
+      `MAP strip_label cs = cs`
+        by (pop_assum kall_tac >> Induct_on `cs` >> simp[]) >>
+      pop_assum SUBST_ALL_TAC >> rw[] >>
+      fs[MEM_MAP, EVERY_MEM, PULL_EXISTS] >>
+      `(m0, labelled vs (Seq sts')) --->* (m0, labelled vs Done)`
+        by (match_mp_tac labelled_RTC_mono >> Induct_on `sts'` >>
+            simp[] >- etac >> dsimp[] >> rpt strip_tac >> fs[] >>
+            simp[Once RTC_CASES_RTC_TWICE] >>
+            qexists_tac `(m0, Seq (Done :: sts'))` >> simp[] >>
+            match_mp_tac (evalrtc_seq |> Q.INST [`pfx` |-> `[]`]
+                                      |> SIMP_RULE (srw_ss()) []) >>
+            simp[]) >>
+      `(m0, labelled vs Done) --->* (m0, Done)` by simp[] >>
+      metis_tac[RTC_CASES_RTC_TWICE])
+  >- (simp[PULL_EXISTS, MAP_EQ_CONS] >> rpt strip_tac >>
+      map_every qexists_tac [`vs`, `if b then t' else e'`, `[]`] >>
+      simp[] >> ONCE_REWRITE_TAC [COND_RAND] >> rw[] >>
+      match_mp_tac labelled_RTC_mono >> match_mp_tac RTC_SUBSET >>
+      e1tac)
+  >- (simp[PULL_EXISTS] >> rpt strip_tac >> qexists_tac `Abort` >>
+      simp[] >> etac)
+  >- (simp[PULL_EXISTS] >> rpt strip_tac >> qexists_tac `Abort` >>
+      simp[] >> etac)
+  >- (simp[PULL_EXISTS] >> rpt strip_tac >> qexists_tac `Abort` >>
+      simp[] >> etac)
+  >- (simp[PULL_EXISTS] >> rpt strip_tac >>
+      map_every qexists_tac [
+        `vs`, `MAP (λdv. Label dv (ssubst vnm dv s')) iters`
+      ] >> simp[MAP_MAP_o, combinTheory.o_DEF] >>
+      match_mp_tac labelled_RTC_mono >> etac)
+  >- (simp[PULL_EXISTS] >> rpt strip_tac >> qexists_tac `labelled vs Abort` >>
+      simp[] >> match_mp_tac labelled_RTC_mono >> etac)
+  >- (simp[PULL_EXISTS] >> rpt strip_tac >>
+      map_every qexists_tac [
+        `vs`, `MAP (λdv. Label dv (ssubst vnm dv s')) iters`
+      ] >> simp[MAP_MAP_o, combinTheory.o_DEF] >>
+      match_mp_tac labelled_RTC_mono >> etac)
+  >- (simp[PULL_EXISTS] >> rpt strip_tac >> qexists_tac `labelled vs Abort` >>
+      simp[] >> match_mp_tac labelled_RTC_mono >> etac)
+  >- (simp[PULL_EXISTS] >> rpt strip_tac >>
+      pop_assum mp_tac >>
+      simp[SimpL ``$==>``, MAP_EQ_APPEND, MAP_EQ_CONS] >> rw[] >>
+      qmatch_assum_rename_tac `MAP strip_label pfx = MAP strip_label p'` [] >>
+      qmatch_assum_rename_tac `MAP strip_label sfx = MAP strip_label s'` [] >>
+      qmatch_assum_rename_tac `strip_label c0 = strip_label c0'` [] >>
+      `∃c'. (m0,c0') --->* (m,c') ∧ strip_label c' = strip_label c`
+        by metis_tac[] >>
+      map_every qexists_tac [`vs`, `p' ++ [c'] ++ s'`] >> simp[] >>
+      match_mp_tac labelled_RTC_mono >> match_mp_tac evalrtc_par >> simp[])
+  >- (simp[PULL_EXISTS] >> rpt strip_tac >> qexists_tac `vs` >>
+      match_mp_tac labelled_RTC_mono >>
+      `MAP strip_label cs = cs`
+        by (pop_assum kall_tac >> Induct_on `cs` >> simp[]) >>
+      pop_assum SUBST_ALL_TAC >> rw[] >> fs[EVERY_MEM, MEM_MAP, PULL_EXISTS] >>
+      Induct_on `sts'` >> simp[] >- etac >> dsimp[] >> rpt strip_tac >> fs[] >>
+
+
+
+
+
+
       `MAP strip_label pfx = pfx` suffices_by metis_tac[evalrtc_seq]
 *)
 
