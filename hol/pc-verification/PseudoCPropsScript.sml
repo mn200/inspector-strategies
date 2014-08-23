@@ -330,6 +330,11 @@ val labelled_EQ = save_thm(
      map mklabelled11_eqn
          (op_set_diff equal (TypeBase.constructors_of ``:stmt``) [``Label``])))
 
+val strip_label_EQ_Abort = store_thm(
+  "strip_label_EQ_Abort[simp]",
+  ``∀c. strip_label c = Abort ⇔ ∃vs. c = labelled vs Abort``,
+  ho_match_mp_tac stmt_induction >> simp[EQ_SYM_EQ]);
+
 val strip_label_EQ_Assign = store_thm(
   "strip_label_EQ_Assign[simp]",
   ``∀c x y z.
@@ -351,6 +356,13 @@ val strip_label_EQ_ForLoop = store_thm(
               strip_label s' = s``,
   ho_match_mp_tac stmt_induction >> simp[PULL_EXISTS] >>
   metis_tac[]);
+
+val strip_label_EQ_Malloc = store_thm(
+  "strip_label_EQ_Malloc[simp]",
+  ``∀c anm sz i.
+       strip_label c = Malloc anm sz i ⇔
+       ∃vs. c = labelled vs (Malloc anm sz i)``,
+  ho_match_mp_tac stmt_induction >> simp[EQ_SYM_EQ]);
 
 val strip_label_EQ_Par = store_thm(
   "strip_label_EQ_Par[simp]",
@@ -427,46 +439,6 @@ val evalrtc_Abort = store_thm(
   "evalrtc_Abort[simp]",
   ``(m, Abort) --->* x ⇔ x = (m, Abort)``,
   simp[Once RTC_CASES1, EQ_SYM_EQ]);
-
-val eval_strip_label_I = store_thm(
-  "eval_strip_label_I",
-  ``∀m0 c0 m c.
-       (m0, c0) ---> (m,c) ⇒
-       ∃c'. (m0, strip_label c0) --->* (m, c') ∧
-            strip_label c' = strip_label c``,
-  ho_match_mp_tac eval_ind' >> simp [] >> rpt strip_tac >>
-  TRY (simp[PULL_EXISTS] >> qexists_tac `[]` >> etac)
-  >- (`MAP strip_label pfx = pfx` by (Induct_on `pfx` >> simp[]) >>
-      `(m0, Seq (pfx ++ [strip_label c0] ++ MAP strip_label sfx)) --->*
-       (m,  Seq (pfx ++ [c'] ++ MAP strip_label sfx))`
-         by metis_tac[evalrtc_seq] >>
-      qexists_tac `Seq (pfx ++ [c'] ++ MAP strip_label sfx)` >>
-      simp[MAP_MAP_o])
-  >- (`MAP strip_label cs = cs` by (Induct_on `cs` >> simp[]) >>
-      simp[PULL_EXISTS] >> qexists_tac `[]` >> simp[] >> etac)
-  >- (qexists_tac `Seq [Done; if b then strip_label t else strip_label e]` >>
-      conj_tac >- (Cases_on `b` >> simp[] >> etac) >> simp[] >> rw[])
-  >- (qexists_tac `Abort` >> etac)
-  >- (qexists_tac `Abort` >> simp[] >> etac)
-  >- (qexists_tac `Abort` >> etac)
-  >- (simp[PULL_EXISTS] >>
-      map_every qexists_tac [`[]`,
-        `MAP (λdv. Label dv (ssubst vnm dv (strip_label body))) iters`] >>
-      simp[MAP_MAP_o, combinTheory.o_ABS_R] >> etac)
-  >- (qexists_tac `Abort` >> simp[] >> etac)
-  >- (qexists_tac
-        `Par (MAP (λdv. Label dv (ssubst vnm dv (strip_label body))) iters)` >>
-      simp[MAP_MAP_o, combinTheory.o_ABS_R] >> etac)
-  >- (qexists_tac `Abort` >> simp[] >> etac)
-  >- (qexists_tac `Par (MAP strip_label pfx ++ [c'] ++ MAP strip_label sfx)` >>
-      simp[MAP_MAP_o, combinTheory.o_DEF] >>
-      match_mp_tac evalrtc_par >> simp[])
-  >- (`MAP strip_label cs = cs` by (Induct_on `cs` >> simp[]) >>
-      simp[PULL_EXISTS] >> qexists_tac `[]` >> etac)
-  >- (qexists_tac `Abort` >> simp[] >> match_mp_tac RTC_SUBSET >>
-      FIRST (List.mapPartial (total MATCH_MP_TAC) (CONJUNCTS eval_rules)) >>
-      simp[MEM_MAP] >> qexists_tac `Abort` >> simp[])
-  >- (qexists_tac `Abort` >> simp[]))
 
 val MAP_EQ_CONS = prove(
   ``MAP f l1 = h::t ⇔ ∃h0 t0. l1 = h0::t0 ∧ t = MAP f t0 ∧ h = f h0``,
@@ -659,8 +631,7 @@ val ParRTCDone_I = store_thm(
   simp[Once eval_cases] >> rw[] >> fs[] >>
   metis_tac[eval_rules, RTC_RULES, APPEND]);
 
-(*
-val strip_label_OK2_0 = prove(
+val strip_label_simulation1 = prove(
   ``∀m0 c0 m c.
       (m0,c0) ---> (m,c) ⇒
       ∀c0'. strip_label c0' = strip_label c0 ⇒
@@ -721,26 +692,16 @@ val strip_label_OK2_0 = prove(
       simp[] >> ONCE_REWRITE_TAC [COND_RAND] >> rw[] >>
       match_mp_tac labelled_RTC_mono >> match_mp_tac RTC_SUBSET >>
       e1tac)
-  >- (simp[PULL_EXISTS] >> rpt strip_tac >> qexists_tac `Abort` >>
-      simp[] >> etac)
-  >- (simp[PULL_EXISTS] >> rpt strip_tac >> qexists_tac `Abort` >>
-      simp[] >> etac)
-  >- (simp[PULL_EXISTS] >> rpt strip_tac >> qexists_tac `Abort` >>
-      simp[] >> etac)
   >- (simp[PULL_EXISTS] >> rpt strip_tac >>
       map_every qexists_tac [
         `vs`, `MAP (λdv. Label dv (ssubst vnm dv s')) iters`
       ] >> simp[MAP_MAP_o, combinTheory.o_DEF] >>
       match_mp_tac labelled_RTC_mono >> etac)
-  >- (simp[PULL_EXISTS] >> rpt strip_tac >> qexists_tac `labelled vs Abort` >>
-      simp[] >> match_mp_tac labelled_RTC_mono >> etac)
   >- (simp[PULL_EXISTS] >> rpt strip_tac >>
       map_every qexists_tac [
         `vs`, `MAP (λdv. Label dv (ssubst vnm dv s')) iters`
       ] >> simp[MAP_MAP_o, combinTheory.o_DEF] >>
       match_mp_tac labelled_RTC_mono >> etac)
-  >- (simp[PULL_EXISTS] >> rpt strip_tac >> qexists_tac `labelled vs Abort` >>
-      simp[] >> match_mp_tac labelled_RTC_mono >> etac)
   >- (simp[PULL_EXISTS] >> rpt strip_tac >>
       pop_assum mp_tac >>
       simp[SimpL ``$==>``, MAP_EQ_APPEND, MAP_EQ_CONS] >> rw[] >>
@@ -757,14 +718,48 @@ val strip_label_OK2_0 = prove(
         by (pop_assum kall_tac >> Induct_on `cs` >> simp[]) >>
       pop_assum SUBST_ALL_TAC >> rw[] >> fs[EVERY_MEM, MEM_MAP, PULL_EXISTS] >>
       Induct_on `sts'` >> simp[] >- etac >> dsimp[] >> rpt strip_tac >> fs[] >>
+      simp[Once RTC_CASES_RTC_TWICE] >>
+      qexists_tac `(m0, Par(Done::sts'))` >>
+      simp[ParRTCDone_I] >> rpt (pop_assum kall_tac) >>
+      match_mp_tac (evalrtc_par |> Q.INST [`pfx` |-> `[]`]
+                                |> SIMP_RULE (srw_ss()) []) >>
+      Induct_on `vs` >> simp[])
+  >- (simp[PULL_EXISTS] >> rpt strip_tac >>
+      qexists_tac `vs` >> simp[] >> match_mp_tac labelled_RTC_mono >>
+      fs[Once MEM_SPLIT_APPEND_first] >> rw[] >>
+      fs[MAP_EQ_APPEND, MAP_EQ_CONS] >> rw[] >>
+      simp[Once RTC_CASES_RTC_TWICE] >>
+      qmatch_assum_rename_tac `MAP strip_label pfx = MAP strip_label p'` [] >>
+      qmatch_assum_rename_tac `MAP strip_label sfx = MAP strip_label s'` [] >>
+      qexists_tac `(m0, Par (p' ++ [Abort] ++ s'))` >> reverse conj_tac >- etac>>
+      match_mp_tac evalrtc_par >> simp[]));
 
+val eval_strip_label_I = save_thm(
+  "eval_strip_label_I",
+  strip_label_simulation1
+    |> SPEC_ALL |> UNDISCH |> SPEC ``strip_label c0``
+    |> SIMP_RULE (srw_ss()) [] |> DISCH_ALL);
 
+val strip_label_simulation0 = prove(
+  ``∀x0 x. x0 --->* x ⇒
+           ∀m0 c0 c0' m c.
+             x0 = (m0,c0) ∧ x = (m,c) ∧
+             strip_label c0' = strip_label c0 ⇒
+             ∃c'. (m0,c0') --->* (m,c') ∧ strip_label c' = strip_label c``,
+  ho_match_mp_tac RTC_STRONG_INDUCT >> simp[] >> rw[]
+  >- metis_tac [RTC_RULES] >>
+  qmatch_assum_rename_tac `(m0,c0) ---> mc'` [] >>
+  `∃m' c'. mc' = (m',c')` by (Cases_on `mc'` >> simp[]) >> rw[] >>
+  `∃c''. (m0, c0') --->* (m', c'') ∧ strip_label c'' = strip_label c'`
+    by metis_tac[strip_label_simulation1] >>
+  `∃cc. (m',c'') --->* (m,cc) ∧ strip_label cc = strip_label c`
+    by metis_tac[] >>
+  metis_tac[RTC_CASES_RTC_TWICE])
 
-
-
-
-      `MAP strip_label pfx = pfx` suffices_by metis_tac[evalrtc_seq]
-*)
+val strip_label_bisimulation = save_thm(
+  "strip_label_bisimulation",
+  strip_label_simulation0
+    |> SIMP_RULE (srw_ss()) [PULL_FORALL, AND_IMP_INTRO]);
 
 (* ----------------------------------------------------------------------
     Create an action graph from a PseudoC program.
@@ -785,12 +780,16 @@ val OPT_SEQUENCE_def = Define`
   (OPT_SEQUENCE (h :: t) = lift2 CONS h (OPT_SEQUENCE t))
 `;
 
+val _ = augment_srw_ss [
+  rewrites [SIMP_RULE (bool_ss ++ ETA_ss) [] FINITE_BAG_FOLDR_loopbag]
+]
+
 val MEM_FOLDR_mlt = store_thm(
   "MEM_FOLDR_mlt",
   ``MEM e l ⇒
     mlt $< (loopbag (f e)) (FOLDR (\e a. loopbag (f e) ⊎ a) {||} l) ∨
     loopbag (f e) = FOLDR (\e a. loopbag (f e) ⊎ a) {||} l``,
-  Induct_on `l` >> dsimp[] >> rpt strip_tac >> res_tac
+  simp[] >> Induct_on `l` >> dsimp[] >> rpt strip_tac >> res_tac
   >- (Cases_on `loopbag (f h) = {||}` >> simp[] >>
       disj1_tac >>
       qmatch_abbrev_tac `mlt $< (loopbag (f e)) (loopbag (f h) ⊎ FF)` >>
