@@ -136,8 +136,9 @@ val graphOf_def = tDefine "graphOf" `
 
   (graphOf i0 m0 Done = SOME(i0,m0,emptyG)) ∧
 
-  (graphOf i0 m0 (Malloc vnm sz value) = NONE)
+  (graphOf i0 m0 (Malloc vnm sz value) = NONE) ∧
 
+  (graphOf i0 m0 (Label v s) = graphOf i0 m0 s)
 ` (WF_REL_TAC
      `inv_image (mlt (<) LEX (<)) (λ(i,m,s). (loopbag s, stmt_weight (K 0) (K 0) s))` >>
    simp[WF_mlt1, FOLDR_MAP, mlt_loopbag_lemma] >>
@@ -408,6 +409,7 @@ val graphOf_idents_apart = store_thm(
   >- ((* Abort *) simp[Once graphOf_def])
   >- ((* Done *) simp[Once graphOf_def])
   >- ((* Malloc *) simp[graphOf_def])
+  >- ((* Label *) simp[graphOf_def])
 );
 
 val pcg_eval_merge_graph = store_thm(
@@ -508,7 +510,9 @@ val graphOf_pcg_eval = store_thm(
            mergeReads_def] >> metis_tac[assign_lemma, REVERSE_DEF, APPEND])
   >- ((* Abort *) simp[graphOf_def])
   >- ((* Done *) simp[graphOf_def, pcg_eval_thm])
-  >- ((* Malloc *) simp[graphOf_def]));
+  >- ((* Malloc *) simp[graphOf_def])
+  >- ((* Label *) simp[graphOf_def])
+);
 
 val assert_EQ_SOME = store_thm(
   "assert_EQ_SOME[simp]",
@@ -982,7 +986,9 @@ val graphOf_starting_id_irrelevant = store_thm(
   >- ((* Abort *) simp[graphOf_def])
   >- ((* Done *) csimp[graphOf_def, INJ_INSERT] >> strip_tac >>
       qx_gen_tac `j0` >> strip_tac >> qexists_tac `K j0` >> simp[])
-  >- ((* Malloc *) simp[graphOf_def]))
+  >- ((* Malloc *) simp[graphOf_def])
+  >- ((* Label *) simp[graphOf_def])
+);
 
 val graphOf_simps = save_thm(
   "graphOf_simps[simp]",
@@ -1333,7 +1339,9 @@ val graphOf_apply_action_diamond = store_thm(
       metis_tac[successful_action_diamond])
   >- ((* abort *) simp[graphOf_def])
   >- ((* Done *) simp[graphOf_def])
-  >- ((* malloc *) simp[graphOf_def]))
+  >- ((* malloc *) simp[graphOf_def])
+  >- ((* Label *) simp[graphOf_def])
+);
 
 val graphOf_pcg_eval_diamond = store_thm(
   "graphOf_pcg_eval_diamond",
@@ -1440,7 +1448,9 @@ val eval_graphOf_action = store_thm(
         (Q.ISPEC_THEN `LENGTH pfx`
            (Q.ISPEC_THEN `λn c. TOS (GG n m0 c)` mp_tac))
         pregraph_FOLDRi_merge_graph >> simp[])
-  >- ((* malloc *) simp[graphOf_def]));
+  >- ((* malloc *) simp[graphOf_def])
+  >- ((* Label *) simp[graphOf_def] >> metis_tac[])
+);
 
 val _ = temp_overload_on ("MergeL", ``FOLDR merge_graph emptyG``)
 
@@ -1523,6 +1533,12 @@ val MergeL_empties = store_thm(
   "MergeL_empties",
   ``(∀g. MEM g glist ⇒ g = emptyG) ⇒ MergeL glist = emptyG``,
   Induct_on `glist` >> simp[]);
+
+val MAPi_MAP_o = store_thm(
+  "MAPi_MAP_o",
+  ``∀l f g. MAPi f (MAP g l) = MAPi (λn. f n o g) l``,
+  Induct_on `l` >> simp[combinTheory.o_ABS_L]);
+
 
 val graphOf_correct_lemma = store_thm(
   "graphOf_correct_lemma",
@@ -1643,6 +1659,12 @@ val graphOf_correct_lemma = store_thm(
   >- ((* forloop turns into seq *)
       rpt gen_tac >> strip_tac >> simp[Once graphOf_def, SimpL ``$==>``] >>
       simp[EXISTS_PROD, PULL_EXISTS] >>
+      `∀i m f l.
+         graphOf i m (Seq (MAP (λx. Label x (f x)) l)) =
+         graphOf i m (Seq (MAP f l))`
+        by (Induct_on `l` >> ONCE_REWRITE_TAC [graphOf_def] >>
+            simp[] >> ONCE_REWRITE_TAC [graphOf_def] >> simp[]) >>
+      simp[] >>
       metis_tac[stackInc_EQ_NIL, graphOf_starting_id_irrelevant,
                 gtouches_imap])
   >- ((* forloop aborts because domain evaluates badly *)
@@ -1650,6 +1672,11 @@ val graphOf_correct_lemma = store_thm(
   >- ((* parloop turns into par *)
       rpt gen_tac >> strip_tac >> simp[Once graphOf_def, SimpL ``$==>``] >>
       simp[EXISTS_PROD, PULL_EXISTS] >>
+      `∀i m f l.
+         graphOf i m (Par (MAP (λx. Label x (f x)) l)) =
+         graphOf i m (Par (MAP f l))`
+        by (simp[graphOf_def, MAPi_MAP_o, combinTheory.o_ABS_L]) >>
+      simp[] >>
       metis_tac[stackInc_EQ_NIL, graphOf_starting_id_irrelevant,
                 gtouches_imap])
   >- ((* parloop aborts because domain evaluates badly *)
@@ -1850,7 +1877,11 @@ val graphOf_correct_lemma = store_thm(
       disch_then (qx_choose_then `n` strip_assume_tac) >>
       `∀i m. graphOf i m Abort = NONE` by simp[] >>
       metis_tac[optionTheory.NOT_NONE_SOME])
-  >- ((* Malloc *) simp[graphOf_def]));
+  >- ((* Malloc *) simp[graphOf_def])
+  >- ((* evaluate under a Label *) simp[graphOf_def])
+  >- ((* Label-Done ---> Done *) simp[graphOf_def])
+  >- ((* Label-Abort ---> Abort*) simp[graphOf_def])
+);
 
 val _ = overload_on("--->*", ``RTC eval``)
 val _ = overload_on("--->⁺", ``TC eval``)
