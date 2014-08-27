@@ -210,7 +210,9 @@ val graphOf_def = tDefine "graphOf" `
 
   (graphOf i0 m0 Done = SOME(m0,ε)) ∧
 
-  (graphOf i0 m0 (Malloc vnm sz value) = NONE)
+  (graphOf i0 m0 (Malloc vnm sz value) = NONE) ∧
+
+  (graphOf i0 m0 (Label v s) = graphOf (v::i0) m0 s)
 ` (WF_REL_TAC
      `inv_image (mlt (<) LEX (<)) (λ(i,m,s). (loopbag s, stmt_weight (K 0) (K 0) s))` >>
    simp[WF_mlt1, FOLDR_MAP, mlt_loopbag_lemma] >>
@@ -249,15 +251,6 @@ val OPTION_IGNORE_BIND_EQUALS_OPTION = store_thm(
       (?x'. x = SOME x') /\ (y = SOME z))``,
   Cases_on `x` THEN SIMP_TAC (srw_ss()) []);
 
-val SNOC_11 = prove(
-  ``INJ (λi. i ++ [x]) s UNIV``,
-  simp[INJ_IFF]);
-
-val updLast_EQ_NIL = store_thm(
-  "updLast_EQ_NIL[simp]",
-  ``updLast f l = [] ⇔ l = []``,
-  Induct_on `l` >> simp[] >> Cases_on `l` >> simp[]);
-
 val OPT_SEQUENCE_EQ_SOME = store_thm(
    "OPT_SEQUENCE_EQ_SOME",
    ``∀l. OPT_SEQUENCE optlist = SOME l ⇔
@@ -265,23 +258,6 @@ val OPT_SEQUENCE_EQ_SOME = store_thm(
          (l = MAP THE optlist)``,
    Induct_on `optlist` >> dsimp[OPT_SEQUENCE_def] >>
    csimp[] >> metis_tac []);
-
-val FRONT_TAKE = store_thm(
-  "FRONT_TAKE",
-  ``l ≠ [] ⇒ FRONT l = TAKE (LENGTH l - 1) l``,
-  Induct_on `l` >> simp[] >> Cases_on `l` >>
-  fs[DECIDE ``SUC x ≤ 1 ⇔ x = 0``]);
-
-val TAKE_isPREFIX = store_thm(
-  "TAKE_isPREFIX",
-  ``!n l. n <= LENGTH l ==> TAKE n l <<= l``,
-  Induct_on `l` THEN SIMP_TAC (srw_ss()) [] THEN
-  MAP_EVERY Q.X_GEN_TAC [`h`, `n`] THEN STRIP_TAC THEN
-  `n < SUC (LENGTH l) \/ n = SUC (LENGTH l)` by DECIDE_TAC THENL [
-    FULL_SIMP_TAC (srw_ss()) [LT_SUC] THEN SRW_TAC[][] THEN
-    FULL_SIMP_TAC (srw_ss()) [],
-    FULL_SIMP_TAC (srw_ss()) []
-  ]);
 
 val some_EQ_SOME_E = save_thm(
   "some_EQ_SOME_E",
@@ -303,15 +279,12 @@ val assign_lemma = store_thm(
     getReads m ds = SOME rds ⇒
     mergeReads0 ds acc opn (MAP (lookupRW m) rds) =
     (opn:value list -> value) (REVERSE acc ++ rvs)``,
-  simp[OPT_SEQUENCE_EQ_SOME,
-       MEM_MAP, MAP_MAP_o,
-       PULL_EXISTS] >>
+  simp[OPT_SEQUENCE_EQ_SOME, MEM_MAP, MAP_MAP_o, PULL_EXISTS] >>
   map_every qid_spec_tac [`acc`, `rvs`, `rds`, `ds`] >>
   Induct >> simp[getReads_def, mergeReads0_def] >>
   Cases >> dsimp[getReads_def, mergeReads0_def, evalDexpr_def,
                  lookupRW_def] >>
-  simp_tac bool_ss [APPEND,
-                    GSYM APPEND_ASSOC] >>
+  simp_tac bool_ss [APPEND, GSYM APPEND_ASSOC] >>
   rpt strip_tac >> imp_res_tac some_EQ_SOME_E >> fs[]);
 
 val addLabel_readswrites = store_thm(
@@ -387,40 +360,22 @@ val graphOf_pcg_eval = store_thm(
            mergeReads_def] >> metis_tac[assign_lemma, REVERSE_DEF, APPEND])
   >- ((* Abort *) simp[graphOf_def])
   >- ((* Done *) simp[graphOf_def, pcg_eval_thm])
-  >- ((* Malloc *) simp[graphOf_def]));
+  >- ((* Malloc *) simp[graphOf_def])
+  >- ((* Label *) simp[graphOf_def])
+);
 
 val assert_EQ_SOME = store_thm(
   "assert_EQ_SOME[simp]",
   ``(assert b = SOME x) <=> b``,
   Cases_on `b` THEN SIMP_TAC (srw_ss()) [oneTheory.one]);
 
-val INJ_UNION_DOMAIN = store_thm(
-  "INJ_UNION_DOMAIN",
-  ``INJ f (p ∪ q) r ⇔
-      INJ f p r ∧ INJ f q r ∧
-      DISJOINT (IMAGE f (p DIFF q)) (IMAGE f (q DIFF p))``,
-  dsimp[INJ_IFF, EQ_IMP_THM] >> rw[]
-  >- (simp[DISJOINT_DEF, EXTENSION] >> metis_tac[])
-  >- (fs[DISJOINT_DEF, EXTENSION] >> metis_tac[])
-  >- (fs[DISJOINT_DEF, EXTENSION] >> metis_tac[]));
-
-val INJ_CONG = store_thm(
-  "INJ_CONG",
-  ``(∀x. x ∈ s ⇒ f x = g x) ⇒ (INJ f s t ⇔ INJ g s t)``,
-  simp[INJ_IFF]);
-
-val match_imp = let
-  fun f th = SUBGOAL_THEN (lhand (concl th)) (mp_tac o MATCH_MP th)
-in
-  disch_then f
-end
-
 val graphOf_simps = save_thm(
   "graphOf_simps[simp]",
   LIST_CONJ
     [ONCE_REWRITE_CONV [graphOf_def] ``graphOf i0 m0 Done``,
      ONCE_REWRITE_CONV [graphOf_def] ``graphOf i0 m0 Abort``,
-     ONCE_REWRITE_CONV [graphOf_def] ``graphOf i0 m0 (Malloc vn n v)``
+     ONCE_REWRITE_CONV [graphOf_def] ``graphOf i0 m0 (Malloc vn n v)``,
+     ONCE_REWRITE_CONV [graphOf_def] ``graphOf i0 m0 (Label v s)``
     ]);
 
 val isDValue_getReads = prove(
@@ -474,13 +429,6 @@ val addLabel_gentouches = store_thm(
 
 val _ = overload_on("antouches",
   ``gentouches (set o action_reads) (set o action_writes) nreads nwrites``);
-
-val ggentouches_add2 = store_thm(
-  "ggentouches_add2[simp]",
-  ``gentouches rf wf greads gwrites x (a <+ g) ⇔
-      gentouches rf wf nreads nwrites x a ∨
-      gentouches rf wf greads gwrites x g``,
-  simp[gentouches_def] >> metis_tac[]);
 
 val pcg_eval_expreval_preserves = store_thm(
   "pcg_eval_expreval_preserves",
@@ -626,40 +574,6 @@ val apply_action_dvreadAction_commutes = store_thm(
     by simp[touches_def, readAction_def, expr_reads_def] >>
   metis_tac[apply_action_expr_eval_commutes, touches_SYM])
 
-val ggentouches_merge = store_thm(
-  "ggentouches_merge[simp]",
-  ``(gentouches rf wf greads gwrites x (g1 ⊕ g2) ⇔
-       gentouches rf wf greads gwrites x g1 ∨
-       gentouches rf wf greads gwrites x g2) ∧
-    (gentouches greads gwrites rf wf (g1 ⊕ g2) x ⇔
-       gentouches greads gwrites rf wf g1 x ∨
-       gentouches greads gwrites rf wf g2 x)``,
-  simp[gentouches_def] >> metis_tac[]);
-
-val ggentouches_empty = store_thm(
-  "ggentouches_empty[simp]",
-  ``(gentouches rf wf greads gwrites x ε ⇔ F) ∧
-    (gentouches greads gwrites rf wf ε x ⇔ F)``,
-  simp[gentouches_def]);
-
-val ggentouches_add = store_thm(
-  "ggentouches_add[simp]",
-  ``(gentouches rf wf greads gwrites x (n <+ g) ⇔
-       gentouches rf wf nreads nwrites x n ∨
-       gentouches rf wf greads gwrites x g) ∧
-    (gentouches greads gwrites rf wf (n <+ g) x ⇔
-       gentouches nreads nwrites rf wf n x ∨
-       gentouches greads gwrites rf wf g x)``,
-  simp[gentouches_def] >> metis_tac[]);
-
-val ggentouches_hdbuild = store_thm(
-  "ggentouches_hdbuild[simp]",
-  ``(gentouches rf wf greads gwrites x (hdbuild l) ⇔
-      ∃n. MEM n l ∧ gentouches rf wf nreads nwrites x n) ∧
-    (gentouches greads gwrites rf wf (hdbuild l) x ⇔
-      ∃n. MEM n l ∧ gentouches nreads nwrites rf wf n x)``,
-  Induct_on `l` >> dsimp[]);
-
 val agentouches_polydata_upd = store_thm(
   "agentouches_polydata_upd[simp]",
   ``(gentouches (set o action_reads) (set o action_writes) rf wf
@@ -763,7 +677,8 @@ val graphOf_apply_action_diamond = store_thm(
             simp[Abbr`TOS`]) >>
       simp[GSYM PULL_EXISTS] >> rpt conj_tac
       >- metis_tac[]
-      >- metis_tac[MEM_EL, DECIDE ``i < j ∧ j < n ⇒ i < n:num``] >>
+      >- (simp[optionTheory.OPTION_GUARD_EQ_THM, oneTheory.one] >>
+          metis_tac[MEM_EL, DECIDE ``i < j ∧ j < n ⇒ i < n:num``]) >>
       `MAP (λv. HG (TOS v m2)) dvs = MAP (λv. HG (TOS v m0)) dvs`
         by simp[MAP_EQ_f] >> simp[] >>
       `¬agtouches a (hdbuild (MAP (λv. HG (TOS v m0)) dvs))`
@@ -790,7 +705,8 @@ val graphOf_apply_action_diamond = store_thm(
             simp[Abbr`TOS`]) >>
       simp[GSYM PULL_EXISTS, GSYM CONJ_ASSOC] >> rpt conj_tac
       >- metis_tac[]
-      >- metis_tac[MEM_EL, DECIDE ``i < j ∧ j < n ⇒ i < n:num``] >>
+      >- (simp[oneTheory.one] >>
+          metis_tac[MEM_EL, DECIDE ``i < j ∧ j < n ⇒ i < n:num``]) >>
       `MAP (λc. HG (TOS c m2)) cmds = MAP (λc. HG (TOS c m0)) cmds`
         by simp[MAP_EQ_f] >> simp[] >>
       `¬agtouches a (hdbuild (MAP (λc. HG (TOS c m0)) cmds))`
@@ -836,7 +752,9 @@ val graphOf_apply_action_diamond = store_thm(
       metis_tac[successful_action_diamond])
   >- ((* abort *) simp[graphOf_def])
   >- ((* Done *) simp[graphOf_def])
-  >- ((* malloc *) simp[graphOf_def]))
+  >- ((* malloc *) simp[graphOf_def])
+  >- ((* Label *) simp[graphOf_def])
+)
 
 val graphOf_pcg_eval_diamond = store_thm(
   "graphOf_pcg_eval_diamond",
@@ -858,109 +776,6 @@ val graphOf_pcg_eval_diamond = store_thm(
   `∃m'. pcn_eval n (SOME m0) = SOME m'` suffices_by metis_tac[] >>
   Cases_on `pcn_eval n (SOME m0)` >> fs[]);
 
-(*
-val eval_graphOf_action = store_thm(
-  "eval_graphOf_action",
-  ``∀m0 c0 m c.
-      (m0,c0) ---> (m,c) ⇒
-      m0 ≠ m ⇒
-      ∀i0 m0' g0.
-        graphOf i0 m0 c0 = SOME(m0', g0) ⇒
-        ∃a. a ∈ g0 ∧ (∀b. b ∈ pregraph a g0 ⇒ b.writes = []) ∧
-            apply_action a (SOME m0) = SOME m``,
-  ho_match_mp_tac eval_ind' >> rpt conj_tac >> REWRITE_TAC []
-  >- ((* member of Seq steps *)
-      map_every qx_gen_tac [`c`, `c0`, `pfx`, `sfx`, `m0`, `m`] >>
-      ntac 2 strip_tac >> fs[] >> simp[Once graphOf_def] >>
-      reverse (Induct_on `pfx`) >> simp[PULL_EXISTS, EXISTS_PROD]
-      >- (strip_tac >> fs[] >> simp[Once graphOf_def] >> metis_tac[]) >>
-      map_every qx_gen_tac [`i0`, `i`, `mm`, `i'`, `m'`, `g'`, `gg`] >>
-      strip_tac >>
-      `∃a. a ∈ g' ∧ (∀b. b ∈ pregraph a g' ⇒ b.writes = []) ∧
-           apply_action a (SOME m0) = SOME m`
-        by metis_tac[] >>
-      qexists_tac `a` >> simp[pregraph_merge_graph])
-  >- ((* assignvar *)
-      simp[graphOf_def, PULL_EXISTS] >> rpt gen_tac >>
-      rpt strip_tac >> dsimp[] >>
-      conj_tac
-      >- (rw[pregraph_add_action] >> simp[dvreadAction_def]) >>
-      simp[apply_action_def, updf_def, mergeReads_def] >>
-      fs[updf_def] >>
-      imp_res_tac assign_lemma >> simp[] >>
-      fs[OPT_SEQUENCE_EQ_SOME, MEM_MAP, PULL_EXISTS] >> rw[] >>
-      imp_res_tac isDValue_destDValue >> fs[])
-  >- ((* assign *)
-      simp[graphOf_def, PULL_EXISTS] >> rpt gen_tac >> strip_tac >>
-      rpt strip_tac >> dsimp[] >> disj2_tac >>
-      simp[apply_action_def, updf_def, mergeReads_def] >>
-      reverse conj_tac
-      >- (imp_res_tac assign_lemma >> simp[] >>
-          fs[OPT_SEQUENCE_EQ_SOME, evalexpr_def] >> rw[] >>
-          imp_res_tac isDValue_destDValue >> fs[]) >>
-      simp[pregraph_add_action] >>
-      simp[touches_def, readAction_def, expr_reads_def, dvreadAction_def] >>
-      rw[])
-  >- ((* par *)
-      map_every qx_gen_tac [`m0`, `m`, `pfx`, `c0`, `c`, `sfx`] >> strip_tac >>
-      strip_tac >> fs[] >> simp[Once graphOf_def] >>
-      simp[PULL_EXISTS, OPT_SEQUENCE_EQ_SOME, combinTheory.o_ABS_R] >>
-      qabbrev_tac `
-        TOS = λt:tosty.
-               THE (OPTION_MAP (SND o SND) t)` >> simp[] >>
-      map_every qx_gen_tac [`i0`, `m'`] >>
-      qabbrev_tac `GG = λn. graphOf (i0 ++ [n;0])` >> simp[] >>
-      simp[FOLDR_MAPi, combinTheory.o_ABS_R, MEM_MAPi, PULL_EXISTS] >>
-      strip_tac >>
-      first_x_assum (qx_choosel_then [`gi`, `gm`, `gg`] assume_tac o
-                     SIMP_RULE (srw_ss()) [EXISTS_PROD,
-                                           GSYM RIGHT_EXISTS_IMP_THM,
-                                           SKOLEM_THM]) >>
-      `∀x y z. TOS (SOME (x,y,z)) = z` by simp[Abbr`TOS`] >>
-      lfs[] >>
-      `∀i j. i < j ∧ j < LENGTH pfx + (LENGTH sfx + 1) ⇒
-             DISJOINT (idents (gg i)) (idents (gg j))`
-        by (map_every qx_gen_tac [`i`, `j`] >> strip_tac >>
-            first_x_assum (fn th =>
-              map_every (fn q => qspec_then q mp_tac th) [`i`, `j`]) >>
-            simp[Abbr`GG`] >> rpt strip_tac >>
-            `(∀it. it ∈ idents (gg i) ⇒
-                   TAKE (LENGTH (i0 ++ [i;0]) - 1) it = FRONT (i0 ++ [i;0])) ∧
-             (∀it. it ∈ idents (gg j) ⇒
-                   TAKE (LENGTH (i0 ++ [j;0]) - 1) it = FRONT (i0 ++ [j;0]))`
-              by metis_tac[graphOf_idents_apart, APPEND_eq_NIL] >>
-            lfs[FRONT_APPEND] >> `i0 ++ [i] ≠ i0 ++ [j]` by simp[] >>
-            simp[DISJOINT_DEF, EXTENSION] >> metis_tac[]) >>
-      simp[IN_FOLDRi_merge_graph] >>
-      first_x_assum (qspecl_then [`i0 ++ [LENGTH pfx; 0]`,
-                                  `gi (LENGTH pfx)`,
-                                  `gm (LENGTH pfx)`,
-                                  `gg (LENGTH pfx)`] mp_tac) >>
-      simp[] >> csimp[] >>
-      `LENGTH pfx < LENGTH pfx + (LENGTH sfx + 1)` by decide_tac >>
-      pop_assum (fn th => first_assum (mp_tac o C MATCH_MP th)) >>
-      simp_tac (srw_ss() ++ ARITH_ss) [EL_APPEND2, EL_APPEND1] >>
-      disch_then kall_tac >> disch_then (qx_choose_then `a` strip_assume_tac) >>
-      qexists_tac `a` >> conj_tac >- (qexists_tac `LENGTH pfx` >> simp[]) >>
-      simp[] >>
-      Q.ISPEC_THEN `pfx ++ [c0] ++ sfx`
-        (Q.ISPEC_THEN `LENGTH pfx`
-           (Q.ISPEC_THEN `λn c. TOS (GG n m0 c)` mp_tac))
-        pregraph_FOLDRi_merge_graph >> simp[])
-  >- ((* malloc *) simp[graphOf_def]));
-*)
-
-val hdbuild_append = store_thm(
-  "hdbuild_append[simp]",
-  ``hdbuild (l1 ++ l2) = hdbuild l1 ⊕ hdbuild l2``,
-  Induct_on `l1` >> simp[])
-
-val _ = overload_on("MergeL", ``FOLDR hdmerge ε``)
-
-val MergeL_empties = store_thm(
-  "MergeL_empties",
-  ``(∀g. MEM g glist ⇒ g = ε) ⇒ MergeL glist = ε``,
-  Induct_on `glist` >> simp[]);
 
 val graphOfL_def = Define`
   graphOfL lf cf i0 mg0 x = do
@@ -985,6 +800,21 @@ val seqcase =
 val graphOf_def' =
     SIMP_RULE (bool_ss ++ boolSimps.ETA_ss) [GSYM forcase, GSYM seqcase] graphOf_def
 
+val _ = overload_on("MergeL", ``FOLDR hdmerge ε``)
+
+val MergeL_empties = store_thm(
+  "MergeL_empties",
+  ``(∀g. MEM g glist ⇒ g = ε) ⇒ MergeL glist = ε``,
+  Induct_on `glist` >> simp[]);
+
+val FOLDL_graphOfL_Dones = store_thm(
+  "FOLDL_graphOfL_Dones[simp]",
+  ``∀l m g.
+      EVERY ($= Done) l ⇒
+      FOLDL (graphOfL lf I lab) (SOME(m,g)) l =
+      SOME (m, g ⊕ MergeL (GENLIST (K (HG ε <+ ε)) (LENGTH l)))``,
+  Induct >> simp[graphOfL_def, GENLIST_CONS] >> simp[GSYM hdmerge_ASSOC])
+
 val FOLDL_graphOfL_EQ_NONE = store_thm(
   "FOLDL_graphOfL_EQ_NONE[simp]",
   ``∀l. FOLDL (graphOfL lf cf lab) NONE l = NONE``,
@@ -998,6 +828,94 @@ val FOLDL_graphOfL_EQ_SOME_E = store_thm(
     by metis_tac[optionTheory.option_CASES, pair_CASES] >>
   simp[]);
 
+val FOLDL_graphOfL_allnodes = store_thm(
+  "FOLDL_graphOfL_allnodes",
+  ``∀l m0 g0 m g.
+      FOLDL (graphOfL lf cf lab) (SOME(m0,g0)) l = SOME(m,g) ⇒
+      ∀a. BAG_IN a (allnodes g0) ⇒ BAG_IN a (allnodes g)``,
+  Induct >> simp[graphOfL_def] >> rpt gen_tac >>
+  strip_tac >>
+  imp_res_tac FOLDL_graphOfL_EQ_SOME_E >>
+  pop_assum (fn th => RULE_ASSUM_TAC (SIMP_RULE (srw_ss()) [th]) >>
+                      mp_tac th) >> simp[EXISTS_PROD] >> res_tac >>
+  rw[] >> fs[]);
+
+val IN_allnodes_FOLDR_HGadd = store_thm(
+  "IN_allnodes_FOLDR_HGadd[simp]",
+  ``a <: allnodes (FOLDR (λg acc. HG g <+ acc) g0 l) ⇔
+    a <: allnodes g0 ∨ ∃e. MEM e l ∧ a <: allnodes e``,
+  Induct_on `l` >> simp[] >> metis_tac[]);
+
+val eval_graphOf_action = store_thm(
+  "eval_graphOf_action",
+  ``∀m0 c0 m c.
+      (m0,c0) ---> (m,c) ⇒
+      m0 ≠ m ⇒
+      ∀i0 m0' g0.
+        graphOf i0 m0 c0 = SOME(m0', g0) ⇒
+        ∃a. BAG_IN a (allnodes g0) ∧
+            apply_action (polydata_upd SND a) (SOME m0) = SOME m``,
+  ho_match_mp_tac eval_ind' >> rpt conj_tac >> REWRITE_TAC []
+  >- ((* member of Seq steps *)
+      map_every qx_gen_tac [`c`, `c0`, `pfx`, `sfx`, `m0`, `m`] >>
+      ntac 2 strip_tac >> fs[] >> simp[graphOf_def'] >>
+      simp[FOLDL_APPEND, graphOfL_def] >>
+      qx_genl_tac [`i0`, `m'`, `g'`] >>
+      disch_then (fn th =>
+                     (th |> MATCH_MP FOLDL_graphOfL_EQ_SOME_E
+                         |> qx_choosel_then [`mm`, `gg`] mp_tac) >>
+                     assume_tac th) >>
+      disch_then (fn th => RULE_ASSUM_TAC (SIMP_RULE (srw_ss()) [th]) >>
+                           mp_tac th) >>
+      simp[EXISTS_PROD] >>
+      disch_then (qx_choosel_then [`gg0`] strip_assume_tac) >>
+      `∃a. BAG_IN a (allnodes gg0) ∧
+           apply_action (polydata_upd SND a) (SOME m0) = SOME m`
+        by metis_tac[] >>
+      qexists_tac `a` >> simp[] >> imp_res_tac FOLDL_graphOfL_allnodes >>
+      rw[] >> fs[allnodes_def])
+  >- ((* assignvar *)
+      simp[graphOf_def, PULL_EXISTS] >> rpt gen_tac >>
+      rpt strip_tac >> dsimp[] >>
+      simp[apply_action_def, updf_def, mergeReads_def, polydata_upd_def] >>
+      fs[updf_def] >>
+      imp_res_tac assign_lemma >> simp[] >>
+      fs[OPT_SEQUENCE_EQ_SOME, MEM_MAP, PULL_EXISTS] >> rw[] >>
+      imp_res_tac isDValue_destDValue >> fs[])
+  >- ((* assign *)
+      simp[graphOf_def, PULL_EXISTS] >> rpt gen_tac >> strip_tac >>
+      rpt strip_tac >> dsimp[] >>
+      simp[apply_action_def, updf_def, mergeReads_def, readAction_def,
+           dvreadAction_def] >>
+      imp_res_tac assign_lemma >> simp[] >>
+      fs[OPT_SEQUENCE_EQ_SOME, evalexpr_def] >> rw[] >>
+      imp_res_tac isDValue_destDValue >> fs[])
+  >- ((* par *)
+      map_every qx_gen_tac [`m0`, `m`, `pfx`, `c0`, `c`, `sfx`] >> strip_tac >>
+      strip_tac >> fs[] >>
+      simp[graphOf_def, oneTheory.one, MAP_MAP_o,
+           PULL_EXISTS, OPT_SEQUENCE_EQ_SOME, combinTheory.o_ABS_R] >>
+      qabbrev_tac `
+        TOS = λi m c. THE (OPTION_MAP SND (graphOf i m c))` >> simp[] >>
+      simp[DISJ_IMP_THM, FORALL_AND_THM, EXISTS_PROD] >>
+      qx_genl_tac [`i0`, `m'`] >> strip_tac >>
+      qmatch_assum_rename_tac `graphOf i0 m0 c0 = SOME(mm,gg)` [] >>
+      `TOS i0 m0 c0 = gg` by simp[Abbr`TOS`] >> metis_tac[])
+  >- ((* malloc *) simp[graphOf_def])
+  >- ((* Label *) simp[graphOf_def] >> metis_tac[])
+);
+
+val hdbuild_append = store_thm(
+  "hdbuild_append[simp]",
+  ``hdbuild (l1 ++ l2) = hdbuild l1 ⊕ hdbuild l2``,
+  Induct_on `l1` >> simp[])
+
+val allnodes_touches = store_thm(
+  "allnodes_touches",
+  ``(∀n. a <: nnodes n ∧ agtouches a g2 ⇒ ngtouches n g2) ∧
+    (∀g1. a <: allnodes g1 ∧ agtouches a g2 ⇒ g1 ∼ᵍ g2)``,
+  ho_match_mp_tac hidag_ind >> simp[] >> metis_tac[]);
+
 val FOLDL_graphOfL_same_start = store_thm(
   "FOLDL_graphOfL_same_start",
   ``∀l m0 g0.
@@ -1005,8 +923,7 @@ val FOLDL_graphOfL_same_start = store_thm(
       ∃gd. g = g0 ⊕ gd ∧
            ∀g0'. FOLDL (graphOfL lf cf lab) (SOME(m0,g0')) l =
                  SOME(m,g0' ⊕ gd)``,
-  Induct >> simp[]
-  >- (simp[PULL_EXISTS] >> ntac 2 (qexists_tac `ε`) >> simp[]) >>
+  Induct >> simp[] >- (qexists_tac `ε` >> simp[]) >>
   qx_genl_tac [`h`, `m0`, `g0`] >> strip_tac >>
   IMP_RES_THEN
     (qx_choosel_then [`m'`, `g'`] assume_tac)
@@ -1016,13 +933,26 @@ val FOLDL_graphOfL_same_start = store_thm(
   fs[graphOfL_def] >>
   qmatch_assum_rename_tac `graphOf (lf h lab) m0 (cf h) = SOME mg` [] >>
   `∃m0' g0'. mg = (m0', g0')` by (Cases_on `mg` >> simp[]) >> rw[] >> fs[] >>
-  rw[] >> qexists_tac `HG g0' <+ ε ⊕ gd1` >> simp[hdmerge_ASSOC] >>
-  qx_gen_tac `lf1` >>
-  first_x_assum (qspec_then `lf1` (qx_choose_then `gd'` strip_assume_tac))
+  rw[] >> qexists_tac `HG g0' <+ ε ⊕ gd1` >> simp[hdmerge_ASSOC]);
 
-metis_tac[hdmerge_ASSOC])
+val pcg_eval_FOLDR_nested_graphs = store_thm(
+  "pcg_eval_FOLDR_nested_graphs",
+  ``∀m_opt. pcg_eval (FOLDR (λg acc. HG g <+ acc) g0 l) m_opt =
+            pcg_eval (MergeL l ⊕ g0) m_opt``,
+  Induct_on `l` >> simp[]);
 
-val ggentouches_merge
+val ggentouches_FOLDR_nested_graphs = store_thm(
+  "ggentouches_FOLDR_nested_graphs",
+  ``FOLDR (λg acc. HG g <+ acc) g0 l ∼ᵍ g' ⇔
+    g0 ∼ᵍ g' ∨ ∃g. MEM g l ∧ g ∼ᵍ g'``,
+  Induct_on `l` >> simp[] >> metis_tac[]);
+
+val MergeL_mid_to_front = store_thm(
+  "MergeL_mid_to_front",
+  ``(∀g'. MEM g' l1 ⇒ g' ≁ᵍ g) ⇒
+    MergeL (l1 ++ [g] ++ l2) = g ⊕ MergeL (l1 ++ l2)``,
+  Induct_on `l1` >> simp[] >> dsimp[] >>
+  metis_tac[hdmerge_ASSOC, hdmerge_COMM]);
 
 val graphOf_correct_lemma = store_thm(
   "graphOf_correct_lemma",
@@ -1133,244 +1063,150 @@ val graphOf_correct_lemma = store_thm(
   >- ((* forloop turns into seq *)
       simp[graphOf_def', EXISTS_PROD, PULL_EXISTS, FOLDL_MAP] >>
       `∀i0 x vnm body.
-         (λdv. graphOfL (K I) I i0 x (ssubst vnm dv body)) =
-         graphOfL (K I) (λdv. ssubst vnm dv body) i0 x`
+         (λdv. graphOfL (K I) I i0 x (Label dv (ssubst vnm dv body))) =
+         graphOfL CONS (λdv. ssubst vnm dv body) i0 x`
         by simp[graphOfL_def, FUN_EQ_THM] >>
-      asm_simp_tac (srw_ss() ++ ETA_ss) []
-
-      rpt gen_tac >> strip_tac >> simp[Once graphOf_def, SimpL ``$==>``] >>
-      simp[EXISTS_PROD, PULL_EXISTS] >>
-      metis_tac[stackInc_EQ_NIL, graphOf_starting_id_irrelevant,
-                gtouches_imap])
+      asm_simp_tac (srw_ss() ++ ETA_ss) [])
   >- ((* forloop aborts because domain evaluates badly *)
-      ONCE_REWRITE_TAC [graphOf_def] >> simp[])
+      simp[graphOf_def])
   >- ((* parloop turns into par *)
-      rpt gen_tac >> strip_tac >> simp[Once graphOf_def, SimpL ``$==>``] >>
-      simp[EXISTS_PROD, PULL_EXISTS] >>
-      metis_tac[stackInc_EQ_NIL, graphOf_starting_id_irrelevant,
-                gtouches_imap])
+      simp[graphOf_def', MAP_MAP_o, combinTheory.o_ABS_R, oneTheory.one,
+           PULL_EXISTS])
   >- ((* parloop aborts because domain evaluates badly *)
-      ONCE_REWRITE_TAC [graphOf_def] >> simp[])
+      simp[graphOf_def])
   >- ((* one component of a par takes a step *)
       map_every qx_gen_tac [`m0`, `m`, `pfx`, `c0`, `c`, `sfx`] >>
-      strip_tac >> ONCE_REWRITE_TAC [graphOf_def] >>
-      simp[PULL_EXISTS, OPT_SEQUENCE_EQ_SOME, MEM_MAP, MEM_MAPi,
-           combinTheory.o_ABS_R] >>
+      strip_tac >>
+      simp[graphOf_def, oneTheory.one, PULL_EXISTS, OPT_SEQUENCE_EQ_SOME,
+           MAP_MAP_o, combinTheory.o_ABS_R] >>
       qabbrev_tac `
-        TOS = λt:tosty.
-               THE (OPTION_MAP (SND o SND) t)` >> simp[] >>
-      map_every qx_gen_tac [`i0`, `m00`] >>
-      qabbrev_tac `GG = λn. graphOf (i0 ++ [n;0])` >> simp[] >>
-      strip_tac >>
-      first_x_assum (qx_choosel_then [`gi`, `gm`, `gg`] assume_tac o
-                     SIMP_RULE (srw_ss()) [GSYM RIGHT_EXISTS_IMP_THM,
-                                           EXISTS_PROD,
-                                           SKOLEM_THM]) >>
-      qabbrev_tac `ci = LENGTH pfx` >>
-      `GG ci m0 c0 = SOME(gi ci,gm ci,gg ci)`
-        by (first_x_assum (qspec_then `ci` mp_tac) >>
-            simp[Abbr`ci`, EL_APPEND1, EL_APPEND2]) >>
-      first_x_assum (qspec_then `i0 ++ [ci;0]` mp_tac) >> simp[] >>
-      disch_then (qx_choosel_then [`ci'`, `cg'`] strip_assume_tac) >>
-      `pcg_eval (gg ci) (SOME m0) = SOME (gm ci)`
-        by (simp[Abbr`GG`] >> fs[] >>
-            metis_tac[graphOf_pcg_eval, APPEND_eq_NIL]) >>
-      `∀a b c. TOS (SOME (a,b,c)) = c` by simp[Abbr`TOS`] >>
-      lfs[] >>
-      `∀n. n < ci + (LENGTH sfx + 1) ∧ n ≠ ci ⇒
-           ∃m'. GG n m (EL n (pfx ++ [c] ++ sfx)) = SOME (gi n, m', gg n)`
-        by (gen_tac >> strip_tac >>
-            Cases_on `n < ci`
-            >- (simp[EL_APPEND1] >>
-                Cases_on `m = m0` >> simp[]
-                >- (first_x_assum (qspec_then `n` mp_tac) >>
-                    simp[EL_APPEND1]) >>
-                `∃a. a ∈ gg ci ∧ (∀b. b ∈ pregraph a (gg ci) ⇒ b.writes = []) ∧
-                     apply_action a (SOME m0) = SOME m`
-                  by metis_tac[eval_graphOf_action, APPEND_eq_NIL] >>
-                first_x_assum (qspec_then `n` mp_tac) >> simp[EL_APPEND1] >>
-                strip_tac >>
-                `∀b. b ∈ gg n ⇒ a ≁ₜ b`
-                  by (first_x_assum (qspecl_then [`n`, `ci`] mp_tac) >>
-                      simp[gtouches_def] >> metis_tac[touches_SYM]) >>
-                simp[Abbr`GG`] >> fs[] >>
-                metis_tac[graphOf_apply_action_diamond, APPEND_eq_NIL]) >>
-            `ci < n ∧ n < ci + (LENGTH sfx + 1)` by decide_tac >>
-            simp[EL_APPEND1, EL_APPEND2] >>
-            Cases_on `m = m0` >> simp[]
-            >- (first_x_assum (qspec_then `n` mp_tac) >>
-                simp[EL_APPEND1, EL_APPEND2]) >>
-            `∃a. a ∈ gg ci ∧ (∀b. b ∈ pregraph a (gg ci) ⇒ b.writes = []) ∧
-                 apply_action a (SOME m0) = SOME m`
-              by metis_tac[eval_graphOf_action, APPEND_eq_NIL] >>
-            first_x_assum (qspec_then `n` mp_tac) >>
-            simp[EL_APPEND1, EL_APPEND2] >> strip_tac >>
-            `∀b. b ∈ gg n ⇒ a ≁ₜ b`
-              by (first_x_assum (qspecl_then [`ci`, `n`] mp_tac) >>
-                  simp[gtouches_def] >> metis_tac[touches_SYM]) >>
-            simp[Abbr`GG`] >> fs[] >>
-            metis_tac[graphOf_apply_action_diamond, APPEND_eq_NIL]) >>
-      conj_tac
-      >- (qx_gen_tac `n` >> strip_tac >> reverse (Cases_on `n = ci`)
-          >- metis_tac[] >> simp[EL_APPEND2, EL_APPEND1]) >>
-      pop_assum (qx_choose_then `gm'` assume_tac o
-                 SIMP_RULE (srw_ss()) [GSYM RIGHT_EXISTS_IMP_THM, SKOLEM_THM])>>
-      `∀i j. i < j ∧ j < ci + (LENGTH sfx + 1) ⇒
-             ¬gtouches (TOS (GG i m (EL i (pfx ++ [c] ++ sfx))))
-                       (TOS (GG j m (EL j (pfx ++ [c] ++ sfx))))`
-        by (rpt gen_tac >> strip_tac >>
-            Cases_on `i = ci` >> simp[]
-            >- (simp[EL_APPEND1, EL_APPEND2] >> metis_tac[]) >>
-            Cases_on `j = ci` >> simp[] >>
-            simp[EL_APPEND1, EL_APPEND2] >> metis_tac[gtouches_SYM]) >>
-      conj_tac >- metis_tac[] >>
-      `pcg_eval cg' (SOME m) = SOME (gm ci)`
-        by (simp[Abbr`GG`] >> fs[] >>
-            metis_tac[graphOf_pcg_eval, APPEND_eq_NIL]) >>
-      fs[MAPi_APPEND, combinTheory.o_ABS_L] >>
-      `∀n. n < ci ⇒ TOS (GG n m (EL n pfx)) = gg n ∧
-                     TOS (GG n m0 (EL n pfx)) = gg n`
-        by (rpt strip_tac
-            >- (Q.SUBGOAL_THEN `n < ci + (LENGTH sfx + 1) ∧ n ≠ ci`
-                 (fn th => first_x_assum (mp_tac o C MATCH_MP th))
-                >- decide_tac >> simp[EL_APPEND1]) >>
-            `n < ci + (LENGTH sfx + 1)` by decide_tac >>
-            pop_assum (fn th => first_x_assum (mp_tac o C MATCH_MP th)) >>
-            simp[EL_APPEND1]) >>
-      `∀n. n < LENGTH sfx ⇒
-           TOS (GG (ci + (n + 1)) m0 (EL n sfx)) = gg (ci + (n + 1)) ∧
-           TOS (GG (ci + (n + 1)) m (EL n sfx)) = gg (ci + (n + 1))`
-        by (rpt strip_tac
-            >- (`ci + (n + 1) < ci + (LENGTH sfx + 1)` by decide_tac >>
-                pop_assum (fn th => first_x_assum (mp_tac o C MATCH_MP th)) >>
-                simp[EL_APPEND2]) >>
-            Q.SUBGOAL_THEN
-              `ci + (n + 1) < ci + (LENGTH sfx + 1) ∧ ci + (n + 1) ≠ ci`
-              (fn th => first_x_assum (mp_tac o C MATCH_MP th))
-            >- decide_tac >>
-            simp[EL_APPEND2]) >>
-      lfs[MAPi_GENLIST, Cong GENLIST_CONG] >>
-      full_simp_tac (srw_ss() ++ ETA_ss) [] >>
-      `∀g. MEM g (GENLIST gg ci) ⇒
-           ¬gtouches g cg' ∧ ¬gtouches g (gg ci) ∧
-           DISJOINT (idents g) (idents cg') ∧
-           DISJOINT (idents g) (idents (gg ci))`
-        by (simp[MEM_GENLIST, PULL_EXISTS] >> qx_gen_tac `n` >>
-            strip_tac >> conj_tac
-            >- (first_x_assum (qspecl_then [`n`, `ci`] mp_tac) >>
-                simp[EL_APPEND2, EL_APPEND1] >>
-                first_x_assum (qspec_then `n` mp_tac) >>
-                simp[EL_APPEND2, EL_APPEND1]) >>
-            `n < ci + (LENGTH sfx + 1)` by decide_tac >>
-            pop_assum (fn th => first_x_assum (mp_tac o C MATCH_MP th)) >>
-            simp[EL_APPEND1] >> qunabbrev_tac `GG` >> fs[] >> strip_tac >>
-            `(∀it. it ∈ idents (gg n) ⇒
-                   TAKE (LENGTH (i0 ++ [n;0]) - 1) it =
-                   FRONT (i0 ++ [n;0])) ∧
-             (∀it. it ∈ idents cg' ∨ it ∈ idents (gg ci) ⇒
-                   TAKE (LENGTH (i0 ++ [ci;0]) - 1) it =
-                   FRONT (i0 ++ [ci;0]))`
-              by metis_tac[graphOf_idents_apart, APPEND_eq_NIL] >>
-            fs[FRONT_APPEND] >> simp[DISJOINT_DEF, EXTENSION] >>
-            `i0 ++ [ci] ≠ i0 ++ [n]` by simp[] >>
-            metis_tac[]) >>
-      fs[FOLDR_merge_lemma] >>
-      conj_tac
-      >- (qmatch_abbrev_tac `
-            pcg_eval (merge_graph cg' RestG) (SOME m) = SOME m00
-          ` >>
-          `DISJOINT (idents cg') (idents RestG) ∧
-           DISJOINT (idents (gg ci)) (idents RestG)`
-            suffices_by (strip_tac >> fs[pcg_eval_merge_graph']) >>
-          ONCE_REWRITE_TAC [DISJOINT_SYM] >>
-          simp[Abbr`RestG`, idents_MergeL, PULL_EXISTS] >>
-          simp[MEM_GENLIST, PULL_EXISTS, PULL_FORALL] >>
-          `∀n. n < LENGTH sfx ⇒
-               DISJOINT (idents (gg (ci + (n + 1))))
-                        (idents cg') ∧
-               DISJOINT (idents (gg (ci + (n + 1))))
-                        (idents (gg ci))`
-            suffices_by metis_tac[] >>
-          gen_tac >> strip_tac >>
-          `ci + (n + 1) < ci + (LENGTH sfx + 1)` by decide_tac >>
-          pop_assum (fn th => first_x_assum (mp_tac o C MATCH_MP th)) >>
-          simp[EL_APPEND2] >> qunabbrev_tac `GG` >> fs[] >> strip_tac >>
-          `(∀it. it ∈ idents (gg (ci + (n + 1))) ⇒
-                 TAKE (LENGTH (i0 ++ [ci + (n + 1);0]) - 1) it =
-                 FRONT (i0 ++ [ci + (n + 1);0])) ∧
-           (∀it. it ∈ idents cg' ∨ it ∈ idents (gg ci) ⇒
-                 TAKE (LENGTH (i0 ++ [ci;0]) - 1) it =
-                 FRONT (i0 ++ [ci;0]))`
-            by metis_tac[graphOf_idents_apart, APPEND_eq_NIL] >>
-          fs[FRONT_APPEND] >>
-          `i0 ++ [ci] ≠ i0 ++ [ci + (n + 1)]` by simp[] >>
-          simp[DISJOINT_DEF, EXTENSION] >> metis_tac[]) >>
-      qmatch_abbrev_tac `
-        ∀g'. gtouches (merge_graph cg' BG) g' ⇒
-             gtouches (merge_graph (gg ci) BG) g'` >>
-      simp[gtouches_def, IN_merge_graph, PULL_EXISTS] >>
-      map_every qx_gen_tac [`g'`, `a1`, `a2`] >> strip_tac
-      >- metis_tac[gtouches_def] >>
-      map_every qexists_tac [`a1`, `a2`] >> simp[] >>
-      `a1.ident ∉ idents (gg ci)` suffices_by simp[] >>
-      strip_tac >>
-      `a1.ident ∈ idents BG` by simp[idents_thm] >>
-      fs[idents_FOLDR_merge_graph, Abbr`BG`]
-      >- (res_tac >> fs[DISJOINT_DEF, EXTENSION] >>
-          metis_tac[]) >>
-      qpat_assum `MEM g (GENLIST f n)` mp_tac >>
-      simp[MEM_GENLIST, PULL_EXISTS] >> qx_gen_tac `n` >>
-      disjneq_search >> BasicProvers.VAR_EQ_TAC >> strip_tac >>
-      `ci + (n + 1) < ci + (LENGTH sfx + 1)` by decide_tac >>
-      pop_assum (fn th => first_x_assum (mp_tac o C MATCH_MP th)) >>
-      simp[EL_APPEND2, Abbr`GG`] >> strip_tac >> fs[] >>
-      `TAKE (LENGTH (i0 ++ [ci; 0]) - 1) a1.ident =
-       FRONT (i0 ++ [ci;0]) ∧
-       TAKE (LENGTH (i0 ++ [ci + (n + 1); 0]) - 1) a1.ident =
-       FRONT (i0 ++ [ci + (n + 1);0])`
-        by metis_tac[graphOf_idents_apart, APPEND_eq_NIL] >>
-      fs[FRONT_APPEND])
+        TOS = λi m c. THE (OPTION_MAP SND (graphOf i m c))` >> simp[] >>
+      qx_genl_tac [`i0`, `m00`] >>
+      simp[DISJ_IMP_THM, FORALL_AND_THM, MEM_MAP] >>
+      simp[PULL_EXISTS, FORALL_PROD, EXISTS_PROD] >>
+      qx_genl_tac [`m0'`, `g0'`] >> strip_tac >>
+      `∃g'. graphOf i0 m c = SOME(m0',g') ∧
+            ∀g2. g' ∼ᵍ g2 ⇒ g0' ∼ᵍ g2` by metis_tac[] >>
+      simp[] >>
+      `∀d. MEM d pfx ⇒
+           (∃dm. graphOf i0 m d = SOME(dm, TOS i0 m0 d)) ∧
+           TOS i0 m d = TOS i0 m0 d`
+        by (Cases_on `m0 = m` >> simp[]
+            >- (simp[Abbr`TOS`] >> rpt strip_tac >> res_tac >>
+                simp[] >> rw[]) >>
+            `∃a. BAG_IN a (allnodes g0') ∧
+                 apply_action (polydata_upd SND a) (SOME m0) = SOME m`
+              by metis_tac[eval_graphOf_action] >>
+            qx_gen_tac `d` >> strip_tac >>
+            `∃dm dg. graphOf i0 m0 d = SOME(dm,dg)` by metis_tac[] >>
+            `¬agtouches (polydata_upd SND a) dg`
+              by (simp[] >> strip_tac >>
+                  `dg ∼ᵍ g0'` by metis_tac[allnodes_touches, gentouches_SYM] >>
+                  `∃di. di < LENGTH pfx ∧ d = EL di pfx` by metis_tac[MEM_EL] >>
+                  first_x_assum (qspecl_then [`di`, `LENGTH pfx`] mp_tac) >>
+                  simp[EL_APPEND1, EL_APPEND2, EL_MAP] >>
+                  simp[Abbr`TOS`] >> rw[]) >>
+            `∃dm'. graphOf i0 m d = SOME(dm', dg)`
+              by metis_tac[graphOf_apply_action_diamond] >>
+            simp[Abbr`TOS`]) >>
+      pop_assum (strip_assume_tac o
+                 SIMP_RULE (srw_ss()) [IMP_CONJ_THM, FORALL_AND_THM,
+                                       GSYM RIGHT_EXISTS_IMP_THM,
+                                       SKOLEM_THM]) >>
+      `∀d. MEM d sfx ⇒
+           (∃dm. graphOf i0 m d = SOME(dm, TOS i0 m0 d)) ∧
+           TOS i0 m d = TOS i0 m0 d`
+        by (Cases_on `m0 = m` >> simp[]
+            >- (simp[Abbr`TOS`] >> rpt strip_tac >> res_tac >>
+                simp[] >> rw[]) >>
+            `∃a. BAG_IN a (allnodes g0') ∧
+                 apply_action (polydata_upd SND a) (SOME m0) = SOME m`
+              by metis_tac[eval_graphOf_action] >>
+            qx_gen_tac `d` >> strip_tac >>
+            `∃dm dg. graphOf i0 m0 d = SOME(dm,dg)` by metis_tac[] >>
+            `¬agtouches (polydata_upd SND a) dg`
+              by (simp[] >> strip_tac >>
+                  `dg ∼ᵍ g0'` by metis_tac[allnodes_touches, gentouches_SYM] >>
+                  `∃di. di < LENGTH sfx ∧ d = EL di sfx` by metis_tac[MEM_EL] >>
+                  first_x_assum
+                    (qspecl_then [`LENGTH pfx`, `LENGTH pfx + 1 + di`] mp_tac) >>
+                  simp[EL_APPEND1, EL_APPEND2, EL_MAP] >>
+                  simp[Abbr`TOS`] >> rw[] >> metis_tac[gentouches_SYM]) >>
+            `∃dm'. graphOf i0 m d = SOME(dm', dg)`
+              by metis_tac[graphOf_apply_action_diamond] >>
+            simp[Abbr`TOS`]) >>
+      pop_assum (strip_assume_tac o
+                 SIMP_RULE (srw_ss()) [IMP_CONJ_THM, FORALL_AND_THM,
+                                       GSYM RIGHT_EXISTS_IMP_THM,
+                                       SKOLEM_THM]) >>
+      simp[Cong (SIMP_RULE bool_ss [GSYM AND_IMP_INTRO] MAP_CONG)] >>
+      rpt conj_tac
+      >- (qx_genl_tac [`i`, `j`] >> strip_tac >>
+          first_x_assum (qspecl_then [`i`, `j`] mp_tac) >> simp[] >>
+          Cases_on `j < LENGTH pfx` >- (simp[EL_APPEND1]) >>
+          Cases_on `j = LENGTH pfx`
+          >- (simp[EL_APPEND1, EL_APPEND2] >>
+              simp[Abbr`TOS`] >> metis_tac[gentouches_SYM]) >>
+          Cases_on `i < LENGTH pfx` >- simp[EL_APPEND1, EL_APPEND2] >>
+          Cases_on `i = LENGTH pfx`
+          >- (simp[EL_APPEND1, EL_APPEND2] >> simp[Abbr`TOS`] >>
+              metis_tac[]) >>
+          simp[EL_APPEND2, EL_APPEND1])
+      >- (fs[pcg_eval_FOLDR_nested_graphs] >>
+          `∀g0. MEM g0 (MAP (λc. TOS i0 m0 c) pfx) ⇒ g0 ≁ᵍ TOS i0 m0 c0`
+            by (dsimp[MEM_MAP] >> qx_gen_tac `p` >> strip_tac >>
+                `∃p_i. p_i < LENGTH pfx ∧ p = EL p_i pfx`
+                  by metis_tac[MEM_EL] >>
+                first_x_assum (qspecl_then [`p_i`, `LENGTH pfx`] mp_tac) >>
+                simp[EL_APPEND1, EL_APPEND2, EL_MAP]) >>
+          fs[MergeL_mid_to_front] >>
+          `∀g0. MEM g0 (MAP (λc. TOS i0 m0 c) pfx) ⇒ g0 ≁ᵍ TOS i0 m c`
+            by (simp[Abbr`TOS`] >> pop_assum mp_tac >> simp[] >>
+                metis_tac[gentouches_SYM]) >>
+          simp[MergeL_mid_to_front] >>
+          `pcg_eval (TOS i0 m c) (SOME m) = pcg_eval (TOS i0 m0 c0) (SOME m0)`
+            suffices_by simp[] >>
+          simp[Abbr`TOS`] >> metis_tac[graphOf_pcg_eval]) >>
+      simp[ggentouches_FOLDR_nested_graphs] >>
+      dsimp[MEM_MAP] >> rpt strip_tac
+      >- metis_tac[]
+      >- (pop_assum mp_tac >> simp[Abbr`TOS`])
+      >- metis_tac[])
   >- ((* par is all Dones component *)
       simp[graphOf_def, PULL_EXISTS, OPT_SEQUENCE_EQ_SOME,
            combinTheory.o_ABS_L, combinTheory.o_ABS_R,
-           MEM_MAPi] >>
-      map_every qx_gen_tac [`m0`, `cs`] >> strip_tac >>
+           MEM_MAP, MAP_MAP_o, EL_MAP, pcg_eval_FOLDR_nested_graphs] >>
+      qx_genl_tac [`m0`, `cs`] >> strip_tac >>
       `∀n. n < LENGTH cs ⇒ EL n cs = Done` by fs[EVERY_EL] >>
-      simp[MAPi_GENLIST, combinTheory.S_ABS_L] >>
-      simp[Cong GENLIST_CONG] >>
-      simp[MergeL_empties, MEM_GENLIST, PULL_EXISTS] >>
-      simp[pcg_eval_thm])
+      simp[graphOf_def] >>
+      `∀i m c. MEM c cs ⇒ graphOf i m c = SOME(m,ε)`
+        by (fs[EVERY_MEM] >> rpt strip_tac >> res_tac >>
+            rw[]) >>
+      simp[Cong (SIMP_RULE bool_ss [GSYM AND_IMP_INTRO] MAP_CONG)] >>
+      `MergeL (MAP (λc. ε) cs) = ε : value list pcg` suffices_by simp[] >>
+      match_mp_tac MergeL_empties >> simp[MEM_MAP, PULL_EXISTS])
   >- ((* Par contains an abort *)
-      simp[graphOf_def, OPT_SEQUENCE_EQ_SOME, MEM_MAPi,
-           PULL_EXISTS] >>
-      map_every qx_gen_tac [`m0`, `cs`] >> simp[MEM_EL] >>
-      disch_then (qx_choose_then `n` strip_assume_tac) >>
-      `∀i m. graphOf i m Abort = NONE` by simp[] >>
-      metis_tac[optionTheory.NOT_NONE_SOME])
-  >- ((* Malloc *) simp[graphOf_def]));
-
-val _ = overload_on("--->*", ``RTC eval``)
-val _ = overload_on("--->⁺", ``TC eval``)
-val _ = set_fixity "--->*" (Infix(NONASSOC, 450))
-val _ = set_fixity "--->⁺" (Infix(NONASSOC, 450))
+      simp[graphOf_def, OPT_SEQUENCE_EQ_SOME, MEM_MAP,
+           PULL_EXISTS] >> rpt strip_tac >>
+      disj1_tac >> qexists_tac `Abort` >> simp[])
+  >- ((* Malloc *) simp[graphOf_def])
+  >- ((* Label *) simp[graphOf_def])
+  >- ((* Label-Done ---> Done *) simp[graphOf_def])
+  >- ((* Label-Abort ---> Abort *) simp[graphOf_def])
+);
 
 val graphOf_correct0 = prove(
   ``∀p1 p2.
       p1 --->* p2 ⇒
       ∀m0 c0 m i0 i g gm.
-        p1 = (m0,c0) ∧ p2 = (m,Done) ∧ i0 ≠ [] ∧
-        graphOf i0 m0 c0 = SOME(i,gm,g) ⇒
+        p1 = (m0,c0) ∧ p2 = (m,Done) ∧
+        graphOf i0 m0 c0 = SOME(gm,g) ⇒
         gm = m``,
   ho_match_mp_tac relationTheory.RTC_INDUCT >> simp[] >>
   simp[FORALL_PROD] >> metis_tac[graphOf_correct_lemma]);
 
 val graphOf_correct = save_thm(
   "graphOf_correct",
-  graphOf_correct0 |> SIMP_RULE (srw_ss()) [PULL_FORALL])
+  graphOf_correct0 |> SIMP_RULE (srw_ss()) [PULL_FORALL, AND_IMP_INTRO])
 
-val _ = export_theory();
-
-
-
-*)
 val _ = export_theory();

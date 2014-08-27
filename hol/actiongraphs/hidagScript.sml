@@ -962,6 +962,12 @@ val allnodes_def = new_specification("allnodes_def",
                 `λg gr. gr`, `λn. {|n|}`, `K ∅`, `K ∅`,
                 `K ∅`, `K ∅`]
     |> SIMP_RULE (srw_ss()) [AC COMM_BAG_UNION ASSOC_BAG_UNION])
+val _ = export_rewrites ["allnodes_def"]
+
+val allnodes_hdmerge = store_thm(
+  "allnodes_hdmerge[simp]",
+  ``∀g1 g2. allnodes (g1 ⊕ g2) = allnodes g1 ⊎ allnodes g2``,
+  Induct >> simp[AC ASSOC_BAG_UNION COMM_BAG_UNION]);
 
 (* val _ = app delete_type ["hg0", "hn0"] *)
 
@@ -993,5 +999,38 @@ val htouches_rewrites = store_thm(
       gentouches rf4 wf4 greads gwrites x g``,
   simp[FUN_EQ_THM, gentouches_def]);
 
+val ggentouches_merge = store_thm(
+  "ggentouches_merge[simp]",
+  ``(gentouches rf wf greads gwrites x (g1 ⊕ g2) ⇔
+       gentouches rf wf greads gwrites x g1 ∨
+       gentouches rf wf greads gwrites x g2) ∧
+    (gentouches greads gwrites rf wf (g1 ⊕ g2) x ⇔
+       gentouches greads gwrites rf wf g1 x ∨
+       gentouches greads gwrites rf wf g2 x)``,
+  simp[gentouches_def] >> metis_tac[]);
+
+val ggentouches_empty = store_thm(
+  "ggentouches_empty[simp]",
+  ``(gentouches rf wf greads gwrites x ε ⇔ F) ∧
+    (gentouches greads gwrites rf wf ε x ⇔ F)``,
+  simp[gentouches_def]);
+
+val ggentouches_add = store_thm(
+  "ggentouches_add[simp]",
+  ``(gentouches rf wf greads gwrites x (n <+ g) ⇔
+       gentouches rf wf nreads nwrites x n ∨
+       gentouches rf wf greads gwrites x g) ∧
+    (gentouches greads gwrites rf wf (n <+ g) x ⇔
+       gentouches nreads nwrites rf wf n x ∨
+       gentouches greads gwrites rf wf g x)``,
+  simp[gentouches_def] >> metis_tac[]);
+
+val ggentouches_hdbuild = store_thm(
+  "ggentouches_hdbuild[simp]",
+  ``(gentouches rf wf greads gwrites x (hdbuild l) ⇔
+      ∃n. MEM n l ∧ gentouches rf wf nreads nwrites x n) ∧
+    (gentouches greads gwrites rf wf (hdbuild l) x ⇔
+      ∃n. MEM n l ∧ gentouches nreads nwrites rf wf n x)``,
+  Induct_on `l` >> dsimp[]);
 
 val _ = export_theory();
