@@ -40,7 +40,8 @@ val stmt_weight_def = tDefine "stmt_weight" `
   (stmt_weight (Seq stmts) = SUM (MAP stmt_weight stmts) + LENGTH stmts) ∧
   (stmt_weight (Par stmts) =
     SUM (MAP stmt_weight stmts) + 1 + LENGTH stmts) ∧
-  (stmt_weight (Label v s) = stmt_weight s + 1)
+  (stmt_weight (Label v s) = stmt_weight s + 1) ∧
+  (stmt_weight (Local v e s) = stmt_weight s + 1)
 ` (WF_REL_TAC `measure stmt_size` >> simp[] >>
    Induct >> dsimp[stmt_size_def] >>
    rpt strip_tac >> res_tac >> simp[])
@@ -54,6 +55,7 @@ val seq_count_def = tDefine "seq_count" `
   (seq_count (ForLoop v d s) = seq_count s) ∧
   (seq_count (IfStmt g t e) = seq_count t + seq_count e) ∧
   (seq_count (Label v s) = seq_count s) ∧
+  (seq_count (Local v e s) = seq_count s) ∧
   (seq_count _ = 0)
 `
   (WF_REL_TAC `measure stmt_size` >> simp[] >> Induct >> simp[] >>
@@ -64,6 +66,7 @@ val loopbag_def = tDefine "loopbag" `
   (loopbag Abort = {| |}) ∧
   (loopbag Done = {| |}) ∧
   (loopbag (Label v s) = loopbag s) ∧
+  (loopbag (Local v e s) = loopbag s) ∧
   (loopbag (Assign w ds v) = {| |}) ∧
   (loopbag (AssignVar v ds vf) = {| |}) ∧
   (loopbag (Malloc v d value) = {| |}) ∧
@@ -210,6 +213,46 @@ val FOLDR_KI = store_thm(
   ``FOLDR (\e a. a) acc list = acc``,
   Induct_on `list` >> simp[]);
 
+val SND_ap2 = store_thm(
+  "SND_ap2[simp]",
+  ``SND (ap2 f p) = f (SND p)``,
+  Cases_on `p` >> simp[]);
+
+val expr_weight_esubst = store_thm(
+  "expr_weight_esubst",
+  ``∀e. expr_weight (esubst vnm value e) ≤ expr_weight e``,
+  Induct >> simp[esubst_def] >> rw[]);
+
+val dexpr_weight_dsubst = store_thm(
+  "dexpr_weight_dsubst",
+  ``dexpr_weight (dsubst vnm value d) ≤ dexpr_weight d``,
+  Induct_on `d` >> simp[dsubst_def, expr_weight_esubst] >> rw[])
+
+val stmt_weight_ssubst = store_thm(
+  "stmt_weight_ssubst",
+  ``∀s vnm value.
+      stmt_weight dexpr_weight expr_weight (ssubst vnm value s) ≤
+      stmt_weight dexpr_weight expr_weight s``,
+  ho_match_mp_tac stmt_induction >> simp[ssubst_def, MAP_MAP_o] >> rw[]
+  >- (simp[combinTheory.o_DEF] >>
+      simp_tac (srw_ss() ++ numSimps.ARITH_NORM_ss) [] >>
+      match_mp_tac arithmeticTheory.LESS_EQ_LESS_EQ_MONO >>
+      simp[expr_weight_esubst] >> Induct_on `ds` >> simp[] >> gen_tac >>
+      match_mp_tac arithmeticTheory.LESS_EQ_LESS_EQ_MONO >>
+      simp[dexpr_weight_dsubst])
+  >- (Induct_on `ds` >> simp[] >> gen_tac >>
+      match_mp_tac arithmeticTheory.LESS_EQ_LESS_EQ_MONO >>
+      simp[dexpr_weight_dsubst])
+  >- (Cases_on `d` >> simp[ssubst_def] >> rw[])
+  >- (Cases_on `d` >> simp[ssubst_def] >> rw[])
+  >- (simp[combinTheory.o_ABS_R] >> Induct_on `stmts` >> dsimp[] >>
+      rpt strip_tac >>
+      match_mp_tac arithmeticTheory.LESS_EQ_LESS_EQ_MONO >> simp[])
+  >- (simp[combinTheory.o_ABS_R] >> Induct_on `stmts` >> dsimp[] >>
+      rpt strip_tac >>
+      match_mp_tac arithmeticTheory.LESS_EQ_LESS_EQ_MONO >> simp[])
+  >- (rw[]))
+
 val eval_terminates = store_thm(
   "eval_terminates",
   ``∀a b. eval a b ⇒ evalR b a``,
@@ -233,7 +276,9 @@ val eval_terminates = store_thm(
   >- (disj2_tac >> rw[] >> Induct_on `pfx` >> simp[])
   >- (disj2_tac >> rw[] >> Induct_on `pfx` >> simp[])
   >- (metis_tac[])
-  >- (metis_tac[]));
+  >- (metis_tac[])
+  >- (simp[DECIDE ``x < y + 1n ⇔ x ≤ y``, stmt_weight_ssubst])
+);
 
 val strip_label_def = tDefine "strip_label" `
   (strip_label (IfStmt gd t e) = IfStmt gd (strip_label t) (strip_label e)) ∧
@@ -242,6 +287,7 @@ val strip_label_def = tDefine "strip_label" `
   (strip_label (Seq stmts) = Seq (MAP strip_label stmts)) ∧
   (strip_label (Par stmts) = Par (MAP strip_label stmts)) ∧
   (strip_label (Label v s) = strip_label s) ∧
+  (strip_label (Local v e s) = Local v e (strip_label s)) ∧
   (strip_label s = s)
 ` (WF_REL_TAC `measure stmt_size` >> simp[] >>
    Induct >> dsimp[stmt_size_def] >> rpt strip_tac >> res_tac >>
@@ -400,6 +446,13 @@ val strip_label_EQ_If = store_thm(
         c = labelled vs (IfStmt gd t' e') ∧
         strip_label t' = t ∧
         strip_label e' = e``,
+  ho_match_mp_tac stmt_induction >> simp[PULL_EXISTS] >> metis_tac[]);
+
+val strip_label_EQ_Local = store_thm(
+  "strip_label_EQ_Local[simp]",
+  ``∀c v e s. strip_label c = Local v e s ⇔
+              ∃vs s'. c = labelled vs (Local v e s') ∧
+                      strip_label s' = s``,
   ho_match_mp_tac stmt_induction >> simp[PULL_EXISTS] >> metis_tac[]);
 
 val strip_label_ssubst = store_thm(
@@ -732,7 +785,12 @@ val strip_label_simulation1 = prove(
       qmatch_assum_rename_tac `MAP strip_label pfx = MAP strip_label p'` [] >>
       qmatch_assum_rename_tac `MAP strip_label sfx = MAP strip_label s'` [] >>
       qexists_tac `(m0, Par (p' ++ [Abort] ++ s'))` >> reverse conj_tac >- etac>>
-      match_mp_tac evalrtc_par >> simp[]));
+      match_mp_tac evalrtc_par >> simp[])
+  >- (simp[PULL_EXISTS] >> rpt strip_tac >>
+      qexists_tac `labelled vs (ssubst vnm (evalexpr m0 e) s')` >> simp[] >>
+      match_mp_tac labelled_RTC_mono >>
+      match_mp_tac RTC_SUBSET >> simp[Once eval_cases])
+);
 
 val eval_strip_label_I = save_thm(
   "eval_strip_label_I",

@@ -111,7 +111,8 @@ val stmt_weight_ssubst0 = store_thm(
   ``stmt_weight (K 0) (K 0) (ssubst x y s) = stmt_weight (K 0) (K 0) s``,
   qid_spec_tac `s` >> ho_match_mp_tac PseudoCTheory.stmt_induction >>
   simp[PseudoCTheory.ssubst_def, MAP_MAP_o, combinTheory.o_DEF,
-       Cong (REWRITE_RULE [GSYM AND_IMP_INTRO] MAP_CONG)] >> rpt strip_tac >>
+       Cong (REWRITE_RULE [GSYM AND_IMP_INTRO] MAP_CONG)] >>
+  reverse (rpt strip_tac) >- rw[] >>
   Cases_on `d` >> rw[PseudoCTheory.ssubst_def])
 
 val graphOf_def = tDefine "graphOf" `
@@ -212,7 +213,15 @@ val graphOf_def = tDefine "graphOf" `
 
   (graphOf i0 m0 (Malloc vnm sz value) = NONE) ∧
 
-  (graphOf i0 m0 (Label v s) = graphOf (v::i0) m0 s)
+  (graphOf i0 m0 (Label v s) = graphOf (v::i0) m0 s) ∧
+
+  (graphOf i0 m0 (Local v e s) =
+     do
+       value <- SOME(evalexpr m0 e);
+       assert(∀a. value ≠ Array a);
+       (m,g) <- graphOf lab m0 (ssubst v value s);
+       SOME(m,HD (addLabel lab (readAction () m0 e)) <+ g)
+     od)
 ` (WF_REL_TAC
      `inv_image (mlt (<) LEX (<)) (λ(i,m,s). (loopbag s, stmt_weight (K 0) (K 0) s))` >>
    simp[WF_mlt1, FOLDR_MAP, mlt_loopbag_lemma] >>
@@ -362,6 +371,7 @@ val graphOf_pcg_eval = store_thm(
   >- ((* Done *) simp[graphOf_def, pcg_eval_thm])
   >- ((* Malloc *) simp[graphOf_def])
   >- ((* Label *) simp[graphOf_def])
+  >- ((* Local *) simp[graphOf_def, EXISTS_PROD, PULL_EXISTS])
 );
 
 val assert_EQ_SOME = store_thm(
@@ -754,6 +764,11 @@ val graphOf_apply_action_diamond = store_thm(
   >- ((* Done *) simp[graphOf_def])
   >- ((* malloc *) simp[graphOf_def])
   >- ((* Label *) simp[graphOf_def])
+  >- ((* Local *) simp[graphOf_def, EXISTS_PROD, PULL_EXISTS] >>
+      rpt strip_tac >> fs[] >>
+      `evalexpr m2 e = evalexpr m0 e ∧ readAction () m2 e = readAction () m0 e`
+        by metis_tac[apply_action_expr_eval_commutes, touches_SYM] >>
+      simp[])
 )
 
 val graphOf_pcg_eval_diamond = store_thm(
@@ -1193,6 +1208,7 @@ val graphOf_correct_lemma = store_thm(
   >- ((* Label *) simp[graphOf_def])
   >- ((* Label-Done ---> Done *) simp[graphOf_def])
   >- ((* Label-Abort ---> Abort *) simp[graphOf_def])
+  >- ((* Local *) simp[graphOf_def, PULL_EXISTS, EXISTS_PROD])
 );
 
 val graphOf_correct0 = prove(

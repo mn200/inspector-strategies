@@ -71,6 +71,7 @@ val _ = Datatype`
        | ParLoop vname domain stmt
        | Seq (stmt list)
        | Par (stmt list)
+       | Local vname expr stmt
        | Label value stmt
        | Abort
        | Done
@@ -88,6 +89,7 @@ val stmt_induction = store_thm(
      (∀stmts. (∀m s. MEM s stmts ⇒ P s) ⇒ P (Seq stmts)) ∧
      (∀stmts. (∀m s. MEM s stmts ⇒ P s) ⇒ P (Par stmts)) ∧
      (∀v s. P s ⇒ P (Label v s)) ∧
+     (∀v e s. P s ⇒ P (Local v e s)) ∧
      P Abort ∧ P Done
     ⇒
      ∀s. P s``,
@@ -199,6 +201,9 @@ val ssubst_def = tDefine "ssubst" `
   (ssubst vnm value (Seq slist) = Seq (MAP (ssubst vnm value) slist)) ∧
   (ssubst vnm value (Par slist) = Par (MAP (ssubst vnm value) slist)) ∧
   (ssubst vnm value (Label v s) = Label v (ssubst vnm value s)) ∧
+  (ssubst vnm value (Local v e s) =
+     if v = vnm then Local v e s
+     else Local v (esubst vnm value e) (ssubst vnm value s)) ∧
   (ssubst vnm value Abort = Abort) ∧
   (ssubst vnm value Done = Done)
 `
@@ -406,6 +411,14 @@ val (eval_rules, eval_ind, eval_cases) = Hol_reln`
 
   (∀m v.
       eval (m, Label v Abort) (m, Abort))
+
+     ∧
+
+  (∀m vnm value e s.
+      evalexpr m e = value ∧
+      (∀a. value ≠ Array a)
+     ⇒
+      eval (m, Local vnm e s) (m, ssubst vnm value s))
 `
 
 val _ = set_fixity "--->" (Infix(NONASSOC, 450))
