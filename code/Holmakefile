@@ -5,7 +5,7 @@ HOLHEAP = ../hol/pseudoc/ie0-heap
 endif
 
 
-all: fastwaveTheory.uo evalpc.uo
+all: fastwaveTheory.uo
 
 
 .PHONY: all
