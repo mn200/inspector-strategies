@@ -227,6 +227,13 @@ val (eval_rules, eval_ind, eval_cases) = Hol_reln`
 
      ∧
 
+  (∀m pfx sfx.
+     EVERY ((=) Done) pfx
+    ⇒
+     eval (m, Seq (pfx ++ [Abort] ++ sfx)) (m, Abort))
+
+     ∧
+
   (∀m g t e b.
      evalexpr m g = Bool b
    ⇒

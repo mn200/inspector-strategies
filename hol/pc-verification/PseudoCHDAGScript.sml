@@ -129,7 +129,7 @@ val graphOf_def = tDefine "graphOf" `
                    od
        | _ => NONE) ∧
 
-  (graphOf i0 m0 (ForLoop vnm d body) =
+  (graphOf lab m0 (ForLoop vnm d body) =
      do
        dvs <- dvalues m0 d;
        (m,g) <-
@@ -141,7 +141,7 @@ val graphOf_def = tDefine "graphOf" `
                    od)
                (SOME(m0,ε))
                dvs;
-       SOME(m, HD (addLabel i0 (domreadAction () m0 d)) <+ g)
+       SOME(m, HD (addLabel lab (domreadAction () m0 d)) <+ g)
      od) ∧
 
   (graphOf i0 m0 (Seq cmds) =
@@ -215,7 +215,7 @@ val graphOf_def = tDefine "graphOf" `
 
   (graphOf i0 m0 (Label v s) = graphOf (v::i0) m0 s) ∧
 
-  (graphOf i0 m0 (Local v e s) =
+  (graphOf lab m0 (Local v e s) =
      do
        value <- SOME(evalexpr m0 e);
        assert(∀a. value ≠ Array a);
@@ -1009,6 +1009,15 @@ val graphOf_correct_lemma = store_thm(
       `EVERY ($= Done) cs ⇔ EVERY ($= Done) cs'` by simp[EVERY_MEM, Abbr`cs'`] >>
       pop_assum SUBST_ALL_TAC >> pop_assum kall_tac >> Induct_on `cs'` >>
       simp[] >> simp[Once graphOfL_def, PULL_EXISTS, FORALL_PROD] >> metis_tac[])
+  >- ((* seq includes an abort *) simp[graphOf_def'] >>
+      `∀pfx sfx lab mgopt.
+         FOLDL (graphOfL (K I) I lab) mgopt (pfx ++ [Abort] ++ sfx) = NONE`
+        suffices_by simp[] >>
+      Induct_on `pfx` >> simp[graphOf_def, graphOfL_def] >>
+      rpt gen_tac >>
+      `mgopt = NONE ∨ ∃m g. mgopt = SOME (m,g)`
+        by metis_tac[optionTheory.option_CASES, pairTheory.pair_CASES] >>
+      simp[])
   >- ((* guard of if evaluates to boolean and next statement selected *)
       map_every qx_gen_tac [`m0`, `gd`, `t`, `e`, `b`] >>
       rpt gen_tac >> strip_tac >> simp[graphOf_def, PULL_EXISTS, EXISTS_PROD] >>
