@@ -22,7 +22,7 @@ val _ = Datatype`
 
 val _ = Datatype`
   expr = VRead string
-       | ARead string expr
+       | ASub expr expr
        | Opn (value list -> value) (expr list)
        | Value value
 `
@@ -33,7 +33,7 @@ val isValue_def = Define`
 `
 val _ = export_rewrites ["isValue_def"]
 
-val _ = type_abbrev ("write", ``:string # expr``)
+val _ = type_abbrev ("write", ``:expr``)
 val _ = type_abbrev ("aname", ``:string``)
 val _ = type_abbrev ("vname", ``:string``)
 val _ = disable_tyabbrev_printing "aname"
@@ -41,8 +41,7 @@ val _ = disable_tyabbrev_printing "vname"
 
 val _ = Datatype`
   dexpr = DValue value
-        | DARead aname expr
-        | DVRead vname
+        | DRead expr
 `
 
 val isDValue_def = Define`
@@ -64,7 +63,6 @@ val _ = type_abbrev ("memory", ``:vname |-> value``)
 
 val _ = Datatype`
   stmt = Assign write (dexpr list) (value list -> value)
-       | AssignVar vname (dexpr list) (value list -> value)
        | IfStmt expr stmt stmt
        | Malloc aname expr value
        | ForLoop vname domain stmt
@@ -81,7 +79,6 @@ val stmt_induction = store_thm(
   "stmt_induction",
   ``∀P.
      (∀w ds vf. P (Assign w ds vf)) ∧
-     (∀v ds vf. P (AssignVar v ds vf)) ∧
      (∀g t e. P t ∧ P e ⇒ P (IfStmt g t e)) ∧
      (∀nm e value. P (Malloc nm e value)) ∧
      (∀s d stmt. P stmt ⇒ P (ForLoop s d stmt)) ∧
@@ -131,15 +128,15 @@ val lookup_v_def = Define`
   lookup_v m v =
     case FLOOKUP m v of
         NONE => Error
-      | SOME (Array _) => Error
       | SOME v => v
 `;
 
 (* evalexpr : memory -> expr -> value *)
 val evalexpr_def = tDefine "evalexpr" `
-  (evalexpr m (ARead nm i_expr) =
-     case evalexpr m i_expr of
-         Int i => lookup_array m nm i
+  (evalexpr m (ASub a_expr i_expr) =
+     case (evalexpr m a_expr, evalexpr m i_expr) of
+         (Array vlist, Int i) => if i < 0i ∨ &(LENGTH vlist) ≤ i then Error
+                                 else EL (Num i) vlist
        | _ => Error) ∧
   (evalexpr m (VRead nm) = lookup_v m nm) ∧
   (evalexpr m (Opn vf elist) = vf (MAP (evalexpr m) elist)) ∧
@@ -160,7 +157,7 @@ val dvalues_def = Define`
 
 val esubst_def = tDefine "esubst" `
   (esubst vnm value (VRead vnm') = if vnm = vnm' then Value value
-                                    else VRead vnm') ∧
+                                   else VRead vnm') ∧
   (esubst vnm value (ARead vn e) = ARead vn (esubst vnm value e)) ∧
   (esubst vnm value (Opn f vs) = Opn f (MAP (esubst vnm value) vs)) ∧
   (esubst vnm value (Value v) = Value v)
@@ -178,9 +175,7 @@ val _ = export_rewrites ["ap1_def", "ap2_def", "ap3_def"]
 
 val dsubst_def = Define`
   (dsubst vnm value (DValue v) = DValue v) ∧
-  (dsubst vnm value (DARead anm e) = DARead anm (esubst vnm value e)) ∧
-  (dsubst vnm value (DVRead vnm') = if vnm = vnm' then DValue value
-                                   else DVRead vnm')
+  (dsubst vnm value (DRead e) = DRead (esubst vnm value e))
 `;
 
 val ssubst_def = tDefine "ssubst" `
