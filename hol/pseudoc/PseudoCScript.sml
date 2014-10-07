@@ -7,10 +7,14 @@ open finite_mapTheory
 open lcsymtacs
 open listRangeTheory
 open intrealTheory transcTheory
+open monadsyntax
 
 val _ = new_theory "PseudoC";
 
 val _ = ParseExtras.tight_equality()
+val _ = overload_on ("monad_bind", ``OPTION_BIND``)
+val _ = overload_on ("monad_unitbind", ``OPTION_IGNORE_BIND``)
+val _ = overload_on ("assert", ``OPTION_GUARD``)
 
 val _ = Datatype`
   value = Int int
@@ -38,22 +42,18 @@ val _ = type_abbrev ("aname", ``:string``)
 val _ = type_abbrev ("vname", ``:string``)
 val _ = disable_tyabbrev_printing "aname"
 val _ = disable_tyabbrev_printing "vname"
+val _ = disable_tyabbrev_printing "write"
 
-val _ = Datatype`
-  dexpr = DValue value
-        | DRead expr
+val isValue_def = Define`
+  isValue (Value _) = T ∧
+  isValue _ = F
 `
+val _ = export_rewrites ["isValue_def"]
 
-val isDValue_def = Define`
-  isDValue (DValue _) = T ∧
-  isDValue _ = F
-`
-val _ = export_rewrites ["isDValue_def"]
-
-val destDValue_def = Define`
-  destDValue (DValue v) = v
+val destValue_def = Define`
+  destValue (Value v) = v
 `;
-val _ = export_rewrites ["destDValue_def"]
+val _ = export_rewrites ["destValue_def"]
 
 val _ = Datatype`domain = D expr expr`  (* lo/hi pair *)
 
@@ -62,7 +62,7 @@ val _ = type_abbrev ("vname", ``:string``)
 val _ = type_abbrev ("memory", ``:vname |-> value``)
 
 val _ = Datatype`
-  stmt = Assign write (dexpr list) (value list -> value)
+  stmt = Assign write (expr list) (value list -> value)
        | IfStmt expr stmt stmt
        | Malloc aname expr value
        | ForLoop vname domain stmt
@@ -158,7 +158,8 @@ val dvalues_def = Define`
 val esubst_def = tDefine "esubst" `
   (esubst vnm value (VRead vnm') = if vnm = vnm' then Value value
                                    else VRead vnm') ∧
-  (esubst vnm value (ARead vn e) = ARead vn (esubst vnm value e)) ∧
+  (esubst vnm value (ASub ae ie) =
+     ASub (esubst vnm value ae) (esubst vnm value ie)) ∧
   (esubst vnm value (Opn f vs) = Opn f (MAP (esubst vnm value) vs)) ∧
   (esubst vnm value (Value v) = Value v)
 `
@@ -173,16 +174,9 @@ val ap3_def = Define`
 `;
 val _ = export_rewrites ["ap1_def", "ap2_def", "ap3_def"]
 
-val dsubst_def = Define`
-  (dsubst vnm value (DValue v) = DValue v) ∧
-  (dsubst vnm value (DRead e) = DRead (esubst vnm value e))
-`;
-
 val ssubst_def = tDefine "ssubst" `
   (ssubst vnm value (Assign w ds opf) =
-     Assign (ap2 (esubst vnm value) w) (MAP (dsubst vnm value) ds) opf) ∧
-  (ssubst vnm value (AssignVar vnm' ds opf) =
-     AssignVar vnm' (MAP (dsubst vnm value) ds) opf) ∧ (* maybe abort if vnm = vnm' ? *)
+     Assign (esubst vnm value w) (MAP (esubst vnm value) ds) opf) ∧
   (ssubst vnm value (IfStmt g t e) =
      IfStmt (esubst vnm value g) (ssubst vnm value t) (ssubst vnm value e)) ∧
   (ssubst vnm value (Malloc vnm' e value') =
@@ -205,6 +199,57 @@ val ssubst_def = tDefine "ssubst" `
   (WF_REL_TAC `measure (λ(vnm,value,s). stmt_size s)` >> simp[] >>
    Induct >> dsimp[definition "stmt_size_def"] >> rpt strip_tac >>
    res_tac >> simp[])
+
+val eval_lvalue_def = Define`
+  (eval_lvalue m (VRead nm) = SOME (nm, [])) ∧
+  (eval_lvalue m (ASub ae ie) =
+     do
+       (nm, indices) <- eval_lvalue m ae;
+       i <- (some i. evalexpr m ie = Int i);
+       assert(0 <= i);
+       SOME(nm, indices ++ [Num i])
+     od) ∧
+  (eval_lvalue m (Opn _ _) = NONE) ∧
+  (eval_lvalue m (Value _) = NONE)
+`
+
+val upd_nested_array_def = Define`
+  (upd_nested_array i [] value vlist =
+     if i < LENGTH vlist then
+       case EL i vlist of
+           Array _ => NONE
+         | _ => SOME (LUPDATE value i vlist)
+     else NONE) ∧
+  (upd_nested_array i (j::is) value vlist =
+     if i < LENGTH vlist then
+       case EL i vlist of
+           Array nvlist =>
+           do
+             nvlist' <- upd_nested_array j is value nvlist ;
+             SOME (LUPDATE (Array nvlist') i vlist)
+           od
+         | _ => NONE
+     else NONE)
+`;
+
+
+val upd_memory_def = Define`
+  (upd_memory (nm, []) value m = upd_var m nm value) ∧
+  (upd_memory (nm, i :: is) value m =
+     case FLOOKUP m nm of
+         SOME(Array vlist) =>
+           do
+             newarray <- upd_nested_array i is value vlist;
+             SOME(m |+ (nm, Array newarray))
+           od
+        | _ => NONE)`
+
+val upd_write_def = Define`
+  upd_write m0 w value =
+    case eval_lvalue m0 w of
+        NONE => NONE
+      | SOME lvalue => upd_memory lvalue value m0
+`;
 
 val (eval_rules, eval_ind, eval_cases) = Hol_reln`
   (∀c c0 pfx sfx m0 m.
@@ -243,97 +288,33 @@ val (eval_rules, eval_ind, eval_cases) = Hol_reln`
 
      ∧
 
-  (* assignvar completes successfully, having performed all reads *)
-  (∀m0 m vnm rdes vf.
-     EVERY isDValue rdes ∧
-     upd_var m0 vnm (vf (MAP destDValue rdes)) = SOME m
-    ⇒
-     eval (m0, AssignVar vnm rdes vf) (m, Done))
-
-    ∧
-
-  (* assignvar fails on attempting to write to memory *)
-  (∀m0 vnm rdes vf.
-     EVERY isDValue rdes ∧
-     upd_var m0 vnm (vf (MAP destDValue rdes)) = NONE
-    ⇒
-     eval (m0, AssignVar vnm rdes vf) (m0, Abort))
-
-     ∧
-
-  (* assignvar calculates index for an array read *)
-  (∀m vnm pfx sfx anm e vf.
-     ¬isValue e
-    ⇒
-     eval (m, AssignVar vnm (pfx ++ [DARead anm e] ++ sfx) vf)
-          (m, AssignVar vnm (pfx ++
-                             [DARead anm (Value (evalexpr m e))] ++
-                             sfx) vf))
-
-     ∧
-
-  (* assignvar completes an array read *)
-  (∀m vnm pfx sfx anm i vf.
-     eval (m, AssignVar vnm (pfx ++ [DARead anm (Value (Int i))] ++ sfx) vf)
-          (m, AssignVar vnm (pfx ++ [DValue (lookup_array m anm i)] ++ sfx) vf))
-
-     ∧
-
-  (* assignvar completes a DVRead *)
-  (∀m vnm pfx sfx vr vf.
-     eval (m, AssignVar vnm (pfx ++ [DVRead vr] ++ sfx) vf)
-          (m, AssignVar vnm (pfx ++ [DValue (lookup_v m vr)] ++ sfx) vf))
-
-     ∧
-
-  (∀rdes m0 m' aname i vf.
-      EVERY isDValue rdes ∧
-      upd_array m0 aname i (vf (MAP destDValue rdes)) = SOME m'
+  (* lvalue is evaluated atomically when reads are ready to go;
+     assumption is that write/destination calculation is never
+     racy with respect to data arrays. *)
+  (∀rdes m0 m' vf.
+      EVERY isValue rdes ∧
+      upd_write m0 w (vf (MAP destValue rdes)) = SOME m'
      ⇒
-      eval (m0, Assign (aname, Value (Int i)) rdes vf) (m', Done))
+      eval (m0, Assign w rdes vf) (m', Done))
 
      ∧
 
-  (∀rdes m0 aname i vf.
-      EVERY isDValue rdes ∧
-      upd_array m0 aname i (vf (MAP destDValue rdes)) = NONE
+  (∀w rdes m0 vf.
+      EVERY isValue rdes ∧
+      upd_write m0 w (vf (MAP destValue rdes)) = NONE
      ⇒
-      eval (m0, Assign (aname, Value (Int i)) rdes vf)
-           (m0, Abort))
+      eval (m0, Assign w rdes vf) (m0, Abort))
 
      ∧
 
-  (∀m0 aname expr rds vf.
-      ¬isValue expr ⇒
-      eval (m0, Assign (aname, expr) rds vf)
-           (m0, Assign (aname, Value (evalexpr m0 expr)) rds vf))
-
-     ∧
-
-  (∀rds pfx aname expr sfx w vf m.
-      rds = pfx ++ [DARead aname expr] ++ sfx /\ ¬isValue expr ⇒
-      eval (m, Assign w rds vf)
+  (∀pfx expr sfx w vf m.
+      ¬isValue expr
+     ⇒
+      eval (m, Assign w (pfx ++ [expr] ++ sfx) vf)
            (m,
             Assign w
-                  (pfx ++ [DARead aname (Value (evalexpr m expr))] ++ sfx)
+                  (pfx ++ [Value (evalexpr m expr)] ++ sfx)
                   vf))
-
-     ∧
-
-  (∀rds pfx aname i sfx w vf m.
-      rds = pfx ++ [DARead aname (Value (Int i))] ++ sfx
-     ⇒
-      eval (m, Assign w rds vf)
-           (m,
-            Assign w (pfx ++ [DValue (lookup_array m aname i)] ++ sfx) vf))
-
-     ∧
-
-  (∀rds pfx vname sfx w vf m.
-      rds = pfx ++ [DVRead vname] ++ sfx ⇒
-      eval (m, Assign w rds vf)
-           (m,
-            Assign w (pfx ++ [DValue (lookup_v m vname)] ++ sfx) vf))
 
      ∧
 
