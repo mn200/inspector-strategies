@@ -14,6 +14,45 @@ val _ = new_theory "PseudoCHDAG";
 
 val _ = set_trace "Goalstack.print_goal_at_top" 0
 
+val exprRead_def = Define`
+  (exprRead m (VRead vnm) = SOME (vnm, [])) ∧
+  (exprRead m (ASub ae ie) =
+     lift2 (λ(nm,is) i. (nm, is ++ [i]))
+           (exprRead m ae)
+           (some i. evalexpr m ie = Int i)) ∧
+  (exprRead m _ = NONE)
+`;
+
+val getReads_def = Define`
+  (getReads m [] = SOME []) ∧
+  (getReads m (e :: es) =
+     lift2 CONS (exprRead m e) (getReads m es))
+`;
+
+val mergeReads0_def = Define`
+  (mergeReads0 [] acc opn vs = opn (REVERSE acc)) ∧
+  (mergeReads0 (DVRead _ :: ds) acc opn vs =
+     mergeReads0 ds (HD vs :: acc) opn (TL vs)) ∧
+  (mergeReads0 (DValue v :: ds) acc opn vs =
+     mergeReads0 ds (v :: acc) opn vs) ∧
+  (mergeReads0 (DARead _ _ :: ds) acc opn vs =
+     mergeReads0 ds (HD vs :: acc) opn (TL vs))
+`;
+
+val mergeReads_def = Define`
+  mergeReads ds opn = mergeReads0 ds [] opn
+`;
+
+val evalDexpr_def = Define`
+  (evalDexpr m (DValue v) = SOME v) ∧
+  (evalDexpr m (DVRead vname) = SOME (lookup_v m vname)) ∧
+  (evalDexpr m (DARead aname e_i) =
+     do
+       i <- (some i. evalexpr m e_i = Int i);
+       SOME (lookup_array m aname i)
+     od)
+`;
+
 fun disjneq_search (g as (asl,w)) = let
   val ds = strip_disj w
   fun is_neq t = is_eq (dest_neg t) handle HOL_ERR _ => false

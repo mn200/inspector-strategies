@@ -161,4 +161,23 @@ val EL_delN_AFTER = store_thm(
   `∃i0. i = SUC i0` by (Cases_on `i` >> fs[]) >> rw[] >>
   fs[arithmeticTheory.ADD_CLAUSES] >> simp[]);
 
+val fupdLast_def = Define`
+  (fupdLast f [] = []) /\
+  (fupdLast f [h] = [f h]) /\
+  (fupdLast f (h::t) = h::fupdLast f t)
+`;
+val _ = export_rewrites ["fupdLast_def"]
+
+val fupdLast_EQ_NIL = store_thm(
+  "fupdLast_EQ_NIL[simp]",
+  ``(fupdLast f x = [] ⇔ x = []) ∧
+    ([] = fupdLast f x ⇔ x = [])``,
+  Cases_on `x` >> simp[] >> Cases_on `t` >> simp[]);
+
+val fupdLast_FRONT_LAST = store_thm(
+  "fupdLast_FRONT_LAST",
+  ``fupdLast f l = if l = [] then []
+                  else FRONT l ++ [f (LAST l)]``,
+  Induct_on `l` >> simp[] >> Cases_on `l` >> simp[]);
+
 val _ = export_theory();
