@@ -25,10 +25,11 @@ val _ = Datatype`
 `;
 
 val _ = Datatype`
-  expr = VRead string
-       | ASub expr expr
+  expr = MAccess maccess
        | Opn (value list -> value) (expr list)
-       | Value value
+       | Value value ;
+  maccess = VRead string
+          | ASub maccess expr
 `
 
 val isValue_def = Define`
@@ -37,34 +38,29 @@ val isValue_def = Define`
 `
 val _ = export_rewrites ["isValue_def"]
 
-val _ = type_abbrev ("write", ``:expr``)
-val _ = type_abbrev ("aname", ``:string``)
-val _ = type_abbrev ("vname", ``:string``)
-val _ = disable_tyabbrev_printing "aname"
-val _ = disable_tyabbrev_printing "vname"
-val _ = disable_tyabbrev_printing "write"
-
-val isValue_def = Define`
-  isValue (Value _) = T ∧
-  isValue _ = F
-`
-val _ = export_rewrites ["isValue_def"]
-
-val destValue_def = Define`
-  destValue (Value v) = v
-`;
-val _ = export_rewrites ["destValue_def"]
 
 val _ = Datatype`domain = D expr expr`  (* lo/hi pair *)
+val _ = Datatype`dexpr = DMA maccess | DValue value`
+val destDValue_def = Define`
+  destDValue (DValue v) = v
+`;
+val _ = export_rewrites ["destDValue_def"]
+
+val isDValue_def = Define`
+  isDValue (DValue _) = T ∧
+  isDValue (DMA _) = F
+`
+val _ = export_rewrites ["isDValue_def"]
 
 
 val _ = type_abbrev ("vname", ``:string``)
+val _ = disable_tyabbrev_printing "vname"
 val _ = type_abbrev ("memory", ``:vname |-> value``)
 
 val _ = Datatype`
-  stmt = Assign write (expr list) (value list -> value)
+  stmt = Assign maccess (dexpr list) (value list -> value)
        | IfStmt expr stmt stmt
-       | Malloc aname expr value
+       | Malloc vname expr value
        | ForLoop vname domain stmt
        | ParLoop vname domain stmt
        | Seq (stmt list)
@@ -133,15 +129,19 @@ val lookup_v_def = Define`
 
 (* evalexpr : memory -> expr -> value *)
 val evalexpr_def = tDefine "evalexpr" `
-  (evalexpr m (ASub a_expr i_expr) =
-     case (evalexpr m a_expr, evalexpr m i_expr) of
+  (evalmaccess m (ASub ma i_expr) =
+     case (evalmaccess m ma, evalexpr m i_expr) of
          (Array vlist, Int i) => if i < 0i ∨ &(LENGTH vlist) ≤ i then Error
                                  else EL (Num i) vlist
        | _ => Error) ∧
-  (evalexpr m (VRead nm) = lookup_v m nm) ∧
+  (evalmaccess m (VRead nm) = lookup_v m nm) ∧
+
+  (evalexpr m (MAccess ma) = evalmaccess m ma) ∧
   (evalexpr m (Opn vf elist) = vf (MAP (evalexpr m) elist)) ∧
   (evalexpr m (Value v) = v)
-` (WF_REL_TAC `inv_image (measure expr_size) SND` >>
+` (WF_REL_TAC `measure (λs. case s of
+                                INL (m,ma) => maccess_size ma
+                              | INR (m,e) => expr_size e)` >>
    simp[] >> Induct >> rw[definition "expr_size_def"] >>
    res_tac >> simp[])
 
@@ -155,17 +155,45 @@ val dvalues_def = Define`
       | _ => NONE
 `;
 
+(* trickiness here is that we only want to substitute scalars for variables
+   in "scalar position".  I.e., if we are substituting 10 for x, we want
+
+      a[x+1] --> a[10+1]
+      x * 4  --> 10 * 4
+
+   but for
+
+      x[i]
+
+   to stay unchanged, though it's probably some sort of error in any case. *)
+
 val esubst_def = tDefine "esubst" `
-  (esubst vnm value (VRead vnm') = if vnm = vnm' then Value value
-                                   else VRead vnm') ∧
-  (esubst vnm value (ASub ae ie) =
-     ASub (esubst vnm value ae) (esubst vnm value ie)) ∧
+  (esubst vnm value (MAccess (VRead vnm')) =
+     if vnm = vnm' then Value value else MAccess (VRead vnm')) ∧
+  (esubst vnm value (MAccess (ASub ae ie)) =
+     MAccess (ASub (msubst vnm value ae) (esubst vnm value ie))) ∧
   (esubst vnm value (Opn f vs) = Opn f (MAP (esubst vnm value) vs)) ∧
-  (esubst vnm value (Value v) = Value v)
+  (esubst vnm value (Value v) = Value v) ∧
+
+  (msubst vnm value (VRead vnm') = VRead vnm') ∧
+  (msubst vnm value (ASub ae ie) =
+    ASub (msubst vnm value ae) (esubst vnm value ie))
 `
-  (WF_REL_TAC `measure (λ(vnm,value,e). expr_size e)` >> simp[] >>
+  (WF_REL_TAC `measure (λs. case s of
+                                INL (_,_,e) => expr_size e
+                              | INR (_,_,ma) => maccess_size ma)` >>
+   simp[] >>
    Induct >> dsimp[definition "expr_size_def"] >> rpt strip_tac >>
    res_tac >> simp[])
+
+val dsubst_def = Define`
+  (dsubst _ _ (DValue v) = DValue v) ∧
+  (dsubst vnm value (DMA (VRead vnm')) =
+     if vnm = vnm' then (DValue value)
+     else DMA (VRead vnm')) ∧
+  (dsubst vnm value (DMA (ASub ae ie)) =
+     DMA (ASub (msubst vnm value ae) (esubst vnm value ie)))
+`;
 
 val ap1_def = Define`ap1 f (x,y) = (f x, y)`;
 val ap2_def = Define`ap2 f (x,y) = (x, f y)`;
@@ -176,7 +204,7 @@ val _ = export_rewrites ["ap1_def", "ap2_def", "ap3_def"]
 
 val ssubst_def = tDefine "ssubst" `
   (ssubst vnm value (Assign w ds opf) =
-     Assign (esubst vnm value w) (MAP (esubst vnm value) ds) opf) ∧
+     Assign (msubst vnm value w) (MAP (dsubst vnm value) ds) opf) ∧
   (ssubst vnm value (IfStmt g t e) =
      IfStmt (esubst vnm value g) (ssubst vnm value t) (ssubst vnm value e)) ∧
   (ssubst vnm value (Malloc vnm' e value') =
@@ -208,9 +236,7 @@ val eval_lvalue_def = Define`
        i <- (some i. evalexpr m ie = Int i);
        assert(0 <= i);
        SOME(nm, indices ++ [Num i])
-     od) ∧
-  (eval_lvalue m (Opn _ _) = NONE) ∧
-  (eval_lvalue m (Value _) = NONE)
+     od)
 `
 
 val upd_nested_array_def = Define`
@@ -231,7 +257,6 @@ val upd_nested_array_def = Define`
          | _ => NONE
      else NONE)
 `;
-
 
 val upd_memory_def = Define`
   (upd_memory (nm, []) value m = upd_var m nm value) ∧
@@ -292,28 +317,26 @@ val (eval_rules, eval_ind, eval_cases) = Hol_reln`
      assumption is that write/destination calculation is never
      racy with respect to data arrays. *)
   (∀rdes m0 m' vf.
-      EVERY isValue rdes ∧
-      upd_write m0 w (vf (MAP destValue rdes)) = SOME m'
+      EVERY isDValue rdes ∧
+      upd_write m0 w (vf (MAP destDValue rdes)) = SOME m'
      ⇒
       eval (m0, Assign w rdes vf) (m', Done))
 
      ∧
 
   (∀w rdes m0 vf.
-      EVERY isValue rdes ∧
-      upd_write m0 w (vf (MAP destValue rdes)) = NONE
+      EVERY isDValue rdes ∧
+      upd_write m0 w (vf (MAP destDValue rdes)) = NONE
      ⇒
       eval (m0, Assign w rdes vf) (m0, Abort))
 
      ∧
 
   (∀pfx expr sfx w vf m.
-      ¬isValue expr
-     ⇒
-      eval (m, Assign w (pfx ++ [expr] ++ sfx) vf)
+      eval (m, Assign w (pfx ++ [DMA expr] ++ sfx) vf)
            (m,
             Assign w
-                  (pfx ++ [Value (evalexpr m expr)] ++ sfx)
+                  (pfx ++ [DValue (evalmaccess m expr)] ++ sfx)
                   vf))
 
      ∧
