@@ -24,6 +24,17 @@ val _ = Datatype`
         | Error
 `;
 
+val isArray_def = Define`
+  (isArray (Array _ : value) ⇔ T) ∧
+  (isArray _ ⇔ F)
+`;
+val _ = export_rewrites ["isArray_def"]
+
+val destInt_def = Define`
+  destInt (Int i) = i
+`;
+val _ = export_rewrites ["destInt_def"]
+
 val _ = Datatype`
   expr = MAccess maccess
        | Opn (value list -> value) (expr list)
@@ -111,9 +122,7 @@ val upd_array_def = Define`
 
 val upd_var_def = Define`
   upd_var m vnm v =
-    if vnm ∈ FDOM m ∧ v ≠ Error ∧ (∀els. m ' vnm ≠ Array els) ∧
-       (∀els. v ≠ Array els)
-    then
+    if vnm ∈ FDOM m ∧ v ≠ Error ∧ ¬isArray (m ' vnm) ∧ ¬isArray v then
       SOME (m |+ (vnm,v))
     else
       NONE
@@ -137,7 +146,12 @@ val evalexpr_def = tDefine "evalexpr" `
   (evalmaccess m (VRead nm) = lookup_v m nm) ∧
 
   (evalexpr m (MAccess ma) = evalmaccess m ma) ∧
-  (evalexpr m (Opn vf elist) = vf (MAP (evalexpr m) elist)) ∧
+  (evalexpr m (Opn vf elist) =
+     let vl = MAP (evalexpr m) elist
+     in
+       if EXISTS isArray vl then Error
+       else if EXISTS ((=) Error) vl then Error
+       else vf vl) ∧
   (evalexpr m (Value v) = v)
 ` (WF_REL_TAC `measure (λs. case s of
                                 INL (m,ma) => maccess_size ma
@@ -194,6 +208,7 @@ val dsubst_def = Define`
   (dsubst vnm value (DMA (ASub ae ie)) =
      DMA (ASub (msubst vnm value ae) (esubst vnm value ie)))
 `;
+val _ = export_rewrites ["dsubst_def"]
 
 val ap1_def = Define`ap1 f (x,y) = (f x, y)`;
 val ap2_def = Define`ap2 f (x,y) = (x, f y)`;
@@ -242,8 +257,10 @@ val eval_lvalue_def = Define`
 val upd_nested_array_def = Define`
   (upd_nested_array i [] value vlist =
      if i < LENGTH vlist then
-       case EL i vlist of
-           Array _ => NONE
+       case (EL i vlist, value) of
+           (Array _, _) => NONE
+         | (_, Array _) => NONE
+         | (_, Error) => NONE
          | _ => SOME (LUPDATE value i vlist)
      else NONE) ∧
   (upd_nested_array i (j::is) value vlist =
@@ -257,6 +274,7 @@ val upd_nested_array_def = Define`
          | _ => NONE
      else NONE)
 `;
+val _ = export_rewrites ["upd_nested_array_def"]
 
 val upd_memory_def = Define`
   (upd_memory (nm, []) value m = upd_var m nm value) ∧
@@ -268,6 +286,7 @@ val upd_memory_def = Define`
              SOME(m |+ (nm, Array newarray))
            od
         | _ => NONE)`
+val _ = export_rewrites ["upd_memory_def"]
 
 val upd_write_def = Define`
   upd_write m0 w value =
@@ -421,8 +440,7 @@ val (eval_rules, eval_ind, eval_cases) = Hol_reln`
      ∧
 
   (∀m vnm value e s.
-      evalexpr m e = value ∧
-      (∀a. value ≠ Array a)
+      evalexpr m e = value ∧ ¬isArray value
      ⇒
       eval (m, Local vnm e s) (m, ssubst vnm value s))
 `
