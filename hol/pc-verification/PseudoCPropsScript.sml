@@ -1719,20 +1719,64 @@ val evalmaccess_SOME_ma_reads = save_thm(
   Cases_on `evalexpr m e` >> fs[] >> fs[] >>
   asm_simp_tac (srw_ss() ++ intSimps.OMEGA_ss) []) |> CONJUNCT2);
 
+val valid_vallookup_APPEND = store_thm(
+  "valid_vallookup_APPEND",
+  ``∀pfx sfx v.
+      valid_vallookup v (pfx ++ sfx) ⇔
+        if valid_vallookup v pfx then sfx = []
+        else
+          lookup_indices v pfx ≠ Error ∧
+          valid_vallookup (lookup_indices v pfx) sfx``,
+  Induct >> simp[] >> Cases_on `v` >> csimp[] >>
+  simp[bool_case_eq] >> qx_gen_tac `h` >> Cases_on `h < LENGTH l` >> simp[] >>
+  Cases_on `valid_vallookup (EL h l) pfx` >> simp[]);
+
+val evalma_Array_not_valid_lookup = save_thm(
+  "evalma_Array_not_valid_lookup",
+  prove(``(∀e:expr. T) ∧
+    ∀ma mnm mis maux l.
+      evalmaccess m ma = Array l ∧ ma_reads m ma = (SOME (mnm,mis), maux) ⇒
+      mnm ∈ FDOM m ∧ ¬valid_vallookup (m ' mnm) mis ∧ isArray (m ' mnm) ∧
+      lookup_indices (m ' mnm) mis = Array l``,
+  ho_match_mp_tac expr_ind' >>
+  simp[evalexpr_def, expr_reads_def, lookup_v_def, FLOOKUP_DEF, option_case_eq] >>
+  rpt strip_tac >>
+  fs[value_case_eq, pair_case_eq, option_case_eq, bool_case_eq]
+  >- (veq >> fs[] >> veq >> fs[] >> pop_assum mp_tac >>
+      simp[valid_vallookup_APPEND])
+  >- (veq >> fs[lookup_indices_APPEND, bool_case_eq] >> veq >>
+      Q.UNDISCH_THEN `¬(&LENGTH vlist ≤ i)` mp_tac >>
+      `i = &Num i` by metis_tac[integerTheory.INT_OF_NUM] >>
+      pop_assum SUBST1_TAC >> simp[])) |> CONJUNCT2)
+
+val isArrayError_def = Define`
+  (isArrayError Error ⇔ T) ∧
+  (isArrayError (Array _) ⇔ T) ∧
+  (isArrayError _ ⇔ F)
+`;
+val _ = export_rewrites ["isArrayError_def"]
+
+val isArrayError_DISJ_EQ = store_thm(
+  "isArrayError_DISJ_EQ",
+  ``isArrayError v ⇔ v = Error ∨ isArray v``,
+  Cases_on `v` >> simp[]);
+
 val nonArray_evalexpr = store_thm(
   "nonArray_evalexpr",
-  ``(∀e m. ¬isArray (evalexpr m e) ∧ evalexpr m e ≠ Error ⇒
-           ∀lv. MEM lv (expr_reads m e) ⇒ lv ∈ valid_lvalue m) ∧
+  ``(∀e m lv. ¬isArrayError (evalexpr m e) ∧ MEM lv (expr_reads m e) ⇒
+              lv ∈ valid_lvalue m) ∧
     (∀ma m. evalmaccess m ma ≠ Error ⇒
             (∀lv. MEM lv (SND (ma_reads m ma)) ⇒ lv ∈ valid_lvalue m) ∧
             (¬isArray (evalmaccess m ma) ⇒
              ∀lv. FST (ma_reads m ma) = SOME lv ⇒ lv ∈ valid_lvalue m))``,
   ho_match_mp_tac expr_ind' >> simp[expr_reads_def, evalexpr_def] >> rpt strip_tac
-  >- (fs[MEM_FLAT, MEM_MAP, bool_case_eq, EVERY_MEM, PULL_EXISTS] >> metis_tac[])
+  >- (fs[MEM_FLAT, MEM_MAP, bool_case_eq, PULL_EXISTS, EXISTS_MEM] >>
+      full_simp_tac (srw_ss() ++ COND_elim_ss) [] >>
+      metis_tac[isArrayError_DISJ_EQ])
   >- (`∃maux. ma_reads m ma = (NONE, maux) ∨ ∃mlv. ma_reads m ma = (SOME mlv, maux)`
-        by metis_tac[pair_CASES, option_CASES] >> fs[])
+        by metis_tac[pair_CASES, option_CASES] >> fs[isArrayError_DISJ_EQ])
   >- (fs[valid_lvalue_def, lookup_v_def, FLOOKUP_DEF, option_case_eq] >> fs[] >>
-      pop_assum mp_tac >> simp[])
+      pop_assum mp_tac >> simp[] >> fs[])
   >- (Cases_on `evalmaccess m ma` >> fs[] >>
       Cases_on `evalexpr m e` >> fs[bool_case_eq] >> fs[] >>
       `∃mnm mis maux. ma_reads m ma = (SOME(mnm,mis), maux)`
@@ -1744,60 +1788,52 @@ val nonArray_evalexpr = store_thm(
       `∃mnm mis maux. ma_reads m ma = (SOME(mnm,mis), maux)`
          by (match_mp_tac evalmaccess_SOME_ma_reads >> simp[]) >>
       fs[] >> `0 ≤ i` by asm_simp_tac (srw_ss() ++ intSimps.OMEGA_ss) [] >>
-      Q.UNDISCH_THEN `¬(i < 0)` assume_tac >> fs[] ...
-      fs[])
+      Q.UNDISCH_THEN `¬(i < 0)` assume_tac >> fs[] >> veq >>
+      Q.UNDISCH_THEN `¬(&LENGTH l ≤ i)` assume_tac >> fs[] >>
+      simp[valid_lvalue_def, valid_vallookup_APPEND] >>
+      imp_res_tac evalma_Array_not_valid_lookup >> simp[] >>
+      Q.UNDISCH_THEN `¬(&LENGTH l ≤ i)` mp_tac >>
+      `i = &Num i` by metis_tac[integerTheory.INT_OF_NUM] >>
+      pop_assum SUBST1_TAC >> simp[]))
+
+val valid_lookup_incomparable = store_thm(
+  "valid_lookup_incomparable",
+  ``∀is1 is2 v.
+      valid_vallookup v is1 ∧ valid_vallookup v is2 ∧ is1 ≠ is2 ⇒
+      ¬(is1 <<= is2) ∧ ¬(is2 <<= is1)``,
+  Induct >> simp[valid_vallookup_def]
+  >- (Cases_on `v` >> simp[]) >>
+  Cases_on `v` >> simp[PULL_EXISTS] >> metis_tac[]);
+
+val valid_lvalues_incomparable = store_thm(
+  "valid_lvalues_incomparable",
+  ``∀lv1 lv2.
+      lv1 ∈ valid_lvalue m ∧ lv2 ∈ valid_lvalue m ∧ lv1 ≠ lv2 ⇒
+      lv1 ≰ lv2 ∧ lv2 ≰ lv1``,
+  simp[valid_lvalue_def, PULL_EXISTS, mav_le_def] >>
+  metis_tac[valid_lookup_incomparable]);
 
 
 val apply_action_expr_eval_commutes = store_thm(
   "apply_action_expr_eval_commutes",
   ``∀a e j m0 m.
-       readAction j m0 e ≁ₜ a ∧ apply_action a (SOME m0) = SOME m ⇒
+       readAction j m0 e ≁ₜ a ∧ apply_action a (SOME m0) = SOME m ∧
+       ¬isArrayError (evalexpr m0 e)
+     ⇒
        evalexpr m e = evalexpr m0 e ∧ readAction j m e = readAction j m0 e``,
   simp[readAction_def, touches_def, apply_action_def] >> gen_tac >>
   `a.writes = [] ∨ ∃w t. a.writes = w::t` by (Cases_on `a.writes` >> simp[]) >>
   simp[] >>
   REWRITE_TAC [DECIDE ``p \/ q <=> ~p ==> q``] >>
   simp[DISJ_IMP_THM, FORALL_AND_THM, MEM_FILTER] >>
-  pop_assum kall_tac >> map_every qx_gen_tac [`e`, `m0`, `m`] >> strip_tac
-  >- metis_tac[upd_memory_valid_lvalue] >>
-  first_x_assum (kall_tac o assert (is_forall o concl)) >> rpt (pop_assum mp_tac) >>
-  qspec_tac (`a.data (MAP (lookupRW m0) a.reads)`, `d`) >>
-  rpt strip_tac >>
-
-  map_every qspec_tac [(`a.data`, `expr`), (`a.reads`, `rds`)] >>
-  map_every qid_spec_tac [`m0`, `m`, `e`] >> ho_match_mp_tac expr_ind' >>
-  simp[evalexpr_def, expr_reads_def] >> rpt conj_tac
-  >- (simp[MEM_FLAT, MEM_MAP] >> rpt strip_tac >>
-      AP_TERM_TAC >> simp[MAP_EQ_f] >> metis_tac[])
-  >- (map_every qx_gen_tac [`anm`, `e`] >> strip_tac >>
-      map_every qx_gen_tac [`m`, `m0`, `rds`, `expr`] >>
-      rpt strip_tac >>
-      `¬MEM w (expr_reads m0 e)` by (Cases_on `evalexpr m0 e` >> fs[]) >>
-      `evalexpr m e = evalexpr m0 e ∧ expr_reads m e = expr_reads m0 e`
-        by metis_tac[] >>
-      simp[] >> Cases_on `evalexpr m0 e` >> simp[] >> fs[] >>
-      qpat_assum `updf xx yy zz = SOME mm` mp_tac >>
-      simp[updf_def] >> Cases_on `w` >> simp[]
-      >- (simp[upd_array_def] >> flookupmem_tac >> simp[] >>
-          rw[lookup_array_def] >> rw[FLOOKUP_UPDATE] >> simp[] >>
-          rw[] >> simp[EL_LUPDATE] >> fs[] >>
-          qmatch_assum_rename_tac `¬MEM (Array anm j) (expr_reads m0 e)` [] >>
-          `0 ≤ i ∧ 0 ≤ j` by ARITH_TAC >>
-          `i = &(Num i) ∧ j = &(Num j)`
-            by metis_tac[integerTheory.INT_OF_NUM] >>
-          qmatch_assum_rename_tac `¬(&LENGTH vl ≤ i)` [] >>
-          `Num j < LENGTH vl`
-              by (fs[integerTheory.INT_NOT_LE] >>
-                  metis_tac[integerTheory.INT_LT]) >>
-          metis_tac[]) >>
-      simp[upd_var_def] >> rw[] >> simp[lookup_array_def, FLOOKUP_UPDATE] >>
-      Cases_on `anm = s` >> simp[] >> flookupmem_tac >> simp[] >>
-      fs[FLOOKUP_DEF] >>
-      Cases_on `expr (MAP (lookupRW m0) rds)` >> simp[] >> fs[])
-  >- (rpt gen_tac >> simp[updf_def] >> Cases_on `w` >>
-      simp[upd_array_def, upd_var_def]
-      >- (flookupmem_tac >> simp[] >> rw[lookup_v_def] >> Cases_on `s = s'` >>
-          simp[FLOOKUP_UPDATE]) >>
-      rw[lookup_v_def] >> simp[FLOOKUP_UPDATE]))
+  pop_assum kall_tac >> map_every qx_gen_tac [`e`, `m0`, `m`] >> strip_tac >>
+  first_x_assum (kall_tac o assert (is_forall o concl)) >>
+  qabbrev_tac `d = a.data (MAP (lookupRW m0) a.reads)` >>
+  markerLib.RM_ALL_ABBREVS_TAC >>
+  match_mp_tac (aec_lemma |> CONJUNCT1) >> simp[] >>
+  qx_gen_tac `r` >> strip_tac >> `r ≠ w` by (strip_tac >> fs[]) >>
+  `w ∈ valid_lvalue m0` by metis_tac [upd_memory_valid_lvalue] >>
+  `r ∈ valid_lvalue m0` by metis_tac [nonArray_evalexpr] >>
+  metis_tac[valid_lvalues_incomparable])
 
 val _ = export_theory();
