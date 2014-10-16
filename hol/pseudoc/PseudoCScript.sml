@@ -30,6 +30,18 @@ val isArray_def = Define`
 `;
 val _ = export_rewrites ["isArray_def"]
 
+val isArrayError_def = Define`
+  (isArrayError Error ⇔ T) ∧
+  (isArrayError (Array _) ⇔ T) ∧
+  (isArrayError _ ⇔ F)
+`;
+val _ = export_rewrites ["isArrayError_def"]
+
+val isArrayError_DISJ_EQ = store_thm(
+  "isArrayError_DISJ_EQ",
+  ``isArrayError v ⇔ v = Error ∨ isArray v``,
+  Cases_on `v` >> simp[]);
+
 val destInt_def = Define`
   destInt (Int i) = i
 `;
@@ -53,7 +65,9 @@ val _ = export_rewrites ["isValue_def"]
 val _ = Datatype`domain = D expr expr`  (* lo/hi pair *)
 val _ = Datatype`dexpr = DMA maccess | DValue value`
 val destDValue_def = Define`
-  destDValue (DValue v) = v
+  destDValue (DValue (Array _)) = Error ∧
+  destDValue (DValue v) = v ∧
+  destDValue (DMA _) = Error
 `;
 val _ = export_rewrites ["destDValue_def"]
 
@@ -159,6 +173,12 @@ val evalexpr_def = tDefine "evalexpr" `
    simp[] >> Induct >> rw[definition "expr_size_def"] >>
    res_tac >> simp[])
 
+val devals_scalar_def = Define`
+  devals_scalar m (D lo hi) ⇔
+    ¬isArrayError (evalexpr m lo) ∧
+    ¬isArrayError (evalexpr m hi)
+`;
+
 (* dvalues : domain -> value list option *)
 val dvalues_def = Define`
   dvalues m (D lo hi) =
@@ -168,6 +188,14 @@ val dvalues_def = Define`
                                  (if lo ≤ hi then Num(hi - lo) else 0)))
       | _ => NONE
 `;
+
+val dvalues_SOME_devals_scalar = store_thm(
+  "dvalues_SOME_devals_scalar",
+  ``dvalues m d = SOME l ⇒ devals_scalar m d``,
+  `∃lo hi. d = D lo hi` by (Cases_on `d` >> simp[]) >>
+  simp[dvalues_def, devals_scalar_def] >>
+  Cases_on `evalexpr m lo` >> simp[] >>
+  Cases_on `evalexpr m hi` >> simp[]);
 
 (* trickiness here is that we only want to substitute scalars for variables
    in "scalar position".  I.e., if we are substituting 10 for x, we want
@@ -289,10 +317,12 @@ val upd_memory_def = Define`
 val _ = export_rewrites ["upd_memory_def"]
 
 val upd_write_def = Define`
-  upd_write m0 w value =
-    case eval_lvalue m0 w of
-        NONE => NONE
-      | SOME lvalue => upd_memory lvalue value m0
+  upd_write m0 w vf values =
+    do
+      lvalue <- eval_lvalue m0 w;
+      assert(¬EXISTS isArrayError values);
+      upd_memory lvalue (vf values) m0
+    od
 `;
 
 val (eval_rules, eval_ind, eval_cases) = Hol_reln`
@@ -337,7 +367,7 @@ val (eval_rules, eval_ind, eval_cases) = Hol_reln`
      racy with respect to data arrays. *)
   (∀rdes m0 m' vf.
       EVERY isDValue rdes ∧
-      upd_write m0 w (vf (MAP destDValue rdes)) = SOME m'
+      upd_write m0 w vf (MAP destDValue rdes) = SOME m'
      ⇒
       eval (m0, Assign w rdes vf) (m', Done))
 
@@ -345,7 +375,7 @@ val (eval_rules, eval_ind, eval_cases) = Hol_reln`
 
   (∀w rdes m0 vf.
       EVERY isDValue rdes ∧
-      upd_write m0 w (vf (MAP destDValue rdes)) = NONE
+      upd_write m0 w vf (MAP destDValue rdes) = NONE
      ⇒
       eval (m0, Assign w rdes vf) (m0, Abort))
 
