@@ -1749,18 +1749,6 @@ val evalma_Array_not_valid_lookup = save_thm(
       `i = &Num i` by metis_tac[integerTheory.INT_OF_NUM] >>
       pop_assum SUBST1_TAC >> simp[])) |> CONJUNCT2)
 
-val isArrayError_def = Define`
-  (isArrayError Error ⇔ T) ∧
-  (isArrayError (Array _) ⇔ T) ∧
-  (isArrayError _ ⇔ F)
-`;
-val _ = export_rewrites ["isArrayError_def"]
-
-val isArrayError_DISJ_EQ = store_thm(
-  "isArrayError_DISJ_EQ",
-  ``isArrayError v ⇔ v = Error ∨ isArray v``,
-  Cases_on `v` >> simp[]);
-
 val nonArray_evalexpr = store_thm(
   "nonArray_evalexpr",
   ``(∀e m lv. ¬isArrayError (evalexpr m e) ∧ MEM lv (expr_reads m e) ⇒
