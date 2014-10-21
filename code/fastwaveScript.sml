@@ -8,11 +8,18 @@ open PseudoCTheory PseudoCOpsTheory
 
 val _ = new_theory "fastwave";
 
+val _ = overload_on ("DVRead", ``λs. DMA (VRead s)``)
+val _ = overload_on ("ARead", ``λs e. MAccess (ASub (VRead s) e)``)
+val _ = overload_on ("DARead", ``λanm e. DMA (ASub (VRead anm) e)``)
+val _ = overload_on ("VRead", ``λs. MAccess (PseudoC$VRead s)``)
+val _ = overload_on ("AssignVar", ``λs. Assign (VRead s)``)
+val _ = overload_on ("LVSub", ``λnm e. ASub (VRead nm) e``)
+
 val summationLoop_def = Define`
   summationLoop =
     [
         AssignVar "sum" [] (\xs . Real 0);
-        ForLoop "k" (D (Value(Int 0)) (VRead "workPerIter") )
+        ForLoop "k" (D (Value(Int 0)) (VRead "workPerIter"))
             (AssignVar "sum" [DVRead "sum";
                               DVRead "k";
                               DARead "data_org" (ARead "row" (VRead "p"));
@@ -25,14 +32,14 @@ val orgbody_def = Define`
   orgbody = summationLoop ++
     [
         (* data_org[ row[p] ] += 1.0 + sum; *)
-        Assign ("data_org",  ARead "row" (VRead "p"))
+        Assign (LVSub "data_org"  (ARead "row" (VRead "p")))
             [ DARead "data_org" (ARead "row" (VRead "p"));
               DVRead "sum"
             ]
             (\ xs . case xs of [d;s] => (Real 1.0) + d + s);
 
         (* data_org[ col[p] ] += 1.0 + sum; *)
-        Assign ("data_org", (ARead "col" (VRead "p")))
+        Assign (LVSub "data_org" (ARead "col" (VRead "p")))
             [ DARead "data_org" (ARead "col" (VRead "p"));
               DVRead "sum"
             ]
@@ -55,25 +62,25 @@ val findWavesFast_def = Define`
             (Seq [
 
                   Assign
-                      ("lr_iter",
+                      (LVSub "lr_iter"
                        (ARead "row"
                               (Opn minusval [VRead "p"; Value(Int(1))] )))
                       [DVRead "p"]
                       (\xs . case xs of [p] => p - (Int 1) );
                   Assign
-                      ("lr_iter",
+                      (LVSub "lr_iter"
                        (ARead "col"
                               (Opn minusval [VRead "p"; Value(Int(1))] )))
                       [DVRead "p"]
                       (\xs . case xs of [p] => p - (Int 1) );
                   Assign
-                      ("lw_iter",
+                      (LVSub "lw_iter"
                        (ARead "row"
                               (Opn minusval [VRead "p"; Value(Int(1))] )))
                       [DVRead "p"]
                       (\xs . case xs of [p] => p - (Int 1) );
                   Assign
-                      ("lw_iter",
+                      (LVSub "lw_iter"
                        (ARead "col"
                               (Opn minusval [VRead "p"; Value(Int(1))] )))
                       [DVRead "p"]
@@ -85,7 +92,7 @@ val findWavesFast_def = Define`
                   IfStmt  (Opn cmpGTEval [(ARead "lw_iter" (VRead "r"));
                                 (Value(Int(0)))] )
                        (Assign
-                         ("wave",VRead "p")
+                         (LVSub "wave" (VRead "p"))
                          [DARead "wave" (VRead "p");
                           DARead "wave" (ARead "lw_iter" (VRead "r"))]
                          (\xs . case xs of [x;y] => maxval [x; y + (Int 1)])
@@ -94,7 +101,7 @@ val findWavesFast_def = Define`
                   IfStmt  (Opn cmpGTEval [(ARead "lr_iter" (VRead "r"));
                                 (Value(Int(0)))] )
                         (Assign
-                          ("wave",VRead "p")
+                          (LVSub "wave" (VRead "p"))
                           [DARead "wave" (VRead "p");
                            DARead "wave" (ARead "lr_iter" (VRead "r"))]
                           (\xs . case xs of [x;y] => maxval [x; y + (Int 1)])
@@ -103,7 +110,7 @@ val findWavesFast_def = Define`
                   IfStmt  (Opn cmpGTEval [(ARead "lw_iter" (VRead "c"));
                                 (Value(Int(0)))] )
                        (Assign
-                         ("wave",VRead "p")
+                         (LVSub "wave" (VRead "p"))
                          [DARead "wave" (VRead "p");
                           DARead "wave" (ARead "lw_iter" (VRead "c"))]
                          (\xs . case xs of [x;y] => maxval [x; y + (Int 1)])
@@ -112,7 +119,7 @@ val findWavesFast_def = Define`
                   IfStmt  (Opn cmpGTEval [(ARead "lr_iter" (VRead "d"));
                                 (Value(Int(0)))] )
                         (Assign
-                          ("wave",VRead "p")
+                          (LVSub "wave" (VRead "p"))
                           [DARead "wave" (VRead "p");
                            DARead "wave" (ARead "lr_iter" (VRead "d"))]
                           (\xs . case xs of [x;y] => maxval [x; y + (Int 1)])
@@ -128,13 +135,13 @@ val findWavesFast_def = Define`
                 (Int(0));
 
             ForLoop "p" (D (Value(Int 0)) (VRead "nnz") )
-                (Assign ("wavestart", ARead "wave" (VRead "p"))
+                (Assign (LVSub "wavestart" (ARead "wave" (VRead "p")))
                     [DARead "wavestart" (ARead "wave" (VRead "p"))]
                     (\xs . case xs of [w] => w - Int 1));
 
             ForLoop "w" (D (Value(Int 1))
                            (Opn plusval [(VRead "max_wave"); (Value(Int 1)) ]))
-                (Assign ("wavestart", VRead "w")
+                (Assign (LVSub "wavestart" (VRead "w"))
                     [DARead "wavestart" (Opn minusval [(VRead "w"); (Value(Int 1))]);
                      DARead "wavestart" (VRead "w")]
                     (\xs . case xs of [x;y] => x + y));
@@ -147,10 +154,10 @@ val findWavesFast_def = Define`
                       (\xs . case xs of [n;p] => n - p);
                     AssignVar "w" [DARead "wave" (VRead "p")]
                       (\xs . case xs of [w] => w);
-                    Assign ("wavestart",VRead "w")
+                    Assign (LVSub "wavestart" (VRead "w"))
                         [DARead "wavestart" (VRead "w")]
                         (\xs . case xs of [ws] => ws - Int 1);
-                    Assign ("wavefronts",ARead "wavestart" (VRead "w"))
+                    Assign (LVSub "wavefronts" (ARead "wavestart" (VRead "w")))
                         [DVRead "p"]
                         (\xs . case xs of [p] => p)
                 ])
