@@ -72,7 +72,7 @@ val destDValue_def = Define`
 val _ = export_rewrites ["destDValue_def"]
 
 val isDValue_def = Define`
-  isDValue (DValue _) = T ∧
+  isDValue (DValue v) = ¬isArrayError v ∧
   isDValue (DMA _) = F
 `
 val _ = export_rewrites ["isDValue_def"]
@@ -320,7 +320,6 @@ val upd_write_def = Define`
   upd_write m0 w vf values =
     do
       lvalue <- eval_lvalue m0 w;
-      assert(¬EXISTS isArrayError values);
       upd_memory lvalue (vf values) m0
     od
 `;
@@ -387,6 +386,13 @@ val (eval_rules, eval_ind, eval_cases) = Hol_reln`
             Assign w
                   (pfx ++ [DValue (evalmaccess m expr)] ++ sfx)
                   vf))
+
+     ∧
+
+  (∀pfx sfx w vf v m.
+      isArrayError v
+     ⇒
+      eval (m, Assign w (pfx ++ [DValue v] ++ sfx) vf) (m, Abort))
 
      ∧
 
