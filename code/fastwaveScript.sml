@@ -116,12 +116,12 @@ val findWavesFast_def = Define`
                          (\xs . case xs of [x;y] => maxval [x; y + (Int 1)])
                         )
                         (Seq []);
-                  IfStmt  (Opn cmpGTEval [(ARead "lr_iter" (VRead "d"));
+                  IfStmt  (Opn cmpGTEval [(ARead "lr_iter" (VRead "c"));
                                 (Value(Int(0)))] )
                         (Assign
                           (LVSub "wave" (VRead "p"))
                           [DARead "wave" (VRead "p");
-                           DARead "wave" (ARead "lr_iter" (VRead "d"))]
+                           DARead "wave" (ARead "lr_iter" (VRead "c"))]
                           (\xs . case xs of [x;y] => maxval [x; y + (Int 1)])
                         )
                         (Seq []);

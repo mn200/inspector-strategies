@@ -38,14 +38,19 @@ val evalseq_cons = prove(
   ``∀cs c. eval (m0, Seq (c::cs)) mr ⇔
            if c = Done then
              EVERY ((=) Done) cs ∧ mr = (m0,Done) ∨
-             (∃cs' m r. eval(m0,Seq cs) (m,Seq cs') ∧ r = Seq (Done::cs') ∧
-                        mr = (m,r))
+             (∃m r'. eval(m0,Seq cs) (m,r') ∧
+                     ((∃cs'. r' = Seq cs' ∧ mr = (m,Seq (Done::cs'))) ∨
+                      r' = Abort ∧ mr = (m, Abort)))
+           else if c = Abort then mr = (m0, Abort)
            else
              ∃c' m. eval (m0,c) (m,c') ∧ mr = (m,Seq(c'::cs))``,
   dsimp[newrule ``Seq(h::t)``, listTheory.APPEND_EQ_CONS] >>
   map_every qx_gen_tac [`cs`, `c`] >> reverse (Cases_on `c = Done`) >>
-  simp[newrule ``Done``] >- metis_tac[] >>
+  simp[newrule ``Done``]
+  >- (Cases_on `c = Abort` >> simp[newrule ``Abort``] >> metis_tac[]) >>
   Cases_on `mr = (m0,Done)` >> simp[] >>
+  Cases_on `∃m. mr = (m,Abort)` >> fs[]
+  >- (simp[newrule ``Seq cs``] >> metis_tac[]) >>
   simp[newrule ``Seq cs``] >> dsimp[] >> metis_tac[])
 
 val bb = prove(``(!b. b) = F``, SIMP_TAC bool_ss [FORALL_BOOL])

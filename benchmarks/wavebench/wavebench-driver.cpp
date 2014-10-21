@@ -162,17 +162,12 @@ void find_waves_fast(COO_mat *mat, int nnz, int * row, int *col,
     // Iterating over iterations and how those iterations access data
     // the read and write access relations have been hardcoded here
     // for wavebench computation.
-    // One optimization included here is a count of how many iterations
-    // are put into each wave.
-    // p=0 will always be in wave 0 and its lr_iter and lw_iter will
-    // be taken care of when p=1.
-    for (int p=1; p<nnz; p++) {
-        // last iteration read and wrote row[p-1] and col[p-1]
-        lr_iter[row[p-1]] = p-1;
-        lr_iter[col[p-1]] = p-1;
-        lw_iter[row[p-1]] = p-1;
-        lw_iter[col[p-1]] = p-1;
+    // One optimization that could be included here is a count of 
+    // how many iterations are put into each wave as they are
+    // being put in the waves.  No can't do that because iteration
+    // can be put into later waves as the reduction resolves.
 
+    for (int p=1; p<nnz; p++) {
         // reading and writing to indices r and c for iter p
         int r = row[p];
         int c = col[p];
@@ -185,8 +180,14 @@ void find_waves_fast(COO_mat *mat, int nnz, int * row, int *col,
         if (lw_iter[c]>=0) { wave[p] = MAX(wave[p],wave[lw_iter[c]]+1); }
         if (lr_iter[c]>=0) { wave[p] = MAX(wave[p],wave[lr_iter[c]]+1); }
 
-        // count up number of iterations in each wave
+        // keep track of the maximum wave value
         max_wave = MAX(max_wave,wave[p]);
+
+        // record reads and writes for this iteration
+        lr_iter[r] = p;
+        lr_iter[c] = p;
+        lw_iter[r] = p;
+        lw_iter[c] = p;
     }
     
     // collect iterations per wave in CSR-like data structure
