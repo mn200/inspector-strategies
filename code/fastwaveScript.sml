@@ -44,7 +44,7 @@ val original_def = Define`
 `;
 
 val findWavesFast_def = Define`
-  findWavesFast = 
+  findWavesFast =
     Seq [
         Malloc "lw_iter" (VRead "N") (Int (-1));
         Malloc "lr_iter" (VRead "N") (Int (-1));
@@ -54,35 +54,35 @@ val findWavesFast_def = Define`
         ForLoop "p" (D (Value(Int 1)) (VRead "nnz") )
             (Seq [
 
-                  Assign 
+                  Assign
                       ("lr_iter",
-                       (ARead "row" 
+                       (ARead "row"
                               (Opn minusval [VRead "p"; Value(Int(1))] )))
                       [DVRead "p"]
                       (\xs . case xs of [p] => p - (Int 1) );
-                  Assign 
+                  Assign
                       ("lr_iter",
-                       (ARead "col" 
+                       (ARead "col"
                               (Opn minusval [VRead "p"; Value(Int(1))] )))
                       [DVRead "p"]
                       (\xs . case xs of [p] => p - (Int 1) );
-                  Assign 
+                  Assign
                       ("lw_iter",
-                       (ARead "row" 
+                       (ARead "row"
                               (Opn minusval [VRead "p"; Value(Int(1))] )))
                       [DVRead "p"]
                       (\xs . case xs of [p] => p - (Int 1) );
-                  Assign 
+                  Assign
                       ("lw_iter",
-                       (ARead "col" 
+                       (ARead "col"
                               (Opn minusval [VRead "p"; Value(Int(1))] )))
                       [DVRead "p"]
                       (\xs . case xs of [p] => p - (Int 1) );
-                  
+
                   AssignVar "r" [DARead "row" (VRead "p")] (\xs . case xs of [r] => r);
                   AssignVar "c" [DARead "col" (VRead "p")] (\xs . case xs of [c] => c);
-    
-                  IfStmt  (Opn cmpGTEval [(ARead "lw_iter" (VRead "r")); 
+
+                  IfStmt  (Opn cmpGTEval [(ARead "lw_iter" (VRead "r"));
                                 (Value(Int(0)))] )
                        (Assign
                          ("wave",VRead "p")
@@ -91,7 +91,7 @@ val findWavesFast_def = Define`
                          (\xs . case xs of [x;y] => maxval [x; y + (Int 1)])
                         )
                         (Seq []);
-                  IfStmt  (Opn cmpGTEval [(ARead "lr_iter" (VRead "r")); 
+                  IfStmt  (Opn cmpGTEval [(ARead "lr_iter" (VRead "r"));
                                 (Value(Int(0)))] )
                         (Assign
                           ("wave",VRead "p")
@@ -100,7 +100,7 @@ val findWavesFast_def = Define`
                           (\xs . case xs of [x;y] => maxval [x; y + (Int 1)])
                         )
                         (Seq []);
-                  IfStmt  (Opn cmpGTEval [(ARead "lw_iter" (VRead "c")); 
+                  IfStmt  (Opn cmpGTEval [(ARead "lw_iter" (VRead "c"));
                                 (Value(Int(0)))] )
                        (Assign
                          ("wave",VRead "p")
@@ -109,7 +109,7 @@ val findWavesFast_def = Define`
                          (\xs . case xs of [x;y] => maxval [x; y + (Int 1)])
                         )
                         (Seq []);
-                  IfStmt  (Opn cmpGTEval [(ARead "lr_iter" (VRead "d")); 
+                  IfStmt  (Opn cmpGTEval [(ARead "lr_iter" (VRead "d"));
                                 (Value(Int(0)))] )
                         (Assign
                           ("wave",VRead "p")
@@ -118,15 +118,15 @@ val findWavesFast_def = Define`
                           (\xs . case xs of [x;y] => maxval [x; y + (Int 1)])
                         )
                         (Seq []);
-                  AssignVar "max_wave" 
+                  AssignVar "max_wave"
                     [DVRead "max_wave"; DARead "wave" (VRead "p")]
                     (\xs . case xs of [x;y] => maxval [x; y])
 
             ]);
-            
+
             Malloc "wavestart" (Opn plusval [VRead "max_wave"; Value (Int 2)] )
                 (Int(0));
-            
+
             ForLoop "p" (D (Value(Int 0)) (VRead "nnz") )
                 (Assign ("wavestart", ARead "wave" (VRead "p"))
                     [DARead "wavestart" (ARead "wave" (VRead "p"))]
@@ -138,7 +138,7 @@ val findWavesFast_def = Define`
                     [DARead "wavestart" (Opn minusval [(VRead "w"); (Value(Int 1))]);
                      DARead "wavestart" (VRead "w")]
                     (\xs . case xs of [x;y] => x + y));
-                    
+
             Malloc "wavefronts" (VRead "nnz") (Int 0);
             ForLoop "prev" (D (Value(Int 1)) (Opn plusval [(VRead "nnz");
                                                            (Value(Int 1))] ))
