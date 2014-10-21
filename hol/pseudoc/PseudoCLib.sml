@@ -60,9 +60,9 @@ fun subeval t =
               (FLOOKUP_UPDATE :: lookup_v_def :: evalexpr_def ::
                evalseq_cons :: alt_upd_var :: Cong option_CASE_Cong ::
                PULL_EXISTS :: dvalues_def :: ssubst_def :: esubst_def ::
-               dsubst_def :: listTheory.APPEND_EQ_CONS ::
+               dsubst_def :: listTheory.APPEND_EQ_CONS :: LET_THM ::
                minusval_def :: plusval_def :: cmpGTEval_def ::
-               bb :: maxval_def ::
+               bb :: maxval_def :: upd_write_def :: eval_lvalue_def ::
                lookup_array_def :: upd_array_def :: listTheory.LUPDATE_compute::
                evalths) THENC
      SIMP_CONV (srw_ss() ++ INT_REDUCE_ss)
