@@ -18,6 +18,7 @@ data Expr =
         -- operations needed for wavebench example
         | Plus Expr Expr
         | Minus Expr Expr
+        | Min Expr Expr
         | Max Expr Expr
         | Mult Expr Expr
         | Divide Expr Expr
@@ -67,6 +68,15 @@ data Stmt =
          -- Just ignore Comment for the proof
          | Comment String 
 
+         -- Same ignore; used for debug
+         | Inline String
+
+         -- Same ignore; used for debug
+         | PrintArray String Expr
+
+         -- Same ignore; used for debug
+         | PrintVar String
+           
          -- Statement sequencing
          -- Named different than Seq because somewhat different.
          -- Seq in HOL stuff is instance of body for sequential loop.
@@ -80,6 +90,7 @@ genCexpr :: Expr -> String
 genCexpr (Value vtype) = (genCvalue vtype)
 genCexpr (VRead var) = var
 genCexpr (ARead var idx) = var++"["++(genCexpr idx)++"]"
+genCexpr (Min e1 e2) = "MIN("++(genCexpr e1)++", "++(genCexpr e2)++")"
 genCexpr (Max e1 e2) = "MAX("++(genCexpr e1)++", "++(genCexpr e2)++")"
 genCexpr (Plus e1 e2) = "("++(genCexpr e1)++" + "++(genCexpr e2)++")"
 genCexpr (Minus e1 e2) = "("++(genCexpr e1)++" - "++(genCexpr e2)++")"
@@ -145,6 +156,21 @@ genCstmt s lvl =
         (Comment s) -> -- Just ignore Comment for the proof
                  "\n" ++ (indent lvl) ++ "//" ++ s ++ "\n"
                  
+        (Inline s) -> -- Just ignore for the proof
+                 (indent lvl) ++ s         
+
+        (PrintArray var sz) -> -- Just ignore for the proof
+                    (indent lvl) ++ "if(debug){\n" ++
+                    (genCstmt (ForLoop "i" (D1D (Value (IntVal 0)) sz)
+                          (Inline ("printf(\"" ++ var++ "[%d]=%d\\n\","
+                                  ++ "i"  ++ ","++ (genCexpr (ARead var (VRead "i")))
+                                          ++ ");\n")))
+                      (lvl+1))
+                    ++ (indent lvl) ++ "}\n" 
+        (PrintVar var) -> -- Just ignore for the proof
+                          (indent lvl) ++ "if(debug){\n" ++
+                          (indent (lvl+1)) ++ "printf(\"" ++ var ++ "=%d\\n\"," ++ var ++ ");\n"
+                          ++ (indent lvl) ++ "}\n" 
         (SeqStmt ([]))-> ""
         (SeqStmt (x:xs)) -> (genCstmt x lvl)++(genCstmt (SeqStmt xs) lvl)
 

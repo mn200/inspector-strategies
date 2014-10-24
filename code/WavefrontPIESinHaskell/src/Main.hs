@@ -185,20 +185,25 @@ findWavesFast = SeqStmt [
 zhuang09 :: PseudoC.Stmt
 zhuang09 = SeqStmt [
   Comment "lr/w_iter are private, DDA;wave;wavestart;wavefronts are shared",
-  InitVar "nb_threads" (IntVal 8),
+  InitVar "nb_threads" (IntVal 1),
   Malloc "DDA" (VRead "nnz") (IntVal(-1)),
+  InitVar "max_wave" (IntVal 0),
+
+  PrintVar "nb_threads",
   Comment "Should be parallelized with more argument",
-  ParForLoop "t" (D1D (Value(IntVal 1)) (VRead "nb_threads"))
+  ParForLoop "t" (D1D (Value(IntVal 1)) (Plus (VRead "nb_threads") (Value (IntVal 1))))
     (SeqStmt [
         Comment "nnz is divided by nb_threads",
         InitVar "lbi" (IntVal (0)),
-        AssignVar "lbi" (Mult (Divide (VRead "nnz") (VRead "nb_threads")) (VRead "t")),
+        AssignVar "lbi" (Mult (Divide (VRead "nnz") (VRead "nb_threads")) (Minus (VRead "t") (Value (IntVal 1)))),
         InitVar "ubi" (IntVal (0)),
-        AssignVar "ubi" (Minus (Mult (Divide (VRead "nnz") (VRead "nb_threads")) (Plus (VRead "t") (Value(IntVal(1))))) (Value (IntVal 1))),
+        AssignVar "ubi" (Minus (Mult (Divide (VRead "nnz") (VRead "nb_threads")) (VRead "t")) (Value (IntVal 1))),
         
         Malloc "lw_iter" (Plus (Minus (VRead "ubi") (VRead "lbi")) (Value(IntVal(1))))  (IntVal(-1)),
 
         Malloc "lr_iter" (Plus (Minus (VRead "ubi") (VRead "lbi")) (Value(IntVal(1))))  (IntVal (-1)), -- Malloc need a value type
+
+        PrintArray "lr_iter" (VRead "nnz"),
         Comment "The reason for two loops to have a initialization is that Malloc only takes Valtype (in Haskell)",
         ForLoop "i" (D1D (Value(IntVal 0)) (Plus (Minus (VRead "ubi") (VRead "lbi")) (Value(IntVal(1)))))
             (SeqStmt [
@@ -222,7 +227,6 @@ zhuang09 = SeqStmt [
             )
         ,       
         Malloc "wave"    (VRead "nnz")       (IntVal 0),
-        InitVar "max_wave" (IntVal 0),
         InitVar "r" (IntVal(0)),
         InitVar "c" (IntVal(0)),
         Comment "Will be sequential. But there is several threads that are computing the dep.",
@@ -242,11 +246,17 @@ zhuang09 = SeqStmt [
                     (Minus (VRead "p") (Value(IntVal 1))),
                 AssignVar "r" (ARead "row" (VRead "p")),
                 AssignVar "c" (ARead "col" (VRead "p")),
+                PrintVar "c",
+                PrintVar "r",        
+                PrintArray "lr_iter" (VRead "nnz"),
+                PrintArray "lw_iter" (VRead "nnz"),
                  Assign "DDA"
                             (VRead "p")
-                            (Max (ARead "DDA" (VRead "p")) (Minus (VRead "p") (Max (Max (ARead "lr_iter" (VRead "c")) (ARead "lw_iter" (VRead "c"))) (Max (ARead "lr_iter" (VRead "r")) (ARead "lw_iter" (VRead "r")))))),
+                            (Min (ARead "DDA" (VRead "p")) (Minus (VRead "p") (Plus (Value (IntVal 1)) (Max (Max (ARead "lr_iter" (VRead "c")) (ARead "lw_iter" (VRead "c"))) (Max (ARead "lr_iter" (VRead "r")) (ARead "lw_iter" (VRead "r"))))))),
 
+                 PrintArray "DDA" (VRead "nnz"),
                  Assign "wave" (VRead "p") (Minus (VRead "p") (ARead "DDA" (VRead "p"))),
+                 PrintArray "wave" (VRead "nnz"),
                  {-,
                 IfStmt  (CmpGTE (ARead "lw_iter" (VRead "r")) 
                                 (Value(IntVal(0))))
@@ -292,7 +302,7 @@ zhuang09 = SeqStmt [
                     (Plus (ARead "wavestart" (ARead "wave" (VRead "p")))
                           (Value(IntVal 1)))),
             ForLoop "w" (D1D (Value(IntVal 1)) (Plus (VRead "max_wave")
-                                                     (Value(IntVal 1))))
+                                                     (Value(IntVal 2))))
                 (Assign "wavestart" (VRead "w")
                     (Plus (ARead "wavestart" 
                               (Minus (VRead "w") (Value(IntVal 1))))
@@ -321,7 +331,9 @@ zhuang09 = SeqStmt [
                                            (SeqStmt []))
                         (SeqStmt [])
      
-    ])
+    ]),
+    PrintArray "DDA" (VRead "nnz"),
+    PrintVar "max_wave"
   ]
 
 -- Given the inspector function name and AST generate the C inspector function.
@@ -353,7 +365,7 @@ genWaveZhuang09Inspector inspecName inspecAST =
         ++ (genCstmt inspecAST 1)
         ++ tab ++ "\n"
         ++ tab ++ "// epilogue to capture outputs\n"
-        -- ++ tab ++ "(*max_wave_ptr) = max_wave;\n"
+        ++ tab ++ "(*max_wave_ptr) = max_wave;\n"
         -- ++ tab ++ "(*wavestart_ptr) = wavestart;\n"
         -- ++ tab ++ "(*wavefronts_ptr) = wavefronts;\n"
         ++ "}\n"
