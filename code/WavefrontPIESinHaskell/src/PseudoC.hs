@@ -162,14 +162,14 @@ genCstmt s lvl =
         (PrintArray var sz) -> -- Just ignore for the proof
                     (indent lvl) ++ "if(debug){\n" ++
                     (genCstmt (ForLoop "i" (D1D (Value (IntVal 0)) sz)
-                          (Inline ("printf(\"" ++ var++ "[%d]=%d\\n\","
+                          (Inline ("printf(\"tid=%d: " ++ var++ "[%d]=%d\\n\",tid,"
                                   ++ "i"  ++ ","++ (genCexpr (ARead var (VRead "i")))
                                           ++ ");\n")))
                       (lvl+1))
                     ++ (indent lvl) ++ "}\n" 
         (PrintVar var) -> -- Just ignore for the proof
                           (indent lvl) ++ "if(debug){\n" ++
-                          (indent (lvl+1)) ++ "printf(\"" ++ var ++ "=%d\\n\"," ++ var ++ ");\n"
+                          (indent (lvl+1)) ++ "printf(\"tid=%d: " ++ var ++ "=%d\\n\",tid," ++ var ++ ");\n"
                           ++ (indent lvl) ++ "}\n" 
         (SeqStmt ([]))-> ""
         (SeqStmt (x:xs)) -> (genCstmt x lvl)++(genCstmt (SeqStmt xs) lvl)
