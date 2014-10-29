@@ -1,0 +1,17 @@
+name:           CtoPseudoCLanguageC
+version:        0.1
+cabal-version:  >=1.2
+build-type:     Simple
+author:         lrabiet
+
+library
+  hs-source-dirs:  src
+  build-depends:   language-c, base, groom, PseudoCDefinition
+  ghc-options:     -Wall
+
+executable CtoPseudoCLanguageC
+  hs-source-dirs:  src
+  main-is:         Parser.hs
+  build-depends:   language-c, base, groom, PseudoCDefinition
+  ghc-options:     -Wall
+

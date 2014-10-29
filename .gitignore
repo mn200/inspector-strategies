@@ -7,3 +7,11 @@
 code/*Customize Group: Indent*
 code/.#*Customize Group: Indent*
 code/#*Customize Group: Indent*#
+
+# HASKELL
+*.hi
+*.o
+dist/
+
+# LOG
+*.out
