@@ -6,12 +6,12 @@ author:         mstrout
 
 library
   hs-source-dirs:  src
-  build-depends:   base >= 4
+  build-depends:   base >= 4, PseudoCDefinition
   ghc-options:     -Wall
 
 executable WavefrontPIESinHaskell
   hs-source-dirs:  src
   main-is:         Main.hs
-  build-depends:   base >= 4
+  build-depends:   base >= 4, PseudoCDefinition
   ghc-options:     -Wall
 
