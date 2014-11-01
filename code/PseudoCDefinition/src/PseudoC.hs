@@ -35,8 +35,10 @@ data Domain =
 
 
 data Stmt =
+         -- Nop
+           Empty
          -- Array element definition (array name, index exp, and rhs)
-           Assign String Expr Expr
+         |  Assign String Expr Expr
 
          -- InitVar (declaration plus initialization) to scalar (* var initval *)
          -- initval is not an expression so can easily get type info
@@ -70,6 +72,59 @@ data Stmt =
          | SeqStmt [Stmt]
          
          deriving (Show)
+                  
+-- Print Pseudo Code
+pseudoC2String :: Stmt -> String
+pseudoC2String pseudoc =
+               pseudoC2Stringstmt pseudoc 0
+               
+pseudoC2Stringexpr :: Expr -> String
+pseudoC2Stringexpr (Value vtype) = "(Value " ++ (pseudoC2Stringvalue vtype) ++ ")"
+pseudoC2Stringexpr (VRead var) = "(VRead "++ var ++ ")"
+pseudoC2Stringexpr (ARead var idx) = "(ARead " ++var++ " " ++ (pseudoC2Stringexpr idx)++")"
+pseudoC2Stringexpr (Max e1 e2) = "(Max "++(pseudoC2Stringexpr e1)++(pseudoC2Stringexpr e2)++")"
+pseudoC2Stringexpr (Plus e1 e2) = "(Plus "++(pseudoC2Stringexpr e1)++(pseudoC2Stringexpr e2)++")"
+pseudoC2Stringexpr (Minus e1 e2) = "(Minus "++(pseudoC2Stringexpr e1)++(pseudoC2Stringexpr e2)++")"
+pseudoC2Stringexpr (Mult e1 e2) = "(Mult "++(pseudoC2Stringexpr e1)++(pseudoC2Stringexpr e2)++")"
+pseudoC2Stringexpr (Divide e1 e2) = "(Divide "++(pseudoC2Stringexpr e1)++(pseudoC2Stringexpr e2)++")"
+pseudoC2Stringexpr (CmpGTE e1 e2) = "(CmpGTE "++(pseudoC2Stringexpr e1)++(pseudoC2Stringexpr e2)++")"
+pseudoC2Stringexpr (CmpLT e1 e2) = "(CmpLT "++(pseudoC2Stringexpr e1)++(pseudoC2Stringexpr e2)++")"
+
+
+pseudoC2Stringstmt :: Stmt -> Int -> String
+pseudoC2Stringstmt s lvl =
+  let indent lvl | lvl>0 = "    "++(indent (lvl-1)) | otherwise = ""
+    in case s of
+        (Empty) -> ""
+        (Assign var idx rhs) -> "(Assign " ++ var ++
+                                " " ++ (pseudoC2Stringexpr idx) ++ " " 
+                                ++ (pseudoC2Stringexpr rhs) ++")"
+
+        (InitVar var initvtype) -> "(InitVar "++ var ++ " " 
+                                ++ (pseudoC2Stringvalue initvtype) ++ ")"
+
+        (AssignVar var rhs) -> "(AssignVar "++var++" "++ (pseudoC2Stringexpr rhs)++")"
+
+        (IfStmt e thenbody elsebody) -> "(IfStmt "++(pseudoC2Stringexpr e)++ " "++(pseudoC2Stringstmt thenbody (lvl+1))++ " "++ (pseudoC2Stringstmt  elsebody (lvl+1))++")"
+
+        (Malloc var sz initvtype) -> "(Malloc "++ var++ " "++ (pseudoC2Stringexpr sz) ++ " " ++(pseudoC2Stringvalue initvtype)++")"
+                        
+        (ForLoop iter (D1D lb ub) body) -> "(ForLoop "++iter++" (D1D "++(pseudoC2Stringexpr lb)++(pseudoC2Stringexpr ub)++") "++(pseudoC2Stringstmt body (lvl+1))++")"
+
+        (WhileLoop e body) -> "(WhileLoop "++(pseudoC2Stringexpr e)++" "++(pseudoC2Stringstmt body (lvl+1))++")"
+
+        (SeqStmt ([]))-> "(SeqStmt ([]))"
+        (SeqStmt (x:xs)) -> "(SeqStmt ("++(pseudoC2Stringstmt x (lvl+1)) ++ ":" ++ (pseudoC2Stringstmt (SeqStmt xs) (lvl+1))++"))"
+
+pseudoC2Stringvalue :: ValType -> String
+pseudoC2Stringvalue (IntVal (n)) = "(IntVal("++show n++"))"
+pseudoC2Stringvalue (DoubleVal (d)) = "(DoubleVal ("++show d++"))"
+pseudoC2Stringvalue (BoolVal (b)) = "(BoolVal (" ++show b++ "))"
+
+-- Generate PseudoC from String
+string2PseudoC :: String -> Stmt
+string2PseudoC str =
+               Empty
 
 -- C code generation functions.
 
@@ -85,6 +140,16 @@ genCexpr (Divide e1 e2) = "("++(genCexpr e1)++" / "++(genCexpr e2)++")"
 genCexpr (CmpGTE e1 e2) = "("++(genCexpr e1)++")>=("++(genCexpr e2)++")"
 genCexpr (CmpLT e1 e2) = "("++(genCexpr e1)++")<("++(genCexpr e2)++")"
 
+genC :: Stmt -> String
+genC s =
+     genCstmt s 0
+genCSig :: String -> Stmt  -> String 
+genCSig sig pseudoc =
+          sig ++ "{\n" ++ (genCstmt pseudoc 1) ++ "}\n" 
+          
+genCstmtInv lvl s =
+     genCstmt s lvl
+
 -- Given a PseudoC AST, a list of scalar vars that have already
 -- declared in the generated C code, and the current tab level
 -- generate a string of C code.
@@ -92,6 +157,7 @@ genCstmt :: Stmt -> Int -> String
 genCstmt s lvl =
     let indent lvl | lvl>0 = "    "++(indent (lvl-1)) | otherwise = ""
     in case s of
+        (Empty) -> ""
         (Assign var idx rhs) -> (indent lvl) ++ var 
                                 ++ "[" ++ (genCexpr idx) ++ "] = "
                                 ++ (genCexpr rhs) ++ ";\n"
@@ -105,7 +171,8 @@ genCstmt s lvl =
                                  
         (IfStmt e thenbody elsebody) -> (indent lvl)++"if ("
             ++(genCexpr e)++") {\n"
-            ++(genCstmt thenbody (lvl+1))
+            ++(genCstmt thenbody (lvl+1)) 
+            ++(indent lvl)++"}else {\n"
             ++(genCstmt elsebody (lvl+1))
             ++(indent lvl)++"}\n"
 

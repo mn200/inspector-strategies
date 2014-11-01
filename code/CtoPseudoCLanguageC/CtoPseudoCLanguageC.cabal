@@ -4,14 +4,16 @@ cabal-version:  >=1.2
 build-type:     Simple
 author:         lrabiet
 
+
+-- PseudoCDefinition is found in public/code
 library
   hs-source-dirs:  src
-  build-depends:   language-c, base, groom, PseudoCDefinition
+  build-depends:   language-c, base, groom, PseudoCDefinition, pretty
   ghc-options:     -Wall
 
 executable CtoPseudoCLanguageC
   hs-source-dirs:  src
   main-is:         Parser.hs
-  build-depends:   language-c, base, groom, PseudoCDefinition
-  ghc-options:     -Wall
+  build-depends:   language-c, base, groom, PseudoCDefinition, pretty
+  ghc-options:     
 
