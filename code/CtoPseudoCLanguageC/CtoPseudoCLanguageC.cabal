@@ -9,11 +9,12 @@ author:         lrabiet
 library
   hs-source-dirs:  src
   build-depends:   language-c, base, groom, PseudoCDefinition, pretty
+  Exposed-modules: CtoPseudoCParser
   ghc-options:     -Wall
 
 executable CtoPseudoCLanguageC
   hs-source-dirs:  src
-  main-is:         Parser.hs
+  main-is:         Main.hs
   build-depends:   language-c, base, groom, PseudoCDefinition, pretty
   ghc-options:     
 

@@ -1,4 +1,5 @@
-module Main (main) where
+--module Main (main) where
+module CtoPseudoCParser where
 import PseudoC
 import Language.C
 import Language.C.System.GCC   -- preprocessor used
@@ -11,138 +12,6 @@ import System.IO
 import Control.Monad
 import Text.PrettyPrint.HughesPJ
 
---import IO
---import List
---import Char
-
-data Options = Options  { optVerbose    :: Bool
-                        , optInput      :: FilePath --IO String
-                        , optSign :: String
-                        , optPretty :: CTranslUnit -> IO ()
-                        , optPseudoC :: String -> IO ()
-                        , optOutput     :: String -> IO () -- CTranslUnit -> IO () --String -> IO ()
-                        }
-emptyFun f =
-      putStrLn "Program Done"
-
-noPseudoC f =
-          putStrLn "No Pseudo File to generate"
-
-startOptions :: Options
-startOptions = Options  { optVerbose    = False
-                        , optInput      = "test.c" --getContents
-                        , optSign = "int main()"
-                        , optPretty = emptyFun
-                        , optPseudoC = noPseudoC           
-                        , optOutput     = (putStrLn )
-                        }
-
-                
-options :: [ OptDescr (Options -> IO Options) ]
-options =
-    [ Option "i" ["input"]
-        (ReqArg
-            (\arg opt -> return opt { optInput = arg })
-            "FILE")
-        "Input file"
- 
-    , Option "o" ["output"]
-        (ReqArg
-            (\arg opt -> return opt { optOutput = ((writeFile arg)) })
-            "FILE")
-        "Output for the C code generated from the PseudoC created from the original C code"
-      
-    , Option "m" ["signature"]
-        (ReqArg
-            (\arg opt -> return opt { optSign = arg }) --optOutput = ((writeFile "generated-code-with-sig.c") . (concatSignature arg) . (genCstmtInv 1) . genPseudoC)})
-            "SIGNATURE")
-        "signature for the generated C code (Ex: int main() )"
-
-    , Option "p" ["prettyPrinting"]
-        (NoArg
-            (\opt -> return opt { optPretty = printMyAST})) --printMyAST . genC . genPseudoC})) --(writeFile arg) . (render . pretty) })
-        "Pretty print the original C code"
-      
-    , Option "c" ["PseudoCoutput"]
-        (ReqArg
-            (\arg opt -> return opt { optPseudoC = (writeFile arg) })
-            "FILE")
-        "Output for the PseudoC created from the original C code"
-      
-    {-, Option "s" ["string"]
-        (ReqArg
-            (\arg opt -> return opt { optInput = arg })
-            "FILE")
-        "Input string"-}
-    , Option "v" ["verbose"]
-        (NoArg
-            (\opt -> return opt { optVerbose = True }))
-        "Enable verbose messages"
- 
-    , Option "V" ["version"]
-        (NoArg
-            (\_ -> do
-                hPutStrLn stderr "Version 0.01"
-                exitWith ExitSuccess))
-        "Print version"
- 
-    , Option "h" ["help"]
-        (NoArg
-            (\_ -> do
-    	        prg <- getProgName
-                hPutStrLn stderr (usageInfo prg options)
-                exitWith ExitSuccess))
-        "Show help"
-    ]
-
---main :: IO ()
-main = do
-    args <- getArgs
- 
-    -- Parse options, getting a list of option actions
-    let (actions, nonOptions, errors) = getOpt RequireOrder options args
- 
-    -- Here we thread startOptions through all supplied option actions
-    opts <- foldl (>>=) (return startOptions) actions
- 
-    let Options { optVerbose = verbose
-                , optInput = input
-                , optSign = sign
-                , optPretty = pretty
-                , optPseudoC = pseudoc
-                , optOutput = output   } = opts
- 
-    when verbose (hPutStrLn stderr "Hello!")
-    (parseMyFile input) >>= (output . (genCSig sign) . genPseudoC)
-    (parseMyFile input) >>= pretty
-    (parseMyFile input) >>= (pseudoc  . pseudoC2String . genPseudoC)
-    --(parseMyFile input) >>= (pseudoc. (genCSig sign) . (string2PseudoC)  . pseudoC2String . genPseudoC)
-    -- Missing string2PseudoC for bootstrapping
-    
-
-{-
-parseArgs :: [[Char]] -> IO ()
-parseArgs ["-h"] = usage   >> exit
-parseArgs ["-v"] = version >> exit
-parseArgs [] = usage   >> exit
-parseArgs ["-p"]= ((parseMyFile "test-noHeader.c") >>= printMyAST)
-parseArgs fs     = --(parseMyFile (head fs) >>= printMyAST) 
-                   construct fs-}
-                 
-
-
-construct ::[FilePath] -> IO ()
-construct fs =
-    ((parseMyFile (head fs)) >>= (printPseudoC . genPseudoC))
-
-usage :: IO ()
-usage   = putStrLn "Usage: CPseudoCLanguageC [-vhp] [C file]"
-version :: IO ()
-version = putStrLn "C to PseudoC 0.1"
-exit :: IO a
-exit    = exitWith ExitSuccess
-die :: IO a
-die     = exitWith (ExitFailure 1)
 
 parseMyFile :: FilePath ->  IO CTranslUnit
 parseMyFile input_file =
@@ -187,15 +56,15 @@ genCDeclarationMaybeElmt a =
              (Just cDeclarator, Nothing, Nothing)-> (genVarOrArrayA (genCDeclarator cDeclarator) (IntVal 0))
              (Just cDeclarator, Just cInitializer, Nothing)->  (genVarOrArray (genCDeclarator cDeclarator) (cInitializer))
              (Just cDeclarator, Just cInitializer, Nothing)->  (genVarOrArray (genCDeclarator cDeclarator) (cInitializer))
-             (Just cDeclarator, Just cInitializer, Just cExpression) -> (InitVar "v" (IntVal 1))
-             (Nothing, Nothing, Just cExpression) -> (InitVar "v" (IntVal 1))
-             (Nothing, Just cInitializer , Just cExpression) -> (InitVar "v" (IntVal 1))
-             (Nothing, Just cInitializer , Nothing) -> (InitVar "v" (IntVal 1))
+             --(Just cDeclarator, Just cInitializer, Just cExpression) -> (InitVar "v" (IntVal 1))
+             --(Nothing, Nothing, Just cExpression) -> (InitVar "v" (IntVal 1))
+             --(Nothing, Just cInitializer , Just cExpression) -> (InitVar "v" (IntVal 1))
+             --(Nothing, Just cInitializer , Nothing) -> (InitVar "v" (IntVal 1))
 
 genVarOrArrayA a b =
   case a of
        Left a -> InitVar a  b
-       Right a -> Malloc a (Value (IntVal (5))) (IntVal (-1))
+       --Right a -> Malloc a (Value (IntVal (5))) (IntVal (-1))
    
 genVarOrArray a b =
   case a of
@@ -229,7 +98,7 @@ genValType a =
 genStmt a =
   case a of
        Left a -> a
-       Right b -> InitVar "v" (IntVal 0)
+       --Right b -> InitVar "v" (IntVal 0)
 
 genCExpressionStmt :: CExpression a -> Stmt
 genCExpressionStmt a =
@@ -239,8 +108,12 @@ genCExpressionStmt a =
         CAssign cAssignOp cExpression1 cExpression2 a -> AssignVar  (genCExpressionString cExpression1) (genCExpressionExpr cExpression2) -- Variable
         --CCond cExpression1 maybeCExpression cExpression2 a ->	Right(IntVal 222)
         CBinary cBinaryOp cExpression1 cExpression2 a	->  InitVar "v" (IntVal 2)	  --Left(SeqStmt[((genCBinaryOp cBinaryOp) (genStmt (genCExpression cExpression1)) (genStmt (genCExpression cExpression2)))])
-        --CCast cDeclaration cExpression a->	Right(IntVal 222)	 
-        --CUnary cUnaryOp cExpression a	 ->	Right(IntVal 222)
+        --CCast cDeclaration cExpression a->	Right(IntVal 222)
+        CUnary CPostIncOp cExpression a	 ->	(AssignVar (genCExpressionString cExpression) (Plus (genCExpressionExpr cExpression) (Value (IntVal 1))))
+        -- As you can guess i++ is not possible easily in peusdoC (since we are mixing expr and stmt, and side effect in c)
+        -- And I cannot access easily the type of the variable (without keeping a full list of initialzed variable but Intval is going to work for float and int.
+
+        --CUnary cUnaryOp cExpression a	 ->	
         --CSizeofExpr cExpression a	 ->	Right(IntVal 222)
         --CSizeofType cDeclaration a	 ->	Right(IntVal 222)
         --CAlignofExpr cExpression a	 ->	Right(IntVal 222)
@@ -287,22 +160,22 @@ genCExpressionString a =
 genCExpressionValType :: CExpression a -> ValType
 genCExpressionValType a =
    case a of
-        CComma cExpression a -> 	 IntVal 1
-        CAssign cAssignOp cExpression1 cExpression2 a -> IntVal 2	 
-        CCond cExpression1 maybeCExpression cExpression2 a ->	IntVal 3
+        --CComma cExpression a -> 	 IntVal 1
+        --CAssign cAssignOp cExpression1 cExpression2 a -> IntVal 2	 
+        --CCond cExpression1 maybeCExpression cExpression2 a ->	IntVal 3
         CBinary cBinaryOp cExpression1 cExpression2 a	-> genCExpressionValType cExpression2	  --Left(SeqStmt[((genCBinaryOp cBinaryOp) (genStmt (genCExpression cExpression1)) (genStmt (genCExpression cExpression2)))])
-        CCast cDeclaration cExpression a->	IntVal 4
+        --CCast cDeclaration cExpression a->	IntVal 4
         CUnary cUnaryOp cExpression a	 ->	genCExpressionValType cExpression 
-        CSizeofExpr cExpression a	 ->	IntVal 5
-        CSizeofType cDeclaration a	 ->	IntVal 6
-        CAlignofExpr cExpression a	 ->	IntVal 7
-        CAlignofType cDeclaration a	 ->	IntVal 8
-        CComplexReal cExpression a	 ->	IntVal 9
-        CComplexImag cExpression a	 ->	IntVal 10
-        CIndex cExpression1 cExpression2 a->	IntVal 11 
-        CCall cExpression cExpressionList a	 ->	IntVal 12
-        CMember cExpression ident bool a	 ->	IntVal 13
-        CVar ident a	 ->	IntVal 14 -- for i = 0; i<'N' 
+        --CSizeofExpr cExpression a	 ->	IntVal 5
+        --CSizeofType cDeclaration a	 ->	IntVal 6
+        --CAlignofExpr cExpression a	 ->	IntVal 7
+        --CAlignofType cDeclaration a	 ->	IntVal 8
+        --CComplexReal cExpression a	 ->	IntVal 9
+        --CComplexImag cExpression a	 ->	IntVal 10
+        --CIndex cExpression1 cExpression2 a->	IntVal 11 
+        --CCall cExpression cExpressionList a	 ->	IntVal 12
+        --CMember cExpression ident bool a	 ->	IntVal 13
+        --CVar ident a	 ->	IntVal 14 -- for i = 0; i<'N' 
         CConst cConstant	-> genCConstant cConstant True
         --CCompoundLit cDeclaration cInitializerList a->	Right(IntVal 222)	
         --CStatExpr cStatement a	->	Right(IntVal 222)
@@ -352,7 +225,7 @@ fmin  l =
        a:[]-> a
        a:q -> Min a (fmin q)
        
-
+-- |The 'square' function squares an integer.
 genCExpressionExprLeft :: CExpression a -> Expr
 genCExpressionExprLeft a =
    case a of
@@ -446,15 +319,15 @@ genCFunctionDef a =
 genCStatement a =
   case a of
    --CLabel v stmt attr a	-> (InitVar "v" (IntVal 7))
-   --CCase expr stmt a -> (InitVar "v" (IntVal 8))	
-   --CCases expra exprb stmt a ->(InitVar "v" (IntVal 9))	
-   --CDefault stmt a ->(InitVar "v" (IntVal 10))
+   CCase expr stmt a -> IfStmt (genCExpressionExpr expr) (genCStatement stmt) (Empty)
+   --CCases expr1 expr2 stmt a -> IfStmt (genCExpressionExpr expr1) (genCStatement stmt) (Empty)		
+   CDefault stmt a -> (genCStatement stmt)
    --CExpr (Nothing) a	-> (InitVar "v" (IntVal 10))
    CExpr (Just cExpression) a	->  (genCExpressionStmt cExpression)
    CCompound varlist cCompoundBlockItemlist a-> SeqStmt (map (mapfunc genCCompound) cCompoundBlockItemlist)
    CIf expr stmt Nothing a	-> IfStmt (genCExpressionExpr expr) (genCStatement stmt) (Empty)
    CIf expr stmt (Just stmt2) a	-> IfStmt (genCExpressionExpr expr) (genCStatement stmt) (genCStatement stmt2) 
-   CSwitch expr stmt a-> (InitVar "v" (IntVal 14))	
+   CSwitch expr stmt a-> (genCStatementInCase expr stmt)
    CWhile expr stmt bool a	-> WhileLoop (genCExpressionExpr expr) (genCStatement stmt)
    --CFor eitherMaybeCExpressionCDeclaration maybeCExpression1 Nothing cStatement a	-> ForLoop "A" (D1D (Value(IntVal 0)) (Value (IntVal 5))) (genCStatement cStatement)
    --CFor eitherMaybeCExpressionCDeclaration maybeCExpression1 Nothing cStatement a	-> ForLoop "B" (D1D (Value(IntVal 0)) (Value (IntVal 5))) (genCStatement cStatement)
@@ -462,15 +335,26 @@ genCStatement a =
    --CFor (Left (Just cExpression)) maybeCExpression1 (Just cExpression2) cStatement a	-> ForLoop (genCExpressionString cExpression) (D1D (Value(IntVal 0)) (Value (IntVal 5))) (genCStatement cStatement)
    CFor (Right cDeclaration) (Just cExpression1) (Just cExpression2) cStatement a	-> (SeqStmt (Empty:((ForLoop (getIdCDeclaration cDeclaration)   (D1D (getValueCDeclaration cDeclaration) (genCExpressionExprLeft cExpression1)) (genCStatement cStatement))):[])) --(Value (genCExpressionValType cExpression1))) (genCStatement cStatement))):[]))
    --CFor (Right cDeclaration) Nothing (Just cExpression2) cStatement a	-> (SeqStmt (Empty:((ForLoop (getIdCDeclaration cDeclaration)   (D1D (getValueCDeclaration cDeclaration) (Value (IntVal(0)))) (genCStatement cStatement))):[])) 
-
      {-CGoto Ident a	->(InitVar "v" (IntVal 3))
   CGotoPtr (CExpression a) a	->(InitVar "v" (IntVal 3))
-  CCont a	->(InitVar "v" (IntVal 3))
-  CBreak a->(InitVar "v" (IntVal 3))	
-  CReturn (Maybe (CExpression a)) a->(InitVar "v" (IntVal 3))	
+  CCont a	->(InitVar "v" (IntVal 3))-}
+   CBreak a-> Empty
+{-  CReturn (Maybe (CExpression a)) a->(InitVar "v" (IntVal 3))	
   CAsm (CAssemblyStatement a) a	->(InitVar "v" (IntVal 3))
 -}
 
+genCStatementInCase exprE stmt =
+  case stmt of
+       CCase expr stmt a -> IfStmt (CmpLT (genCExpressionExpr exprE) (genCExpressionExpr expr)) (genCStatement stmt) (Empty)
+       CDefault stmt a -> (genCStatement stmt)
+       CCompound varlist cCompoundBlockItemlist a-> SeqStmt (map (mapfunc (genCCompoundInCase exprE)) cCompoundBlockItemlist)
+       CBreak a-> Empty
+
+genCCompoundInCase exprE stmt =
+  case stmt of
+       CBlockDecl b -> genCDeclaration b
+       CBlockStmt cStatement ->  genCStatementInCase exprE cStatement
+       --_ -> (InitVar "v" (IntVal 6))
 
 -- Used for FORLOOP
 getIdCDeclaration a =
