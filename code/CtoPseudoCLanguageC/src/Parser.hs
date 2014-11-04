@@ -312,27 +312,28 @@ genCExpressionValType a =
 genCExpressionExpr :: CExpression a -> Expr
 genCExpressionExpr a =
    case a of
-        CComma cExpression a -> 	Value(IntVal 1) 
-        CAssign cAssignOp cExpression1 cExpression2 a -> Value(IntVal 2)
-        CCond cExpression1 maybeCExpression cExpression2 a ->	Value(IntVal 3)
+        --CComma cExpression a -> 	Value(IntVal 1) 
+        --CAssign cAssignOp cExpression1 cExpression2 a -> Value(IntVal 2)
+        --CCond cExpression1 maybeCExpression cExpression2 a ->	Value(IntVal 3)
         CBinary cBinaryOp cExpression1 (CSizeofType cExpression2 info) a	->  (genCExpressionExpr cExpression1)
         CBinary cBinaryOp (CSizeofType cExpression1 info) cExpression2 a	->  (genCExpressionExpr cExpression2)
         CBinary cBinaryOp cExpression1 cExpression2 a	->  (genCBinaryOp cBinaryOp) (genCExpressionExpr cExpression1) (genCExpressionExpr cExpression2)
         CCast cDeclaration cExpression a->	genCExpressionExpr cExpression
         CUnary CMinOp (CConst cConstant) a	 -> Value(genCConstant cConstant False) -- -1
         CUnary CPlusOp cExpression a	 -> genCExpressionExpr cExpression -- 1
-        CUnary cUnaryOp cExpression a	 ->Value(IntVal 4)
+        --CUnary cUnaryOp cExpression a	 ->Value(IntVal 4)
   
-        CSizeofExpr cExpression a	 ->	Value(IntVal 5)
-        CSizeofType cDeclaration a	 ->	Value(IntVal 6)
-        CAlignofExpr cExpression a	 ->     Value(IntVal 7)	
-        CAlignofType cDeclaration a	 ->	Value(IntVal 8)
-        CComplexReal cExpression a	 ->	Value(IntVal 9)
-        CComplexImag cExpression a	 ->	Value(IntVal 10)
+        --CSizeofExpr cExpression a	 ->	Value(IntVal 5)
+        --CSizeofType cDeclaration a	 ->	Value(IntVal 6)
+        --CAlignofExpr cExpression a	 ->     Value(IntVal 7)	
+        --CAlignofType cDeclaration a	 ->	Value(IntVal 8)
+        --CComplexReal cExpression a	 ->	Value(IntVal 9)
+        --CComplexImag cExpression a	 ->	Value(IntVal 10)
         CIndex cExpression1 cExpression2 a->	ARead (genCExpressionString  cExpression1) (genCExpressionExpr cExpression2)	 -- Reading Array
         CCall cExpression cExpressionList a	 ->	case (genCExpressionString cExpression) of
-                                                           --"MAX" -> Max (genCExpressionExpr (head cExpressionList)) (genCExpressionExpr (head cExpressionList))--(genCExpressionExpr (head (tail cExpressionList))) --Limited function support
-                                                           _ -> ff  (map genCExpressionExpr cExpressionList)
+                                                           "max" -> fmax  (map genCExpressionExpr cExpressionList) --Max (genCExpressionExpr (head cExpressionList)) (genCExpressionExpr (head cExpressionList))--(genCExpressionExpr (head (tail cExpressionList))) --Limited function support
+                                                           "min"  -> fmin  (map genCExpressionExpr cExpressionList)
+                                                           a ->  VRead a 
         --CMember cExpression ident bool a	 ->	Right(IntVal 222)
         CVar ident a	 ->	VRead (genIdent ident) 
         CConst cConstant	-> Value (genCConstant cConstant True)
@@ -341,10 +342,16 @@ genCExpressionExpr a =
         --CLabAddrExpr ident a	->	Right(IntVal 222)
         --CBuiltinExpr cBuiltinThing->	Right(IntVal 222)
 
-ff  l =
+fmax  l =
   case l of
        a:[]-> a
-       a:q -> Max a (ff q)
+       a:q -> Max a (fmax q)
+
+fmin  l =
+  case l of
+       a:[]-> a
+       a:q -> Min a (fmin q)
+       
 
 genCExpressionExprLeft :: CExpression a -> Expr
 genCExpressionExprLeft a =
@@ -438,23 +445,23 @@ genCFunctionDef a =
 
 genCStatement a =
   case a of
-   CLabel v stmt attr a	-> (InitVar "v" (IntVal 7))
-   CCase expr stmt a -> (InitVar "v" (IntVal 8))	
-   CCases expra exprb stmt a ->(InitVar "v" (IntVal 9))	
-   CDefault stmt a ->(InitVar "v" (IntVal 10))
-   CExpr (Nothing) a	-> (InitVar "v" (IntVal 10))
+   --CLabel v stmt attr a	-> (InitVar "v" (IntVal 7))
+   --CCase expr stmt a -> (InitVar "v" (IntVal 8))	
+   --CCases expra exprb stmt a ->(InitVar "v" (IntVal 9))	
+   --CDefault stmt a ->(InitVar "v" (IntVal 10))
+   --CExpr (Nothing) a	-> (InitVar "v" (IntVal 10))
    CExpr (Just cExpression) a	->  (genCExpressionStmt cExpression)
    CCompound varlist cCompoundBlockItemlist a-> SeqStmt (map (mapfunc genCCompound) cCompoundBlockItemlist)
    CIf expr stmt Nothing a	-> IfStmt (genCExpressionExpr expr) (genCStatement stmt) (Empty)
    CIf expr stmt (Just stmt2) a	-> IfStmt (genCExpressionExpr expr) (genCStatement stmt) (genCStatement stmt2) 
-   CSwitch expr stmt a->(InitVar "v" (IntVal 14))	
-   CWhile expr stmt bool a	->(InitVar "v" (IntVal 15))
-   CFor eitherMaybeCExpressionCDeclaration maybeCExpression1 Nothing cStatement a	-> ForLoop "A" (D1D (Value(IntVal 0)) (Value (IntVal 5))) (genCStatement cStatement)
-   CFor eitherMaybeCExpressionCDeclaration maybeCExpression1 Nothing cStatement a	-> ForLoop "B" (D1D (Value(IntVal 0)) (Value (IntVal 5))) (genCStatement cStatement)
-   CFor (Left Nothing) maybeCExpression1 (Just cExpression2) cStatement a	-> ForLoop "D" (D1D (Value(IntVal 0)) (Value (IntVal 5))) (genCStatement cStatement)
-   CFor (Left (Just cExpression)) maybeCExpression1 (Just cExpression2) cStatement a	-> ForLoop (genCExpressionString cExpression) (D1D (Value(IntVal 0)) (Value (IntVal 5))) (genCStatement cStatement)
+   CSwitch expr stmt a-> (InitVar "v" (IntVal 14))	
+   CWhile expr stmt bool a	-> WhileLoop (genCExpressionExpr expr) (genCStatement stmt)
+   --CFor eitherMaybeCExpressionCDeclaration maybeCExpression1 Nothing cStatement a	-> ForLoop "A" (D1D (Value(IntVal 0)) (Value (IntVal 5))) (genCStatement cStatement)
+   --CFor eitherMaybeCExpressionCDeclaration maybeCExpression1 Nothing cStatement a	-> ForLoop "B" (D1D (Value(IntVal 0)) (Value (IntVal 5))) (genCStatement cStatement)
+   --CFor (Left Nothing) maybeCExpression1 (Just cExpression2) cStatement a	-> ForLoop "D" (D1D (Value(IntVal 0)) (Value (IntVal 5))) (genCStatement cStatement)
+   --CFor (Left (Just cExpression)) maybeCExpression1 (Just cExpression2) cStatement a	-> ForLoop (genCExpressionString cExpression) (D1D (Value(IntVal 0)) (Value (IntVal 5))) (genCStatement cStatement)
    CFor (Right cDeclaration) (Just cExpression1) (Just cExpression2) cStatement a	-> (SeqStmt (Empty:((ForLoop (getIdCDeclaration cDeclaration)   (D1D (getValueCDeclaration cDeclaration) (genCExpressionExprLeft cExpression1)) (genCStatement cStatement))):[])) --(Value (genCExpressionValType cExpression1))) (genCStatement cStatement))):[]))
-   CFor (Right cDeclaration) Nothing (Just cExpression2) cStatement a	-> (SeqStmt (Empty:((ForLoop (getIdCDeclaration cDeclaration)   (D1D (getValueCDeclaration cDeclaration) (Value (IntVal(0)))) (genCStatement cStatement))):[])) 
+   --CFor (Right cDeclaration) Nothing (Just cExpression2) cStatement a	-> (SeqStmt (Empty:((ForLoop (getIdCDeclaration cDeclaration)   (D1D (getValueCDeclaration cDeclaration) (Value (IntVal(0)))) (genCStatement cStatement))):[])) 
 
      {-CGoto Ident a	->(InitVar "v" (IntVal 3))
   CGotoPtr (CExpression a) a	->(InitVar "v" (IntVal 3))

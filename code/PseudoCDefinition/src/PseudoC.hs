@@ -18,6 +18,7 @@ data Expr =
         -- operations needed for wavebench example
         | Plus Expr Expr
         | Minus Expr Expr
+        | Min Expr Expr 
         | Max Expr Expr
         | Mult Expr Expr
         | Divide Expr Expr
@@ -83,6 +84,7 @@ pseudoC2Stringexpr (Value vtype) = "(Value " ++ (pseudoC2Stringvalue vtype) ++ "
 pseudoC2Stringexpr (VRead var) = "(VRead "++ var ++ ")"
 pseudoC2Stringexpr (ARead var idx) = "(ARead " ++var++ " " ++ (pseudoC2Stringexpr idx)++")"
 pseudoC2Stringexpr (Max e1 e2) = "(Max "++(pseudoC2Stringexpr e1)++(pseudoC2Stringexpr e2)++")"
+pseudoC2Stringexpr (Min e1 e2) = "(Min "++(pseudoC2Stringexpr e1)++(pseudoC2Stringexpr e2)++")"
 pseudoC2Stringexpr (Plus e1 e2) = "(Plus "++(pseudoC2Stringexpr e1)++(pseudoC2Stringexpr e2)++")"
 pseudoC2Stringexpr (Minus e1 e2) = "(Minus "++(pseudoC2Stringexpr e1)++(pseudoC2Stringexpr e2)++")"
 pseudoC2Stringexpr (Mult e1 e2) = "(Mult "++(pseudoC2Stringexpr e1)++(pseudoC2Stringexpr e2)++")"
@@ -132,6 +134,7 @@ genCexpr :: Expr -> String
 genCexpr (Value vtype) = (genCvalue vtype)
 genCexpr (VRead var) = var
 genCexpr (ARead var idx) = var++"["++(genCexpr idx)++"]"
+genCexpr (Min e1 e2) = "MIN("++(genCexpr e1)++", "++(genCexpr e2)++")"
 genCexpr (Max e1 e2) = "MAX("++(genCexpr e1)++", "++(genCexpr e2)++")"
 genCexpr (Plus e1 e2) = "("++(genCexpr e1)++" + "++(genCexpr e2)++")"
 genCexpr (Minus e1 e2) = "("++(genCexpr e1)++" - "++(genCexpr e2)++")"
