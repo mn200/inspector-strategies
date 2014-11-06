@@ -18,7 +18,7 @@ data Expr =
         -- operations needed for wavebench example
         | Plus Expr Expr
         | Minus Expr Expr
-        | Min Expr Expr 
+        | Min Expr Expr
         | Max Expr Expr
         | Mult Expr Expr
         | Divide Expr Expr
@@ -36,10 +36,10 @@ data Domain =
 
 
 data Stmt =
-         -- Nop
+	  -- Nop
            Empty
          -- Array element definition (array name, index exp, and rhs)
-         |  Assign String Expr Expr
+         | Assign String Expr Expr
 
          -- InitVar (declaration plus initialization) to scalar (* var initval *)
          -- initval is not an expression so can easily get type info
@@ -85,7 +85,7 @@ data Stmt =
          | SeqStmt [Stmt]
          
          deriving (Show)
-                  
+
 -- Print Pseudo Code
 pseudoC2String :: Stmt -> String
 pseudoC2String pseudoc =
@@ -329,4 +329,3 @@ genQuarktypeString :: ValType -> String
 genQuarktypeString (IntVal(n)) = "int"
 genQuarktypeString (BoolVal(b)) = "bool"
 genQuarktypeString (DoubleVal(d)) = "double"-}
-
