@@ -18,7 +18,7 @@ data Expr =
         -- operations needed for wavebench example
         | Plus Expr Expr
         | Minus Expr Expr
-        | Min Expr Expr 
+        | Min Expr Expr
         | Max Expr Expr
         | Mult Expr Expr
         | Divide Expr Expr
@@ -36,10 +36,10 @@ data Domain =
 
 
 data Stmt =
-         -- Nop
+	  -- Nop
            Empty
          -- Array element definition (array name, index exp, and rhs)
-         |  Assign String Expr Expr
+         | Assign String Expr Expr
 
          -- InitVar (declaration plus initialization) to scalar (* var initval *)
          -- initval is not an expression so can easily get type info
@@ -67,13 +67,25 @@ data Stmt =
          -- while loops cannot be used in the executor
          | WhileLoop Expr Stmt
 
+         -- Just ignore Comment for the proof
+         | Comment String 
+
+         -- Same ignore; used for debug
+         | Inline String
+
+         -- Same ignore; used for debug
+         | PrintArray String Expr
+
+         -- Same ignore; used for debug
+         | PrintVar String
+           
          -- Statement sequencing
          -- Named different than Seq because somewhat different.
          -- Seq in HOL stuff is instance of body for sequential loop.
          | SeqStmt [Stmt]
          
          deriving (Show)
-                  
+
 -- Print Pseudo Code
 pseudoC2String :: Stmt -> String
 pseudoC2String pseudoc =
@@ -196,12 +208,37 @@ genCstmt s lvl =
             ++iter++"<"++(genCexpr ub)++"; "++iter++"++) {\n"
             ++(genCstmt body (lvl+1))
             ++(indent lvl)++"}\n"
+            
+        (ParForLoop iter (D1D lb ub) body) -> 
+            (indent lvl) ++ "#pragma omp parallel for" ++ "\n" ++ (indent lvl) ++ "for (int "++iter++"="++(genCexpr lb)++"; "
+            ++iter++"<"++(genCexpr ub)++"; "++iter++"++) {\n"
+            ++(genCstmt body (lvl+1))
+            ++(indent lvl)++"}\n"
+
 
         (WhileLoop e body) ->
             (indent lvl)++"while ("++(genCexpr e)++") {\n"
             ++(genCstmt body (lvl+1))
             ++(indent lvl)++"}\n"
 
+        (Comment s) -> -- Just ignore Comment for the proof
+                 "\n" ++ (indent lvl) ++ "//" ++ s ++ "\n"
+                 
+        (Inline s) -> -- Just ignore for the proof
+                 (indent lvl) ++ s         
+
+        (PrintArray var sz) -> -- Just ignore for the proof
+                    (indent lvl) ++ "if(debug){\n" ++
+                    (genCstmt (ForLoop "i" (D1D (Value (IntVal 0)) sz)
+                          (Inline ("printf(\"tid=%d: " ++ var++ "[%d]=%d\\n\",tid,"
+                                  ++ "i"  ++ ","++ (genCexpr (ARead var (VRead "i")))
+                                          ++ ");\n")))
+                      (lvl+1))
+                    ++ (indent lvl) ++ "}\n" 
+        (PrintVar var) -> -- Just ignore for the proof
+                          (indent lvl) ++ "if(debug){\n" ++
+                          (indent (lvl+1)) ++ "printf(\"tid=%d: " ++ var ++ "=%d\\n\",tid," ++ var ++ ");\n"
+                          ++ (indent lvl) ++ "}\n" 
         (SeqStmt ([]))-> ""
         (SeqStmt (x:xs)) -> (genCstmt x lvl)++(genCstmt (SeqStmt xs) lvl)
 
@@ -217,3 +254,78 @@ genCtypeString (IntVal(n)) = "int"
 genCtypeString (BoolVal(b)) = "bool"
 genCtypeString (DoubleVal(d)) = "double"
 
+{--- Quark code generation functions.
+
+genQuarkexpr :: Expr -> String
+genQuarkexpr (Value vtype) = (genQuarkvalue vtype)
+genQuarkexpr (VRead var) = var
+genQuarkexpr (ARead var idx) = var++"["++(genQuarkexpr idx)++"]"
+genQuarkexpr (Max e1 e2) = "MAX("++(genQuarkexpr e1)++", "++(genQuarkexpr e2)++")"
+genQuarkexpr (Plus e1 e2) = "("++(genQuarkexpr e1)++" + "++(genQuarkexpr e2)++")"
+genQuarkexpr (Minus e1 e2) = "("++(genQuarkexpr e1)++" - "++(genQuarkexpr e2)++")"
+genQuarkexpr (Mult e1 e2) = "("++(genQuarkexpr e1)++" * "++(genQuarkexpr e2)++")"
+genQuarkexpr (Divide e1 e2) = "("++(genQuarkexpr e1)++" / "++(genQuarkexpr e2)++")"
+genQuarkexpr (CmpGTE e1 e2) = "("++(genQuarkexpr e1)++")>=("++(genQuarkexpr e2)++")"
+genQuarkexpr (CmpLT e1 e2) = "("++(genQuarkexpr e1)++")<("++(genQuarkexpr e2)++")"
+
+-- Given a PseudoC AST, a list of scalar vars that have already
+-- declared in the generated C code, and the current tab level
+-- generate a string of C code.
+genQuarkstmt :: Stmt -> Int -> String
+genQuarkstmt s lvl =
+    let indent lvl | lvl>0 = "    "++(indent (lvl-1)) | otherwise = ""
+    in case s of
+        (Assign var idx rhs) -> (indent lvl) ++ var 
+                                ++ "[" ++ (genQuarkexpr idx) ++ "] = "
+                                ++ (genQuarkexpr rhs) ++ ";\n"
+-- Keep track of which vars have been declared.
+        (InitVar var initvtype) -> (indent lvl) ++ (genCtypeString initvtype)
+                                ++ " " ++ var ++ " = " 
+                                ++ (genCvalue initvtype) ++ ";\n"
+
+        (AssignVar var rhs) -> (indent lvl) ++ var
+                               ++ " = " ++ (genQuarkexpr rhs) ++ ";\n"
+                                 
+        (IfStmt e thenbody elsebody) -> (indent lvl)++"if ("
+            ++(genQuarkexpr e)++") {\n"
+            ++(genQuarkstmt thenbody (lvl+1))
+            ++(genQuarkstmt elsebody (lvl+1))
+            ++(indent lvl)++"}\n"
+
+        -- Generate malloc call and initialization loop.
+        (Malloc var sz initvtype) -> 
+            let typestr = (genCtypeString initvtype)
+            in  (indent lvl) ++ typestr 
+                  ++ "* " ++ var
+                  ++ " = (" ++ typestr ++ "*)malloc(sizeof("
+                  ++ typestr ++ ")*" ++ (genQuarkexpr sz) ++");\n"
+                  ++(genQuarkstmt 
+                      (ForLoop "i" (D1D (Value(IntVal(0))) sz)
+                          (Assign var (VRead "i") (Value (initvtype)) ))
+                  lvl)
+                        
+        (ForLoop iter (D1D lb ub) body) ->
+            (indent lvl)++"for (int "++iter++"="++(genQuarkexpr lb)++"; "
+            ++iter++"<"++(genQuarkexpr ub)++"; "++iter++"++) {\n"
+            ++(genQuarkstmt body (lvl+1))
+            ++(indent lvl)++"}\n"
+
+        (WhileLoop e body) ->
+            (indent lvl)++"while ("++(genQuarkexpr e)++") {\n"
+            ++(genQuarkstmt body (lvl+1))
+            ++(indent lvl)++"}\n"
+
+        (SeqStmt ([]))-> ""
+        (SeqStmt (x:xs)) -> (genQuarkstmt x lvl)++(genQuarkstmt (SeqStmt xs) lvl)
+
+genQuarkvalue :: ValType -> String
+genQuarkvalue (IntVal (n)) = show n
+genQuarkvalue(DoubleVal (d)) = show d 
+genQuarkvalue (BoolVal (b)) = genQuarkboolVal b
+            where genQuarkboolVal True = "true"
+                  genQuarkboolVal False = "false"
+
+genQuarktypeString :: ValType -> String
+genQuarktypeString (IntVal(n)) = "int"
+genQuarktypeString (BoolVal(b)) = "bool"
+genQuarktypeString (DoubleVal(d)) = "double"-}
