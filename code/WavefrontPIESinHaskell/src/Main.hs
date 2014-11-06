@@ -191,7 +191,8 @@ zhuang09 = SeqStmt [
   Malloc "DDA" (VRead "nnz") (IntVal(-1)),
   InitVar "max_wave" (IntVal 0),
   Malloc "wave"    (VRead "nnz")       (IntVal 0),
-
+  -- nb_threads must divide nnz
+  Inline "if(nnz % nb_threads != 0) { printf (\"nb_threads needs to divide nnz: %d\\n\",nnz);exit;}",
   PrintVar "nb_threads",
   Comment "Should be parallelized with more argument",
   ParForLoop "t" (D1D (Value(IntVal 1)) (Plus (VRead "nb_threads") (Value (IntVal 1))))
