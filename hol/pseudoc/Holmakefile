@@ -7,6 +7,12 @@ BARE_THYS = transcTheory intrealTheory
 
 DEPS = $(patsubst %,$(dprot $(SIGOBJ)/%.uo),$(BARE_THYS))
 
+THYFILES = $(patsubst %Script.sml,%Theory.uo,$(wildcard *.sml))
+TARGETS = $(patsubst %.sml,%.uo,$(THYFILES))
+
+all: $(TARGETS)
+.PHONY: all
+
 $(HOLHEAP): $(DEPS)
 	$(protect $(HOLDIR)/bin/buildheap) -o $@ $(BARE_THYS)
 
