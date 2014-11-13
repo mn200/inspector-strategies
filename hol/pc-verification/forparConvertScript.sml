@@ -49,7 +49,7 @@ val simple_executor_equivalence = store_thm(
               (IfStmt (ARead wave_a (VarExpr i) == VarExpr w)
                       body
                       Done))) = SOME(m,g') ∧
-      strip_disconnected_reads g' = g``,
+      strip_pure_reads g' = g``,
   NO_TAC);
 
 val _ = export_theory();

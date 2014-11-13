@@ -167,6 +167,22 @@ val pcg_eval_gflatten = store_thm(
     (∀g:α pcg. pcg_eval (gflatten g) = pcg_eval g)``,
   ho_match_mp_tac hidag_ind >> simp[pcg_eval_merge_graph, FUN_EQ_THM]);
 
+val _ = overload_on("strip_purereads", ``gafilter (λa. a.writes ≠ [])``)
+
+val strip_purereads_OK = store_thm(
+  "strip_purereads_OK",
+  ``(∀n: α pcnode.
+       pcn_eval n =
+         case nafilter (λa. a.writes ≠ []) n of
+             NONE => I
+           | SOME n' => pcn_eval n') ∧
+    (∀g: α pcg.    pcg_eval (strip_purereads g) = pcg_eval g)``,
+  ho_match_mp_tac hidag_ind >> simp[FUN_EQ_THM] >> rpt strip_tac >|[
+    COND_CASES_TAC >> simp[] >> fs[apply_action_def],
+    COND_CASES_TAC >> fs[],
+    Cases_on `nafilter (λa. a.writes ≠ []) n` >> fs[]
+  ]);
+
 val addLabel_def = Define`
   addLabel l a = polydata_upd (λv. (l,v)) a
 `;

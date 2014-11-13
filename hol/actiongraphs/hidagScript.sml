@@ -591,6 +591,25 @@ val grws_gfilter = store_thm(
   ``greads (gfilter P g) ⊆ greads g ∧ gwrites (gfilter P g) ⊆ gwrites g``,
   Induct_on `g` >> rw[] >> rw[] >> metis_tac[SUBSET_TRANS, SUBSET_UNION])
 
+val gafilter_def = new_specification("gafilter_def",
+  ["gafilter", "nafilter"],
+  hidag_recursion
+    |> INST_TYPE [gamma |-> ``:(α,β)hidag``, delta |-> ``:(α,β)hinode option``]
+    |> Q.SPECL [`ε`, `λn g nr gr. case nr of NONE => gr | SOME n' => n' <+ gr`,
+                `λg gr. if gr = ε then NONE else SOME (HG gr)`,
+                `λn. if P n then SOME (HD n) else NONE`,
+                `λnopt. case nopt of NONE => ∅ | SOME n => nreads n`,
+                `λnopt. case nopt of NONE => ∅ | SOME n => nwrites n`,
+                `greads`, `gwrites`]
+    |> SIMP_RULE (srw_ss()) []
+    |> CONV_RULE
+         (LAND_CONV (SIMP_CONV (srw_ss() ++ boolSimps.COND_elim_ss) [Cong DISJ_CONG] THENC
+                     SIMP_CONV (srw_ss()) [optionTheory.FORALL_OPTION]))
+    |> SIMP_RULE (srw_ss()) [SUBSET_DEF, gentouches_def, Once hidagAdd_commutes]
+    |> Q.GEN `P`
+    |> SIMP_RULE (srw_ss()) [SKOLEM_THM, FORALL_AND_THM]);
+val _ = export_rewrites ["gafilter_def"]
+
 val gwave_lemma = prove(
   ``(∀n g nr gr.
         greads gr ⊆ greads g ⇒ greads (gfilter P gr) ⊆ Q ∪ greads g) ∧
