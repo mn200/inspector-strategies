@@ -17,9 +17,9 @@ val eval_def = Define`
 
 val apply_action_def = Define`
   apply_action a (A:'a mvector) =
-    case a.writes of
-        [] => A
-      | (w::_) => update A w (a.data (MAP (vsub A) a.reads))
+    case a.write of
+        NONE => A
+      | SOME w => update A w (a.data (MAP (vsub A) a.reads))
 `;
 
 val MAP_vsub = store_thm(
@@ -32,19 +32,13 @@ val nontouching_actions_commute = store_thm(
   ``¬touches a1 a2 ⇒
     apply_action a1 (apply_action a2 A) = apply_action a2 (apply_action a1 A)``,
   simp[touches_def, apply_action_def, vector_EQ] >> rpt strip_tac >>
-  map_every Cases_on [`a1.writes`, `a2.writes`] >> fs[] >>
+  map_every Cases_on [`a1.write`, `a2.write`] >> fs[] >>
   ONCE_REWRITE_TAC [update_sub] >> simp[] >>
-  qpat_assum `aa.writes = xx` mp_tac >>
-  qmatch_assum_rename_tac `a1.writes = w1::ws1` [] >> strip_tac >>
-  `w1 ≠ HD a2.writes` by (simp[] >> metis_tac[]) >> pop_assum mp_tac >> simp[]>>
-  strip_tac >> simp[] >>
-  `¬MEM (HD a2.writes) a1.reads` by (simp[] >> metis_tac[]) >>
-  pop_assum mp_tac >> simp[] >> strip_tac >>
+  qmatch_assum_rename_tac `a1.write = SOME w1` [] >>
   Cases_on `i = w1` >> simp[]
   >- (simp[SimpRHS, update_sub] >>
       Cases_on `w1 < vsz A` >>
       simp[update_sub, MAP_vsub]) >>
-  `¬MEM w1 a2.reads` by metis_tac[] >>
   simp[update_sub, MAP_vsub]);
 
 val _ = overload_on("evalG", ``genEvalG apply_action``)
@@ -57,7 +51,7 @@ val graphs_evaluate_deterministically = store_thm(
 
 val mkEAction_def = Define`
   mkEAction wf rfs body i =
-    <| writes := [wf i]; reads := rfs <*> [i];
+    <| write := SOME (wf i); reads := rfs <*> [i];
        data := body i; ident := i |>
 `;
 

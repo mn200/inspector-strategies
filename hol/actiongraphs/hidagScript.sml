@@ -24,7 +24,7 @@ val greads0_def = Define`
 val gwrites0_def = Define`
   gwrites0 emptyHDG0 = ∅ ∧
   gwrites0 (hadd0 n g) = nwrites0 n ∪ gwrites0 g ∧
-  nwrites0 (HD0 n) = set n.writes ∧
+  nwrites0 (HD0 n) = set n.write ∧
   nwrites0 (HG0 g) = gwrites0 g
 `;
 
@@ -85,7 +85,6 @@ val ax = TypeBase.axiom_of ``:(α,β)hn0``
             |> Q.SPEC `af`
             |> BETA_RULE
 
-
 val recursion = prove(
   ``∀   (e : γ)
         (af :: respects (neq ===> heq ===> (=) ===> (=)))
@@ -96,7 +95,7 @@ val recursion = prove(
         (grr : γ -> α -> bool)
         (grw : γ -> α -> bool).
       (∀m : (α,β)node. nrr (df m) ⊆ set m.reads) ∧
-      (∀m : (α,β)node. nrw (df m) ⊆ set m.writes) ∧
+      (∀m : (α,β)node. nrw (df m) ⊆ set m.write) ∧
       (∀g : (α,β)hg0 gr : γ. grr gr ⊆ greads0 g ⇒ nrr (gf g gr) ⊆ greads0 g) ∧
       (∀g : (α,β)hg0 gr : γ. grw gr ⊆ gwrites0 g ⇒ nrw (gf g gr) ⊆ gwrites0 g) ∧
 
@@ -308,7 +307,7 @@ val _ = set_mapped_fixity { fixity = Infix(NONASSOC, 450),
                             tok = "≁ᵍ", term_name = "not_gtouches"}
 val _ = overload_on("ngtouches", ``gentouches nreads nwrites greads gwrites``)
 val _ = overload_on("agtouches",
-  ``gentouches (set o action_reads) (set o action_writes) greads gwrites``);
+  ``gentouches (set o action_reads) (set o action_write) greads gwrites``);
 
 val _ = set_mapped_fixity { fixity = Infixr 501, term_name = "hidagAdd",
                             tok = "<+" }
@@ -1009,11 +1008,11 @@ val move_nontouching_hdbuild_front = store_thm(
 val htouches_rewrites = store_thm(
   "htouches_rewrites[simp]",
   ``gentouches nreads nwrites rf1 wf1 (HD a) =
-      gentouches (set o action_reads) (set o action_writes) rf1 wf1 a ∧
+      gentouches (set o action_reads) (set o action_write) rf1 wf1 a ∧
     gentouches nreads nwrites rf2 wf2 (HG g) =
       gentouches greads gwrites rf2 wf2 g ∧
     gentouches rf3 wf3 nreads nwrites x (HD a) =
-      gentouches rf3 wf3 (set o action_reads) (set o action_writes) x a ∧
+      gentouches rf3 wf3 (set o action_reads) (set o action_write) x a ∧
     gentouches rf4 wf4 nreads nwrites x (HG g)=
       gentouches rf4 wf4 greads gwrites x g``,
   simp[FUN_EQ_THM, gentouches_def]);

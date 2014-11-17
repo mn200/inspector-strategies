@@ -105,10 +105,12 @@ end
 
 val gentouches_touches = store_thm(
   "gentouches_touches[simp]",
-  ``gentouches (set o action_reads) (set o action_writes)
-               (set o action_reads) (set o action_writes) a1 a2 ⇔
+  ``gentouches (set o action_reads) (set o action_write)
+               (set o action_reads) (set o action_write) a1 a2 ⇔
       a1 ∼ₜ a2``,
-  simp[touches_def, gentouches_def]);
+  simp[touches_def, gentouches_def] >>
+  map_every Cases_on [`a1.write`, `a2.write`] >>
+  simp[] >> metis_tac[]);
 
 val gflat_eval_def = new_specification(
   "gflat_eval_def", ["gflat_eval"],
@@ -167,20 +169,20 @@ val pcg_eval_gflatten = store_thm(
     (∀g:α pcg. pcg_eval (gflatten g) = pcg_eval g)``,
   ho_match_mp_tac hidag_ind >> simp[pcg_eval_merge_graph, FUN_EQ_THM]);
 
-val _ = overload_on("strip_purereads", ``gafilter (λa. a.writes ≠ [])``)
+val _ = overload_on("strip_purereads", ``gafilter (IS_SOME o action_write)``)
 
 val strip_purereads_OK = store_thm(
   "strip_purereads_OK",
   ``(∀n: α pcnode.
        pcn_eval n =
-         case nafilter (λa. a.writes ≠ []) n of
+         case nafilter (IS_SOME o action_write) n of
              NONE => I
            | SOME n' => pcn_eval n') ∧
     (∀g: α pcg.    pcg_eval (strip_purereads g) = pcg_eval g)``,
   ho_match_mp_tac hidag_ind >> simp[FUN_EQ_THM] >> rpt strip_tac >|[
     COND_CASES_TAC >> simp[] >> fs[apply_action_def],
     COND_CASES_TAC >> fs[],
-    Cases_on `nafilter (λa. a.writes ≠ []) n` >> fs[]
+    Cases_on `nafilter (IS_SOME o action_write) n` >> fs[]
   ]);
 
 val addLabel_def = Define`
@@ -205,7 +207,7 @@ val stmt_weight_ssubst0 = store_thm(
 val mareadAction_def = Define`
   mareadAction l m ma =
     HD <| reads := SND (ma_reads m ma);
-          writes := [];
+          write := NONE;
           data := (l,ARB:value list -> value);
           ident := () |>
 `;
@@ -281,7 +283,7 @@ val graphOf_def = tDefine "graphOf" `
         rds <- getReads m0 ds;
         a0 <- SOME (mareadAction i0 m0 ma);
         a1 <- SOME (HD (addLabel i0 (dvreadAction () m0 ds)));
-        a <- SOME (HD <| writes := [lv];
+        a <- SOME (HD <| write := SOME lv;
                          reads := rds;
                          data := (i0, mergeReads ds opn);
                          ident := () |>) ;
@@ -422,7 +424,7 @@ val assign_lemma = store_thm(
 
 val addLabel_readswrites = store_thm(
   "addLabel_readswrites[simp]",
-  ``(addLabel l a).reads = a.reads ∧ (addLabel l a).writes = a.writes``,
+  ``(addLabel l a).reads = a.reads ∧ (addLabel l a).write = a.write``,
   simp[addLabel_def]);
 
 val pcg_eval_readAction = store_thm(
@@ -544,7 +546,7 @@ val pcg_eval_NONE = store_thm(
   ``(∀n:α pcnode. pcn_eval n NONE = NONE) ∧
     ∀g:α pcg. pcg_eval g NONE = NONE``,
   ho_match_mp_tac hidag_ind >> simp[apply_action_def] >>
-  rpt gen_tac >> Cases_on `a.writes` >> simp[]);
+  rpt gen_tac >> Cases_on `a.write` >> simp[]);
 
 val addLabel_touches = store_thm(
   "addLabel_touches[simp]",
@@ -553,12 +555,12 @@ val addLabel_touches = store_thm(
 
 val addLabel_gentouches = store_thm(
   "addLabel_gentouches[simp]",
-  ``gentouches (set o action_reads) (set o action_writes) rf wf (addLabel l a) =
-    gentouches (set o action_reads) (set o action_writes) rf wf a``,
+  ``gentouches (set o action_reads) (set o action_write) rf wf (addLabel l a) =
+    gentouches (set o action_reads) (set o action_write) rf wf a``,
   simp[FUN_EQ_THM, gentouches_def]);
 
 val _ = overload_on("antouches",
-  ``gentouches (set o action_reads) (set o action_writes) nreads nwrites``);
+  ``gentouches (set o action_reads) (set o action_write) nreads nwrites``);
 
 val pcg_eval_expreval_preserves = store_thm(
   "pcg_eval_expreval_preserves",
@@ -603,17 +605,16 @@ val successful_action_diamond = store_thm(
     ∃m. apply_action a1 (SOME m2) = SOME m ∧
         apply_action a2 (SOME m1) = SOME m``,
   simp[apply_action_def, SimpL ``$==>``] >>
-  `a1.writes = [] ∨ ∃w1 t1. a1.writes = w1::t1`
-    by (Cases_on `a1.writes` >> simp[]) >>
-  `a2.writes = [] ∨ ∃w2 t2. a2.writes = w2::t2`
-    by (Cases_on `a2.writes` >> simp[]) >> simp[apply_action_def]
+  `a1.write = NONE ∨ ∃w1. a1.write = SOME w1`
+    by (Cases_on `a1.write` >> simp[]) >>
+  `a2.write = NONE ∨ ∃w2. a2.write = SOME w2`
+    by (Cases_on `a2.write` >> simp[]) >> simp[apply_action_def]
   >- (rw[] >> simp[]) >> strip_tac >> simp[] >> rw[] >>
   `MAP (lookupRW m2) a1.reads = MAP (lookupRW m0) a1.reads ∧
    MAP (lookupRW m1) a2.reads = MAP (lookupRW m0) a2.reads`
     by metis_tac[nontouching_updm_expreval, touches_SYM] >>
   simp[] >>
-  fs[touches_def] >> `w1 ≠ w2` by metis_tac[MEM] >>
-  metis_tac[successful_upd_memory_diamond]);
+  rfs[touches_def] >> metis_tac[successful_upd_memory_diamond]);
 
 val pcg_eval_apply_action_diamond = store_thm(
   "pcg_eval_apply_action_diamond",
@@ -634,28 +635,6 @@ val pcg_eval_apply_action_diamond = store_thm(
   ntac 2 (rpt gen_tac >> strip_tac) >>
   `∃m'. pcn_eval n (SOME m0) = SOME m'`
     by (Cases_on `pcn_eval n (SOME m0)` >> fs[]) >> fs[] >> prove_tac[]);
-
-val mkWFA_def = Define`
-  mkWFA a =
-    case a.writes of
-        [] => a
-      | h::t => <| reads := a.reads ;
-                   writes := [h] ;
-                   data := a.data;
-                   ident := a.ident |>
-`;
-
-val touches_mkWFA = store_thm(
-  "touches_mkWFA",
-  ``mkWFA a ∼ₜ b ⇒ a ∼ₜ b``,
-  simp[touches_def, mkWFA_def] >> Cases_on `a.writes` >> simp[] >>
-  metis_tac[]);
-
-val apply_action_mkWFA = store_thm(
-  "apply_action_mkWFA[simp]",
-  ``apply_action (mkWFA a) m_opt = apply_action a m_opt``,
-  simp[apply_action_def, mkWFA_def] >> Cases_on `m_opt` >> simp[] >>
-  Cases_on `a.writes` >> simp[]);
 
 val dexprOK_def = Define`
   (dexprOK m (DMA e) = ¬isArrayError (evalmaccess m e)) ∧
@@ -696,31 +675,27 @@ val apply_action_dvreadAction_commutes = store_thm(
   "apply_action_dvreadAction_commutes",
   ``a ≁ₜ dvreadAction i m0 ds ∧ apply_action a (SOME m0) = SOME m ∧
     getReads m0 ds = SOME rds ∧ (∀d. MEM d ds ⇒ dexprOK m0 d) ∧
-    (a.writes ≠ [] ⇒ ¬MEM (HD a.writes) rds)
+    (IS_SOME a.write ⇒ ¬MEM (THE a.write) rds)
    ⇒
     dvreadAction i m ds = dvreadAction i m0 ds ∧
     getReads m ds = getReads m0 ds ∧
     MAP (evalDexpr m) ds = MAP (evalDexpr m0) ds``,
   simp[dvreadAction_def, touches_def, MEM_FLAT, MEM_MAP, PULL_FORALL,
        GSYM IMP_DISJ_THM] >>
-  `a.writes = [] ∨ ∃w t. a.writes = w::t` by (Cases_on `a.writes` >> simp[]) >>
+  `a.write = NONE ∨ ∃w. a.write = SOME w` by (Cases_on `a.write` >> simp[]) >>
   simp[FORALL_AND_THM, GSYM LEFT_FORALL_OR_THM, PULL_EXISTS,
        GSYM RIGHT_FORALL_OR_THM] >- csimp[apply_action_def] >>
   simp[DISJ_IMP_THM, FORALL_AND_THM] >>
   Cases_on `apply_action a (SOME m0) = SOME m` >> simp[] >>
-  `apply_action (mkWFA a) (SOME m0) = SOME m` by simp[] >>
-  `(mkWFA a).writes = [w]` by simp[mkWFA_def] >> qabbrev_tac `b = mkWFA a` >>
-  Q.RM_ABBREV_TAC `b` >> ntac 2 (pop_assum mp_tac) >>
-  rpt (pop_assum kall_tac) >> ntac 2 strip_tac >> strip_tac >>
-  first_x_assum
-    (kall_tac o assert (equal 2 o length o #1 o strip_forall o concl)) >>
+  ntac 2 (pop_assum mp_tac) >>
+  ntac 2 strip_tac >> strip_tac >>
   ntac 4 (pop_assum mp_tac) >>
   qid_spec_tac `rds` >> Induct_on `ds` >>
   simp[getReads_def] >> Cases >> simp[getReads_def, dvread_def, evalDexpr_def] >>
   simp[dvread_def, DISJ_IMP_THM, FORALL_AND_THM, PULL_EXISTS] >>
   simp[PULL_FORALL] >> qx_genl_tac [`lv`, `rds`] >> ntac 4 strip_tac >>
   qmatch_assum_rename_tac `maRead m0 mref = SOME lv` [] >>
-  `readAction () m0 (MAccess mref) ≁ₜ b`
+  `readAction () m0 (MAccess mref) ≁ₜ a`
     by simp[touches_def, readAction_def, expr_reads_def] >>
   `¬isArrayError (evalexpr m0 (MAccess mref))` by simp[evalexpr_def] >>
   `evalexpr m (MAccess mref) = evalexpr m0 (MAccess mref) ∧
@@ -734,12 +709,12 @@ val apply_action_dvreadAction_commutes = store_thm(
 
 val agentouches_polydata_upd = store_thm(
   "agentouches_polydata_upd[simp]",
-  ``(gentouches (set o action_reads) (set o action_writes) rf wf
+  ``(gentouches (set o action_reads) (set o action_write) rf wf
        (polydata_upd f a) x ⇔
-     gentouches (set o action_reads) (set o action_writes) rf wf a x) ∧
-    (gentouches rf wf (set o action_reads) (set o action_writes)
+     gentouches (set o action_reads) (set o action_write) rf wf a x) ∧
+    (gentouches rf wf (set o action_reads) (set o action_write)
        x (polydata_upd f a) ⇔
-     gentouches rf wf (set o action_reads) (set o action_writes) x a)``,
+     gentouches rf wf (set o action_reads) (set o action_write) x a)``,
   simp[gentouches_def]);
 
 val maccess_ind = save_thm(
@@ -934,22 +909,22 @@ val graphOf_apply_action_diamond = store_thm(
       `eval_lvalue m2 lv = SOME (anm, is) ∧
        mareadAction i0 m2 lv = mareadAction i0 m0 lv`
         by metis_tac[apply_action_eval_lvalue_commutes] >> simp[] >>
-      `a.writes ≠ [] ⇒ ¬MEM (HD a.writes) rds`
-        by (Cases_on `a.writes` >> fs[touches_def] >> metis_tac[]) >>
+      `IS_SOME a.write ⇒ ¬MEM (THE a.write) rds`
+        by (Cases_on `a.write` >> fs[touches_def] >> metis_tac[]) >>
       `∀d. MEM d ds ⇒ dexprOK m0 d` by metis_tac[evalDexpr_dexprOK] >>
       `getReads m2 ds = getReads m0 ds ∧
        dvreadAction () m2 ds = dvreadAction () m0 ds ∧
        MAP (evalDexpr m2) ds = MAP (evalDexpr m0) ds`
         by metis_tac[apply_action_dvreadAction_commutes] >> simp[] >>
       qabbrev_tac `b = <|
-        reads := []; writes := [(anm,is)]; ident := ();
+        reads := []; write := SOME (anm,is); ident := ();
         data := K (opn rvs) : value list -> value |>` >>
       `EVERY ($~ o isArrayError) rvs`
         by (simp[EVERY_MEM] >> metis_tac[evalDexpr_notArrayError]) >>
       `upd_write m2 lv opn rvs = apply_action b (SOME m2)`
         by simp[apply_action_def, Abbr`b`, upd_write_def] >> fs[] >>
       `a ≁ₜ b` by (simp[touches_def, Abbr`b`] >> fs[touches_def] >>
-                  Cases_on `a.writes` >> fs[]) >>
+                   Cases_on `a.write` >> fs[]) >>
       `apply_action b (SOME m0) = SOME m1`
         by (fs[apply_action_def, Abbr`b`, upd_write_def] >> rfs[]) >>
       metis_tac[successful_action_diamond])
@@ -1170,7 +1145,7 @@ val graphOf_correct_lemma = store_thm(
       (m0,c0) ---> (m,c) ⇒
       ∀i0 m0' g0.
         graphOf i0 m0 c0 = SOME (m0', g0) ⇒
-        ∃i' g.
+        ∃g.
           graphOf i0 m c = SOME(m0', g) ∧
           ∀g'. g ∼ᵍ g' ⇒ g0 ∼ᵍ g'``,
   ho_match_mp_tac eval_ind' >> rpt conj_tac

@@ -940,9 +940,9 @@ val lookupRW_def = Define`
 
 val apply_action_def = Define`
   apply_action a m_opt =
-    case a.writes of
-        [] => m_opt
-      | (w::_) =>
+    case a.write of
+        NONE => m_opt
+      | SOME w =>
         do
           m <- m_opt;
           vs <- SOME(MAP (lookupRW m) a.reads);
@@ -985,7 +985,7 @@ val upd_memory_preserves_FDOMs = store_thm(
 val apply_action_preserves_FDOMs = store_thm(
   "apply_action_preserves_FDOMs",
   ``apply_action a (SOME m) = SOME m' ⇒ FDOM m' = FDOM m``,
-  simp[apply_action_def] >> Cases_on `a.writes` >> simp[] >>
+  simp[apply_action_def] >> Cases_on `a.write` >> simp[] >>
   metis_tac[upd_memory_preserves_FDOMs]);
 
 val upd_nested_array_preserves_array_length = store_thm(
@@ -1136,10 +1136,10 @@ val nontouching_updm_read_after_writes = store_thm(
 
 val nontouching_updm_expreval = store_thm(
   "nontouching_updm_expreval",
-  ``¬(touches a1 a2) ∧ a2.writes = w::rest ∧ upd_memory w value m = SOME m' ⇒
+  ``a1 ≁ₜ a2 ∧ a2.write = SOME w ∧ upd_memory w value m = SOME m' ⇒
     MAP (lookupRW m') a1.reads = MAP (lookupRW m) a1.reads``,
   simp[MAP_EQ_f] >> strip_tac >> qx_gen_tac `r` >> strip_tac >>
-  `r ≠ w` by metis_tac[touches_def, MEM] >>
+  `r ≠ w` by (fs[touches_def] >> metis_tac[]) >>
   metis_tac[nontouching_updm_read_after_writes]);
 
 val FLOOKUP_memory_cases = prove(
@@ -1384,10 +1384,10 @@ val apply_action_commutes = store_thm(
   simp[apply_action_def, lift_OPTION_BIND, combinTheory.o_ABS_R,
        o_UNCURRY_R, C_UNCURRY_L,
        combinTheory.C_ABS_L] >>
-  `a1.writes = [] ∨ ∃w1 t1. a1.writes = w1::t1`
-    by (Cases_on `a1.writes` >> simp[]) >>
-  `a2.writes = [] ∨ ∃w2 t2. a2.writes = w2::t2`
-    by (Cases_on `a2.writes` >> simp[]) >>
+  `a1.write = NONE ∨ ∃w1. a1.write = SOME w1`
+    by (Cases_on `a1.write` >> simp[]) >>
+  `a2.write = NONE ∨ ∃w2. a2.write = SOME w2`
+    by (Cases_on `a2.write` >> simp[]) >>
   simp[] >>
   qabbrev_tac `
     A1U = λm. upd_memory w1 (a1.data (MAP (lookupRW m) a1.reads)) m` >>
@@ -1443,7 +1443,7 @@ val expr_reads_def = tDefine "expr_reads" `
 val readAction_def = Define`
   readAction i m e = <|
     reads := expr_reads m e;
-    writes := [];
+    write := NONE;
     data := ARB : value list -> value;
     ident := i |>
 `;
@@ -1456,7 +1456,7 @@ val readAction_ident = store_thm(
 val domreadAction_def = Define`
   domreadAction i m (D lo hi) = <|
     reads := expr_reads m lo ++ expr_reads m hi;
-    writes := [];
+    write := NONE;
     data := ARB : value list -> value;
     ident := i
   |> `;
@@ -1474,7 +1474,7 @@ val dvread_def = Define`
 
 val dvreadAction_def = Define`
   dvreadAction i m ds = <| reads := FLAT (MAP (dvread m) ds);
-                           writes := [];
+                           write := NONE;
                            data := ARB : value list -> value;
                            ident := i |>
 `
@@ -1810,12 +1810,11 @@ val apply_action_expr_eval_commutes = store_thm(
      ⇒
        evalexpr m e = evalexpr m0 e ∧ readAction j m e = readAction j m0 e``,
   simp[readAction_def, touches_def, apply_action_def] >> gen_tac >>
-  `a.writes = [] ∨ ∃w t. a.writes = w::t` by (Cases_on `a.writes` >> simp[]) >>
+  `a.write = NONE ∨ ∃w. a.write = SOME w` by (Cases_on `a.write` >> simp[]) >>
   simp[] >>
   REWRITE_TAC [DECIDE ``p \/ q <=> ~p ==> q``] >>
   simp[DISJ_IMP_THM, FORALL_AND_THM, MEM_FILTER] >>
   pop_assum kall_tac >> map_every qx_gen_tac [`e`, `m0`, `m`] >> strip_tac >>
-  first_x_assum (kall_tac o assert (is_forall o concl)) >>
   qabbrev_tac `d = a.data (MAP (lookupRW m0) a.reads)` >>
   markerLib.RM_ALL_ABBREVS_TAC >>
   match_mp_tac (aec_lemma |> CONJUNCT1) >> simp[] >>

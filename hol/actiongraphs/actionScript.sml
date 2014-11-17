@@ -11,7 +11,7 @@ val _ = new_theory "action";
 val _ = IndDefLib.export_rule_induction "relation.TC_STRONG_INDUCT"
 val _ = Hol_datatype`
   action = <|
-    writes : 'rw list;
+    write : 'rw option;
     reads : 'rw list ;
     data : 'data;
     ident : 's_ident
@@ -21,12 +21,18 @@ val _ = Hol_datatype`
 `;
 
 val action_component_equality = theorem "action_component_equality"
+val optset_def = Define`
+  optset NONE = ∅ ∧
+  optset (SOME x) = {x}
+`;
+val _ = overload_on ("set", ``optset``)
+val _ = export_rewrites ["optset_def"]
 
 val touches_def = Define`
   touches a1 a2 ⇔
-     (∃w. MEM w a1.writes ∧ MEM w a2.writes) ∨
-     (∃w. MEM w a1.writes ∧ MEM w a2.reads) ∨
-     (∃w. MEM w a2.writes ∧ MEM w a1.reads)
+     ¬DISJOINT (set a1.reads) (set a2.write) ∨
+     ¬DISJOINT (set a2.reads) (set a1.write) ∨
+     ¬DISJOINT (set a1.write) (set a2.write)
 `;
 
 val _ = set_mapped_fixity {term_name = "touches", fixity = Infix(NONASSOC, 450),
@@ -46,13 +52,13 @@ val _ = export_rewrites ["touches_ignores_ident"]
 val touches_SYM = store_thm(
   "touches_SYM",
   ``touches a1 a2 ⇒ touches a2 a1``,
-  simp[touches_def] >> rpt strip_tac >> simp[] >> metis_tac[]);
+  simp[touches_def] >> rpt strip_tac >> simp[] >> metis_tac[DISJOINT_SYM]);
 
 (* redundant if HOL's github issue #173 is fixed *)
 val polydata_upd_def = Define`
   polydata_upd f a = <|
     reads := a.reads ;
-    writes := a.writes ;
+    write := a.write ;
     data := f a.data;
     ident := a.ident
   |>`
@@ -64,7 +70,7 @@ val polydata_upd_ident = store_thm(
 
 val polydata_upd_reads_writes = store_thm(
   "polydata_upd_reads_writes[simp]",
-  ``(polydata_upd f a).reads = a.reads ∧ (polydata_upd f a).writes = a.writes``,
+  ``(polydata_upd f a).reads = a.reads ∧ (polydata_upd f a).write = a.write``,
   simp[polydata_upd_def]);
 
 val polydata_upd_data = store_thm(

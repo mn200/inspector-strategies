@@ -260,7 +260,7 @@ val dagmerge_ASSOC = store_thm(
 val (dagREL_rules, dagREL_ind, dagREL_cases) = Hol_reln`
   dagREL R ε ε ∧
 
-  ∀a1 a2. R a1.data a2.data ∧ a1.reads = a2.reads ∧ a1.writes = a2.writes ∧
+  ∀a1 a2. R a1.data a2.data ∧ a1.reads = a2.reads ∧ a1.write = a2.write ∧
           dagREL R d1 d2
         ⇒
           dagREL R (a1 <+ d1) (a2 <+ d2)
@@ -741,19 +741,19 @@ val dagREL_elim_add = store_thm(
   "dagREL_elim_add",
   ``dagREL R (a <+ d1) d2 ⇔
       ∃b d0. d2 = b <+ d0 ∧ R a.data b.data ∧ dagREL R d1 d0 ∧
-             b.writes = a.writes ∧ b.reads = a.reads``,
+             b.write = a.write ∧ b.reads = a.reads``,
   reverse eq_tac >- (rw[] >> metis_tac[dagREL_rules]) >>
   `∀d1 d2. dagREL R d1 d2 ⇒
            ∀a d10. d1 = a <+ d10 ⇒
                    ∃b d20. d2 = b <+ d20 ∧ R a.data b.data ∧
-                           b.writes = a.writes ∧ b.reads = a.reads ∧
+                           b.write = a.write ∧ b.reads = a.reads ∧
                            dagREL R d10 d20` suffices_by metis_tac[] >>
   Induct_on `dagREL` >> simp[] >>
   qx_genl_tac [`d1`, `d2`, `a1`, `a2`] >> strip_tac >>
   qx_genl_tac [`a`, `d10`] >> simp[SimpL ``$==>``, dagAdd_11_thm] >>
   strip_tac >- (rw[] >> metis_tac[]) >>
   qmatch_assum_rename_tac `d1 = a <+ d10'` [] >>
-  `∃b d20. d2 = b <+ d20 ∧ R a.data b.data ∧ b.writes = a.writes ∧
+  `∃b d20. d2 = b <+ d20 ∧ R a.data b.data ∧ b.write = a.write ∧
            b.reads = a.reads ∧ dagREL R d10' d20` by metis_tac[] >>
   rw[] >> map_every qexists_tac [`b`, `a2 <+ d20`] >> simp[] >>
   reverse conj_tac >- metis_tac[dagREL_rules] >>
