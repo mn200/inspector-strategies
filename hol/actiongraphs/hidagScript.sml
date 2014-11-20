@@ -6,10 +6,14 @@ open actionTheory
 open bagTheory
 open quotientLib
 open indexedListsTheory
+open monadsyntax
 
 val _ = new_theory "hidag";
 
 val _ = type_abbrev("node", ``:(β,α,unit)action``)
+val _ = overload_on ("monad_bind", ``OPTION_BIND``)
+val _ = overload_on ("monad_unitbind", ``OPTION_IGNORE_BIND``)
+val _ = overload_on ("assert", ``OPTION_GUARD``)
 
 val _ = Datatype`hn0 = HD0 ((α,β) node) | HG0 hg0 ;
                  hg0 = emptyHDG0 | hadd0 hn0 hg0`
@@ -608,6 +612,18 @@ val gafilter_def = new_specification("gafilter_def",
     |> Q.GEN `P`
     |> SIMP_RULE (srw_ss()) [SKOLEM_THM, FORALL_AND_THM]);
 val _ = export_rewrites ["gafilter_def"]
+
+val gafilter_gafilter = store_thm(
+  "gafilter_gafilter",
+  ``(∀n.
+       nafilter (λa. P a ∧ Q a) n =
+         do
+           n' <- nafilter Q n ;
+           nafilter P n'
+         od) ∧
+    ∀g. gafilter P (gafilter Q g) = gafilter (λa. P a ∧ Q a) g``,
+  ho_match_mp_tac hidag_ind >> simp[] >> rw[] >> fs[] >>
+  Cases_on `nafilter Q n` >> simp[]);
 
 val gwave_lemma = prove(
   ``(∀n g nr gr.

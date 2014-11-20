@@ -170,11 +170,6 @@ val mlt_loopbag_lemma = store_thm(
   rpt strip_tac >> Cases_on `list` >> fs[] >- fs[Abbr`FF`] >>
   res_tac >> metis_tac[DECIDE ``x < SUC x``])
 
-val FORALL_domain = store_thm(
-  "FORALL_domain",
-  ``(∀d. P d) ⇔ ∀e1 e2. P (D e1 e2)``,
-  simp[EQ_IMP_THM] >> strip_tac >> Cases >> simp[]);
-
 val loopbag_ssubst = store_thm(
   "loopbag_ssubst[simp]",
   ``loopbag (ssubst vnm value s) = loopbag s``,
