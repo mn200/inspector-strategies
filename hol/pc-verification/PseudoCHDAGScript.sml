@@ -213,6 +213,17 @@ val mareadAction_def = Define`
 `;
 
 
+(* ----------------------------------------------------------------------
+    Create an action graph from a PseudoC program.
+
+    Function is partial to allow for possibility that actions
+    parallelised underneath a Par may be touching/conflicting. If this
+    happens, the result has to be NONE.
+
+    The function will also return NONE if there are constructs within the
+    program that are not allowed to appear in "original code" programs.
+   ---------------------------------------------------------------------- *)
+
 val graphOf_def = tDefine "graphOf" `
 
   (graphOf lab m0 (IfStmt gd t e) =
@@ -306,7 +317,9 @@ val graphOf_def = tDefine "graphOf" `
        assert(¬isArrayError value);
        (m,g) <- graphOf lab m0 (ssubst v value s);
        SOME(m,HD (addLabel lab (readAction () m0 e)) <+ g)
-     od)
+     od) ∧
+
+  (graphOf lab m (Atomic s) = NONE)
 ` (WF_REL_TAC
      `inv_image (mlt (<) LEX (<)) (λ(i,m,s). (loopbag s, stmt_weight (K 0) s))` >>
    simp[WF_mlt1, FOLDR_MAP, mlt_loopbag_lemma] >>
@@ -495,6 +508,7 @@ val graphOf_pcg_eval = store_thm(
   >- ((* Malloc *) simp[graphOf_def])
   >- ((* Label *) simp[graphOf_def])
   >- ((* Local *) simp[graphOf_def, EXISTS_PROD, PULL_EXISTS])
+  >- ((* Atomic *) simp[graphOf_def])
 );
 
 val assert_EQ_SOME = store_thm(
@@ -937,6 +951,7 @@ val graphOf_apply_action_diamond = store_thm(
       `evalexpr m2 e = evalexpr m0 e ∧ readAction () m2 e = readAction () m0 e`
         by metis_tac[apply_action_expr_eval_commutes, touches_SYM] >>
       simp[])
+  >- ((* Atomic *) simp[graphOf_def])
 )
 
 val graphOf_pcg_eval_diamond = store_thm(
@@ -1082,6 +1097,7 @@ val eval_graphOf_action = store_thm(
       `TOS i0 m0 c0 = gg` by simp[Abbr`TOS`] >> metis_tac[])
   >- ((* malloc *) simp[graphOf_def])
   >- ((* Label *) simp[graphOf_def] >> metis_tac[])
+  >- ((* Atomic *) simp[graphOf_def])
 );
 
 val hdbuild_append = store_thm(
@@ -1348,6 +1364,7 @@ val graphOf_correct_lemma = store_thm(
       disj1_tac >> qexists_tac `Abort` >> simp[])
   >- ((* Malloc *) simp[graphOf_def])
   >- ((* Label *) simp[graphOf_def])
+  >- ((* Atomic *) simp[graphOf_def])
   >- ((* Label-Done ---> Done *) simp[graphOf_def])
   >- ((* Label-Abort ---> Abort *) simp[graphOf_def])
   >- ((* Local *) simp[graphOf_def, PULL_EXISTS, EXISTS_PROD])

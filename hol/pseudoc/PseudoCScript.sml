@@ -97,6 +97,7 @@ val _ = Datatype`
        | Par (stmt list)
        | Local vname expr stmt
        | Label value stmt
+       | Atomic stmt
        | Abort
        | Done
 `
@@ -114,6 +115,7 @@ val stmt_induction = store_thm(
      (∀stmts. (∀m s. MEM s stmts ⇒ P s) ⇒ P (Par stmts)) ∧
      (∀v s. P s ⇒ P (Label v s)) ∧
      (∀v e s. P s ⇒ P (Local v e s)) ∧
+     (∀s. P s ⇒ P (Atomic s)) ∧
      P Abort ∧ P Done
     ⇒
      ∀s. P s``,
@@ -269,6 +271,7 @@ val ssubst_def = tDefine "ssubst" `
   (ssubst vnm value (Local v e s) =
      if v = vnm then Local v (esubst vnm value e) s
      else Local v (esubst vnm value e) (ssubst vnm value s)) ∧
+  (ssubst vnm value (Atomic s) = Atomic (ssubst vnm value s)) ∧
   (ssubst vnm value Abort = Abort) ∧
   (ssubst vnm value Done = Done)
 `
@@ -353,6 +356,7 @@ val svarsOf_def = tDefine "svarsOf" `
   svarsOf (Par slist) = listVarsOf svarsOf slist ∧
   svarsOf (Label _ s) = svarsOf s ∧
   svarsOf (Local v e s) = (svarsOf s DELETE v) ∪ varsOf e ∧
+  svarsOf (Atomic s) = svarsOf s ∧
   svarsOf Abort = ∅ ∧
   svarsOf Done = ∅
 ` (WF_REL_TAC `measure stmt_size` >> simp[] >>
@@ -567,6 +571,13 @@ val (eval_rules, eval_ind, eval_cases) = Hol_reln`
       eval (m0, c0) (m, c)
      ⇒
       eval (m0, Label v c0) (m, Label v c))
+
+     ∧
+
+  (∀m0 s m.
+      RTC eval (m0,s) (m, Done)
+     ⇒
+      eval (m0, Atomic s) (m, Done))
 
      ∧
 
