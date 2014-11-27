@@ -8,6 +8,7 @@ open indexedListsTheory
 open finite_mapTheory
 open intLib
 open optionTheory
+open relationTheory
 
 open monadsyntax boolSimps
 
@@ -213,6 +214,18 @@ val mareadAction_def = Define`
 `;
 
 
+val mlt_BAG_IMAGE_SUC = store_thm(
+  "mlt_BAG_IMAGE_SUC[simp]",
+  ``FINITE_BAG b ∧ b ≠ {||} ⇒ mlt $< b (BAG_IMAGE SUC b)``,
+  simp[mlt_dominates_thm1] >> strip_tac >>
+  map_every qexists_tac [`BAG_IMAGE SUC b`, `b`] >>
+  simp[dominates_def, PULL_EXISTS] >> metis_tac[DECIDE ``x < SUC x``])
+
+val SUM_MAP_lemma = store_thm(
+  "SUM_MAP_lemma",
+  ``∀l. MEM e l ⇒ f e < LENGTH l + SUM (MAP f l)``,
+  Induct >> dsimp[] >> rpt strip_tac >> res_tac >> simp[]);
+
 (* ----------------------------------------------------------------------
     Create an action graph from a PseudoC program.
 
@@ -323,26 +336,9 @@ val graphOf_def = tDefine "graphOf" `
 ` (WF_REL_TAC
      `inv_image (mlt (<) LEX (<)) (λ(i,m,s). (loopbag s, stmt_weight (K 0) s))` >>
    simp[WF_mlt1, FOLDR_MAP, mlt_loopbag_lemma] >>
-   rpt strip_tac >> TRY (rw[mlt_loopbag_lemma, MAX_PLUS] >> NO_TAC)
-   >- (imp_res_tac MEM_FOLDR_mlt >> pop_assum (qspec_then `I` mp_tac) >>
-       rw[] >> simp[] >> qpat_assum `MEM c cmds` mp_tac >>
-       rpt (pop_assum kall_tac) >>
-       qid_spec_tac `c` >> Induct_on `cmds` >> dsimp[] >>
-       rpt strip_tac >> res_tac >> decide_tac)
-   >- (imp_res_tac MEM_FOLDR_mlt >> pop_assum (qspec_then `I` mp_tac) >>
-       rw[] >> simp[] >> qpat_assum `MEM c cmds` mp_tac >>
-       rpt (pop_assum kall_tac) >>
-       qid_spec_tac `c` >> Induct_on `cmds` >> dsimp[] >>
-       rpt strip_tac >> res_tac >> decide_tac)
-   >- (disj1_tac >> rw[] >>
-       simp[mlt_dominates_thm1] >>
-       map_every qexists_tac [`BAG_IMAGE SUC (loopbag body)`, `loopbag body`] >>
-       dsimp[dominates_def] >> metis_tac[DECIDE ``x < SUC x``])
-   >- (disj1_tac >> rw[] >>
-       simp[mlt_dominates_thm1] >>
-       map_every qexists_tac [`BAG_IMAGE SUC (loopbag body)`, `loopbag body`] >>
-       dsimp[dominates_def] >> metis_tac[DECIDE ``x < SUC x``])
-)
+   rpt strip_tac >> TRY (rw[mlt_loopbag_lemma, MAX_PLUS] >> NO_TAC) >>
+   imp_res_tac MEM_FOLDR_mlt >> pop_assum (qspec_then `I` mp_tac) >>
+   rw[SUM_MAP_lemma])
 
 val eval_ind' = save_thm(
   "eval_ind'",
@@ -1377,11 +1373,322 @@ val graphOf_correct0 = prove(
         p1 = (m0,c0) ∧ p2 = (m,Done) ∧
         graphOf i0 m0 c0 = SOME(gm,g) ⇒
         gm = m``,
-  ho_match_mp_tac relationTheory.RTC_INDUCT >> simp[] >>
+  ho_match_mp_tac RTC_INDUCT >> simp[] >>
   simp[FORALL_PROD] >> metis_tac[graphOf_correct_lemma]);
 
 val graphOf_correct = save_thm(
   "graphOf_correct",
   graphOf_correct0 |> SIMP_RULE (srw_ss()) [PULL_FORALL, AND_IMP_INTRO])
 
+val RTC_RULE2 = RTC_RULES |> SPEC_ALL |> CONJUNCT2
+
+val eval_seq_sing = store_thm(
+  "eval_seq_sing[simp]",
+  ``(m0, Seq [c]) --->* (m, Done) ⇔ (m0, c) --->* (m, Done)``,
+  eq_tac
+  >- (`∀mr0 mr. mr0 --->* mr ⇒
+                ∀m0 c m. mr0 = (m0, Seq [c]) ∧ mr = (m, Done) ⇒
+                       (m0, c) --->* (m, Done)`
+        suffices_by metis_tac[] >>
+      ho_match_mp_tac RTC_STRONG_INDUCT >> simp[] >> dsimp[] >>
+      simp[Once eval_cases, FORALL_PROD] >>
+      dsimp[APPEND_EQ_CONS] >> metis_tac[RTC_RULES]) >>
+  `∀mr0 mr. mr0 --->* mr ⇒
+            ∀m0 c m. mr0 = (m0, c) ∧ mr = (m, Done) ⇒
+                     (m0, Seq [c]) --->* (m, Done)`
+    suffices_by metis_tac[] >>
+  ho_match_mp_tac RTC_STRONG_INDUCT >> dsimp[] >> conj_tac
+  >- (gen_tac >> match_mp_tac RTC_SUBSET >> simp[Once eval_cases]) >>
+  simp[FORALL_PROD] >> qx_genl_tac [`m'`, `c'`, `m0`, `c`, `m`] >>
+  strip_tac >> match_mp_tac RTC_RULE2 >>
+  qexists_tac `(m', Seq [c'])` >> simp[] >>
+  simp[Once eval_cases] >> dsimp[APPEND_EQ_CONS]);
+
+val bb = prove(``(!b. b) = F``, SIMP_TAC bool_ss [FORALL_BOOL])
+
+val graphOf_ind = theorem "graphOf_ind"
+
+val graphOf_ind' =
+    WF_INDUCTION_THM
+      |> Q.ISPEC `inv_image (mlt (<) LEX (<))
+                            (λs. (loopbag s, stmt_weight (K 0) s))`
+      |> SIMP_RULE (srw_ss()) [WF_mlt1, WF_inv_image, pairTheory.WF_LEX,
+                               WF_TC]
+
+val assign_evalDexpr_lemma = prove(
+  ``∀ds rvs m.
+       OPT_SEQUENCE (MAP (evalDexpr m) ds) = SOME rvs ⇒
+       (m, Assign lve ds f) --->* (m, Assign lve (MAP DValue rvs) f)``,
+  simp[OPT_SEQUENCE_EQ_SOME, MEM_MAP, PULL_EXISTS] >>
+  Induct_on `LENGTH (FILTER ($~ o isDValue) ds)` >>
+  simp[LENGTH_NIL_SYM, FILTER_EQ_NIL]
+  >- (rpt strip_tac >>
+      `MAP DValue (MAP THE (MAP (evalDexpr m) ds)) = ds`
+        suffices_by simp[] >>
+      fs[EVERY_MEM] >> simp[LIST_EQ_REWRITE, EL_MAP] >>
+      qx_gen_tac `i` >> strip_tac >>
+      `isDValue (EL i ds) ∧ ∃v. evalDexpr m (EL i ds) = SOME v`
+        by metis_tac[MEM_EL] >>
+      Cases_on `EL i ds` >> fs[] >> fs[evalDexpr_def]) >>
+  dsimp[LENGTH_CONS, FILTER_EQ_CONS, FILTER_EQ_NIL] >>
+  rpt strip_tac >>
+  qmatch_assum_rename_tac `LENGTH (FILTER ($~ o isDValue) sfx) = n` [] >>
+  qmatch_assum_rename_tac `EVERY (λx. isDValue x) pfx` [] >>
+  qmatch_assum_rename_tac `evalDexpr m rd = SOME v` [] >>
+  `∃ma. rd = DMA ma` by (Cases_on `rd` >> fs[evalDexpr_def]) >> veq >> fs[] >>
+  match_mp_tac RTC_RULE2 >>
+  qexists_tac `(m, Assign lve (pfx ++ [DValue v] ++ sfx) f)` >> conj_tac
+  >- (simp[Once eval_cases] >>
+      `evalmaccess m ma = v` suffices_by metis_tac[] >>
+      fs[evalDexpr_def, value_case_eq]) >>
+  first_x_assum (qspec_then `pfx ++ [DValue v] ++ sfx` mp_tac) >>
+  simp[FILTER_APPEND_DISTRIB] >>
+  `¬isArrayError v` by (fs[evalDexpr_def, value_case_eq] >> rw[]) >>
+  `LENGTH (FILTER ($~ o isDValue) pfx) = 0`
+    by simp[LENGTH_NIL, FILTER_EQ_NIL] >>
+  dsimp[evalDexpr_def])
+
+(*
+val graphOf_correct2 = store_thm(
+  "graphOf_correct2",
+  ``∀c0 lab m0 m g. graphOf lab m0 c0 = SOME (m, g) ⇒ (m0,c0) --->* (m, Done)``,
+  ho_match_mp_tac graphOf_ind' >> simp[] >> Cases >> simp[]
+  >- ((* assign *) simp[graphOf_def, PULL_EXISTS] >>
+      disch_then kall_tac >> rpt strip_tac >>
+      qmatch_assum_rename_tac `eval_lvalue m0 lve = SOME lv` [] >>
+      qmatch_assum_rename_tac `getReads m0 ds = SOME rds` [] >>
+      qmatch_rename_tac `(m0, Assign lve ds f) --->* (m,Done)` [] >>
+      simp[Once RTC_CASES_RTC_TWICE] >>
+      qexists_tac `(m0, Assign lve (MAP DValue rvs) f)` >> conj_tac
+      >- metis_tac[assign_evalDexpr_lemma] >>
+      match_mp_tac RTC_SUBSET >>
+      simp[Once eval_cases, EVERY_MEM, MEM_MAP, PULL_EXISTS, MAP_MAP_o] >>
+      imp_res_tac evalDexpr_notArrayError >> simp[] >>
+      `MAP (destDValue o DValue) rvs = rvs` suffices_by simp[] >>
+      simp[LIST_EQ_REWRITE, EL_MAP, destDValue_Value_COND] >> rw[] >>
+      metis_tac[MEM_EL])
+  >- ((* if *) simp[graphOf_def, value_case_eq, bool_case_eq, EXISTS_PROD] >>
+      dsimp[] >> rpt strip_tac >> match_mp_tac RTC_RULE2 >>
+      simp[EXISTS_PROD, Once eval_cases, bb] >>
+      fs[AND_IMP_INTRO] >> first_x_assum match_mp_tac >>
+      simp[pairTheory.LEX_DEF, MAX_PLUS] >> metis_tac[])
+  >- ((* forloop *)
+      simp[graphOf_def', PULL_EXISTS, FORALL_PROD] >> strip_tac >>
+      qx_genl_tac [`lab`, `m0`, `m`, `dvs`, `g`] >> strip_tac >>
+      match_mp_tac RTC_RULE2 >>
+      simp[Once eval_cases, EXISTS_PROD] >>
+      Q.UNDISCH_THEN `dvalues m0 d = SOME dvs` kall_tac >>
+      qabbrev_tac `g0 : value list pcg = ε` >>
+      Q.RM_ABBREV_TAC `g0` >>
+      pop_assum mp_tac >> map_every qid_spec_tac [`m0`, `g0`] >>
+      Induct_on `dvs` >> simp[]
+      >- (match_mp_tac RTC_RULE2 >> simp[EXISTS_PROD, Once eval_cases]) >>
+      qx_gen_tac `d0` >> dsimp[] >> qx_genl_tac [`g0`, `m0`] >>
+      disch_then (fn th =>
+        assume_tac th >>
+        strip_assume_tac (MATCH_MP FOLDL_graphOfL_EQ_SOME_E th)) >> fs[] >>
+      pop_assum mp_tac >>
+      dsimp[graphOfL_def, FORALL_PROD] >> qx_gen_tac `subg` >> strip_tac >>
+      qmatch_assum_rename_tac
+        `graphOf (d0::lab) m0 (ssubst vnm d0 body) = SOME (m0', subg)` [] >>
+      qabbrev_tac `bod' = ssubst vnm d0 body` >>
+      `(m0, bod') --->* (m0', Done)`
+        by (fs[AND_IMP_INTRO, PULL_FORALL] >> first_x_assum match_mp_tac >>
+            simp[Abbr`bod'`, pairTheory.LEX_DEF] >> rw[] >> metis_tac[]) >>
+      `(m0, Label d0 bod') --->* (m0', Done)`
+        by (`(m0, Label d0 bod') --->* (m0', Label d0 Done)` by simp[] >>
+            `(m0', Label d0 Done) ---> (m0', Done)` by simp[Once eval_cases] >>
+            metis_tac[RTC_CASES2]) >>
+      qmatch_abbrev_tac `(m0, Seq (Label d0 bod' :: rest)) --->* (m, Done)` >>
+      `(m0, Seq (Label d0 bod' :: rest)) --->* (m0', Seq (Done :: rest))`
+        by simp[evalrtc_seq |> Q.INST [`pfx` |-> `[]`]
+                            |> SIMP_RULE (srw_ss()) []] >>
+      simp[Once RTC_CASES_RTC_TWICE] >>
+      qexists_tac `(m0',Seq (Done :: rest))` >> simp[] >>
+      first_x_assum match_mp_tac >> qexists_tac `g0'` >> simp[])
+  >- ((* parloop *) simp[graphOf_def', PULL_EXISTS] >> strip_tac >>
+      qx_genl_tac [`lab`, `m0`, `m`, `dvs`, `gs`] >> strip_tac >>
+      match_mp_tac RTC_RULE2 >> simp[EXISTS_PROD, Once eval_cases] >> fs[] >>
+      Q.UNDISCH_THEN `dvalues m0 d = SOME dvs` kall_tac >>
+      ntac 3 (pop_assum mp_tac) >> map_every qid_spec_tac [`gs`, `m0`] >>
+      Induct_on `dvs` >> simp[]
+      >- (simp[OPT_SEQUENCE_def] >> rw[] >>
+          match_mp_tac RTC_RULE2 >> simp[EXISTS_PROD, Once eval_cases]) >>
+      dsimp[OPT_SEQUENCE_def, PULL_EXISTS, FORALL_PROD] >>
+      qx_genl_tac [`dv`, `m0`, `gs0`, `m'`, `g'`] >> rpt strip_tac >>
+      `∀i j. i < j ∧ j < LENGTH gs0 ⇒ EL i gs0 ≁ᵍ EL j gs0`
+        by (rpt gen_tac >>
+            first_x_assum (qspecl_then [`SUC i`, `SUC j`] mp_tac) >>
+            simp[]) >>
+      `pcg_eval g' (SOME m0) = SOME m'` by metis_tac[graphOf_pcg_eval] >>
+      first_x_assum (qspecl_then [`m'`, `gs0`] mp_tac) >> simp[] >> fs[] >>
+      qmatch_assum_rename_tac
+        `graphOf (dv::lab) m0 (ssubst vnm dv body) = SOME (m', g')` [] >>
+      fs[AND_IMP_INTRO, PULL_FORALL] >>
+      `(m0, ssubst vnm dv body) --->* (m', Done)`
+        by (first_x_assum match_mp_tac >> simp[pairTheory.LEX_DEF] >> rw[] >>
+            metis_tac[]) >>
+      `(m0, Label dv (ssubst vnm dv body)) --->* (m', Label dv Done)`
+        by simp[] >>
+      `(m', Label dv Done) --->* (m', Done)` by simp[] >>
+      `(m0, Label dv (ssubst vnm dv body)) --->* (m', Done)`
+        by metis_tac[RTC_CASES_RTC_TWICE] >>
+      strip_tac >>
+      qmatch_abbrev_tac `(m0, Par (c1 :: rest)) --->* (m, Done)` >>
+      `(m0, Par (c1::rest)) --->* (m', Par (Done::rest))`
+        by metis_tac[evalrtc_par |> Q.INST [`pfx` |-> `[]`]
+                                 |> SIMP_RULE (srw_ss()) []] >>
+      simp[Once RTC_CASES_RTC_TWICE] >>
+      qexists_tac `(m', Par (Done::rest))` >> simp[] >>
+      match_mp_tac ParRTCDone_I >> first_x_assum match_mp_tac >>
+      `MAP (λv. OPTION_MAP SND (graphOf (v::lab) m' (ssubst vnm v body)))
+           dvs =
+       MAP (λv. OPTION_MAP SND (graphOf (v::lab) m0 (ssubst vnm v body)))
+           dvs` suffices_by simp[] >>
+      simp[MAP_EQ_f] >> qx_gen_tac `dv'` >> strip_tac >>
+      fs[OPT_SEQUENCE_EQ_SOME, MEM_MAP, PULL_EXISTS] >>
+      first_x_assum (qspec_then `dv'` mp_tac) >>
+      simp[PULL_EXISTS, FORALL_PROD, EXISTS_PROD] >>
+      `∃dvi'. dvi' < LENGTH dvs ∧ dv' = EL dvi' dvs` by metis_tac[MEM_EL] >>
+      qx_genl_tac [`m''`, `g''`] >>
+      Q.SUBGOAL_THEN `0 < SUC dvi' ∧ SUC dvi' < SUC (LENGTH gs0)`
+        (fn th => first_x_assum (mp_tac o C MATCH_MP th)) >> simp[EL_MAP] >>
+      csimp[AND_IMP_INTRO] >>
+      metis_tac[graphOf_pcg_eval_diamond])
+  >- ((* seq *) simp[graphOf_def', PULL_EXISTS, FORALL_PROD] >> strip_tac >>
+      qx_genl_tac [`lab`, `m0`, `m`, `g`] >> strip_tac >>
+      qabbrev_tac `g0 : value list pcg = ε` >>
+      Q.RM_ABBREV_TAC `g0` >>
+      qmatch_rename_tac `(m0, Seq cs) --->* (m, Done)` [] >>
+      `∀c lab m0 m g.
+          MEM c cs ∧ graphOf lab m0 c = SOME(m,g) ⇒ (m0,c) --->* (m,Done)`
+        by (rpt strip_tac >> fs[AND_IMP_INTRO, PULL_FORALL] >>
+            first_x_assum match_mp_tac >> simp[pairTheory.LEX_DEF] >>
+            imp_res_tac (MEM_FOLDR_mlt |> INST_TYPE [alpha |-> ``:stmt``]
+                                       |> Q.INST [`f` |-> `I`]
+                                       |> SIMP_RULE (srw_ss()) []
+                                       |> GEN_ALL) >>
+            simp[] >> asm_simp_tac (srw_ss() ++ ETA_ss) [SUM_MAP_lemma] >>
+            metis_tac[]) >>
+      ntac 2 (pop_assum mp_tac) >> pop_assum kall_tac >>
+      map_every qid_spec_tac [`m0`, `g0`] >>
+      Induct_on `cs` >> simp[]
+      >- (match_mp_tac RTC_RULE2 >>
+          simp[EXISTS_PROD, Once eval_cases]) >>
+      qx_gen_tac `c0` >> dsimp[] >> qx_genl_tac [`g0`, `m0`] >>
+      disch_then (fn th =>
+        assume_tac th >>
+        strip_assume_tac (MATCH_MP FOLDL_graphOfL_EQ_SOME_E th)) >> fs[] >>
+      pop_assum mp_tac >>
+      dsimp[graphOfL_def, FORALL_PROD] >> qx_gen_tac `subg` >> rpt strip_tac >>
+      `(m0, c0) --->* (m0', Done)` by metis_tac[] >>
+      `(m0, Seq (c0 :: cs)) --->* (m0', Seq (Done :: cs))`
+        by simp[evalrtc_seq |> Q.INST [`pfx` |-> `[]`]
+                            |> SIMP_RULE (srw_ss()) []] >>
+      simp[Once RTC_CASES_RTC_TWICE] >>
+      qexists_tac `(m0',Seq (Done :: cs))` >> simp[] >>
+      first_x_assum (qspecl_then [`g0'`, `m0'`] mp_tac) >> simp[] >>
+      disch_then match_mp_tac >> metis_tac[])
+  >- ((* par *) simp[graphOf_def', PULL_EXISTS] >>
+      rpt strip_tac >> qmatch_rename_tac `(m0, Par cs) --->* (m, Done)` [] >>
+      `∀c lab m0 m g.
+        MEM c cs ∧ graphOf lab m0 c = SOME(m,g) ⇒ (m0,c) --->* (m,Done)`
+        by (rpt strip_tac >> fs[AND_IMP_INTRO, PULL_FORALL] >>
+            first_x_assum match_mp_tac >> simp[pairTheory.LEX_DEF] >>
+            imp_res_tac (MEM_FOLDR_mlt |> INST_TYPE [alpha |-> ``:stmt``]
+                                       |> Q.INST [`f` |-> `I`]
+                                       |> SIMP_RULE (srw_ss()) []
+                                       |> GEN_ALL) >>
+            simp[] >> asm_simp_tac (srw_ss() ++ ETA_ss) [SUM_MAP_lemma] >>
+            metis_tac[]) >>
+      ntac 4 (pop_assum mp_tac) >> pop_assum kall_tac >>
+      map_every qid_spec_tac [`m0`, `gs`] >>
+      Induct_on `cs` >> dsimp[OPT_SEQUENCE_def, PULL_EXISTS, FORALL_PROD]
+      >- simp[Once eval_cases] >>
+      qx_genl_tac [`c`, `m0`, `gs`, `m0'`, `g0'`] >> rpt strip_tac >> fs[] >>
+      simp[Once RTC_CASES_RTC_TWICE] >>
+      qexists_tac `(m0', Par(Done::cs))` >> simp[] >> conj_tac
+      >- (match_mp_tac (evalrtc_par |> Q.INST [`pfx` |-> `[]`]
+                                    |> SIMP_RULE (srw_ss()) []) >>
+          metis_tac[]) >>
+      match_mp_tac ParRTCDone_I >>
+
+
+
+  ho_match_mp_tac graphOf_ind >> simp[] >> rpt conj_tac
+  >- (simp[graphOf_def, value_case_eq, bool_case_eq, EXISTS_PROD] >>
+      dsimp[] >> rpt strip_tac >> match_mp_tac RTC_RULE2 >>
+      simp[EXISTS_PROD, Once eval_cases, bb])
+  >- (simp[graphOf_def', PULL_EXISTS, FORALL_PROD] >>
+      qx_genl_tac [`lab`, `m0`, `vnm`, `d`, `body`] >> strip_tac >>
+      qx_genl_tac [`m`, `dvs`, `g`] >> strip_tac >> fs[] >>
+      match_mp_tac RTC_RULE2 >>
+      simp[Once eval_cases, EXISTS_PROD] >>
+      Q.UNDISCH_THEN `dvalues m0 d = SOME dvs` kall_tac >>
+      qabbrev_tac `g0 : value list pcg = ε` >>
+      Q.RM_ABBREV_TAC `g0` >>
+      pop_assum mp_tac >> map_every qid_spec_tac [`m0`, `g0`] >>
+      Induct_on `dvs` >> simp[]
+      >- (match_mp_tac RTC_RULE2 >> simp[EXISTS_PROD, Once eval_cases]) >>
+      qx_gen_tac `d0` >> dsimp[] >> qx_genl_tac [`g0`, `m0`] >> strip_tac >>
+      disch_then (fn th =>
+        assume_tac th >>
+        strip_assume_tac (MATCH_MP FOLDL_graphOfL_EQ_SOME_E th)) >> fs[] >>
+      pop_assum mp_tac >>
+      dsimp[graphOfL_def, FORALL_PROD] >> qx_gen_tac `subg` >> strip_tac >>
+      qabbrev_tac `bod' = ssubst vnm d0 body` >>
+      `(m0, bod') --->* (m0', Done)` by simp[] >>
+      `(m0, Label d0 bod') --->* (m0', Done)`
+        by (qspecl_then [`m0`, `m0'`, `[d0]`] strip_assume_tac
+                        labelled_RTC_mono >> fs[] >>
+            `(m0, Label d0 bod') --->* (m0', Label d0 Done)`
+              by metis_tac[] >>
+            `(m0', Label d0 Done) ---> (m0', Done)`
+              by simp[Once eval_cases] >>
+            metis_tac[RTC_CASES2]) >>
+      qmatch_abbrev_tac `(m0, Seq (Label d0 bod' :: rest)) --->* (m, Done)` >>
+      `(m0, Seq (Label d0 bod' :: rest)) --->* (m0', Seq (Done :: rest))`
+        by simp[evalrtc_seq |> Q.INST [`pfx` |-> `[]`]
+                            |> SIMP_RULE (srw_ss()) []] >>
+      simp[Once RTC_CASES_RTC_TWICE] >>
+      qexists_tac `(m0',Seq (Done :: rest))` >> simp[] >>
+      first_x_assum match_mp_tac >> qexists_tac `g0'` >> simp[])
+  >- ((* seq *)
+      simp[graphOf_def'] >> qx_genl_tac [`lab`, `m0`, `cs`] >> strip_tac >>
+      qx_genl_tac [`m`, `g`] >> qabbrev_tac `g0 : value list pcg = ε` >>
+      Q.RM_ABBREV_TAC `g0` >> map_every qid_spec_tac [`m0`, `g0`] >>
+      Induct_on `cs` >> simp[]
+      >- (match_mp_tac RTC_RULE2 >> simp[EXISTS_PROD, Once eval_cases]) >>
+      dsimp[] >> qx_genl_tac [`c`, `g0`, `m0`] >> rpt strip_tac >>
+      imp_res_tac FOLDL_graphOfL_EQ_SOME_E >> fs[] >> pop_assum mp_tac >>
+      dsimp[graphOfL_def, FORALL_PROD] >> qx_gen_tac `subg` >> strip_tac >>
+      res_tac >> qmatch_assum_rename_tac `(m0,c) --->* (m0', Done)` [] >>
+      qmatch_assum_rename_tac `(m0', Seq cs) --->* (m, Done)` [] >>
+      simp[Once RTC_CASES_RTC_TWICE] >> qexists_tac `(m0', Seq (Done::cs))` >>
+      simp[] >>
+      simp [evalrtc_seq |> Q.INST [`pfx` |-> `[]`]
+                        |> SIMP_RULE (srw_ss()) []])
+  >- ((* parloop *)
+      simp[graphOf_def', PULL_EXISTS] >>
+      qx_genl_tac [`lab`, `m0`, `vnm`, `d`, `body`] >> strip_tac >>
+      qx_genl_tac [`m`, `dvs`, `gs`] >> strip_tac >>
+      match_mp_tac RTC_RULE2 >> simp[EXISTS_PROD, Once eval_cases] >> fs[] >>
+      Q.UNDISCH_THEN `dvalues m0 d = SOME dvs` kall_tac >>
+      rpt (pop_assum mp_tac) >> map_every qid_spec_tac [`gs`, `m0`] >>
+      Induct_on `dvs` >> simp[]
+      >- (simp[OPT_SEQUENCE_def] >> rw[] >>
+          match_mp_tac RTC_RULE2 >> simp[EXISTS_PROD, Once eval_cases]) >>
+      dsimp[OPT_SEQUENCE_def, PULL_EXISTS, FORALL_PROD] >>
+      qx_genl_tac [`dv`, `m0`, `gs0`, `m'`, `g'`] >> rpt strip_tac >>
+      `∀i j. i < j ∧ j < LENGTH gs0 ⇒ EL i gs0 ≁ᵍ EL j gs0`
+        by (rpt gen_tac >>
+            first_x_assum (qspecl_then [`SUC i`, `SUC j`] mp_tac) >>
+            simp[]) >>
+      `pcg_eval g' (SOME m0) = SOME m'` by metis_tac[graphOf_pcg_eval] >>
+      first_x_assum (qspecl_then [`m'`, `gs0`] mp_tac) >> simp[] >> fs[] >>
+
+
+
+
+*)
 val _ = export_theory();

@@ -4,6 +4,7 @@ struct
 open HolKernel simpLib
 
 open listRangeTheory finite_mapTheory PseudoCTheory PseudoCOpsTheory
+open PseudoCHDAGTheory
 
 open lcsymtacs intReduce
 
@@ -13,7 +14,7 @@ fun newrule t =
 val evalths = [newrule ``Seq []``, newrule ``Done``,
                newrule ``ForLoop v d b``, newrule ``Assign w rds vf``,
                newrule ``ParLoop v d b``, newrule ``Par []``,
-               newrule ``Par (h::t)``, newrule ``AssignVar v rds vf``,
+               newrule ``Par (h::t)``,
                newrule ``IfStmt g t e``, newrule ``Malloc v n value``,
                newrule ``Label l s``, newrule ``Local var e s``]
 
@@ -54,6 +55,20 @@ val evalseq_cons = prove(
   simp[newrule ``Seq cs``] >> dsimp[] >> metis_tac[])
 
 val bb = prove(``(!b. b) = F``, SIMP_TAC bool_ss [FORALL_BOOL])
+
+val atomic = prove(
+  ``∀m0 s mr.
+      (m0, Atomic s) ---> mr ⇔
+      case graphOf [] m0 s of
+          SOME (m, _) => mr = (m, Done)
+        | NONE => unint ((m0, Atomic s) ---> mr)``,
+  simp[Once eval_cases, SimpLHS, pairTheory.FORALL_PROD] >>
+  rpt gen_tac >>
+  `graphOf [] m0 s = NONE ∨ ∃m g. graphOf [] m0 s = SOME(m,g)`
+    by metis_tac[optionTheory.option_CASES, pairTheory.pair_CASES]
+  >- (simp[markerTheory.unint_def] >> simp[SimpRHS, Once eval_cases]) >>
+  simp[] >> metis_tac[graphOf_correct
+
 
 fun subeval t =
     (SIMP_CONV (srw_ss() ++ INT_REDUCE_ss)

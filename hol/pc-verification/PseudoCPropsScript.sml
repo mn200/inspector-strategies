@@ -66,7 +66,7 @@ val stmt_weight_def = tDefine "stmt_weight" `
   (stmt_weight (ParLoop v d s) = stmt_weight s + 1) ∧
   (stmt_weight (Seq stmts) = SUM (MAP stmt_weight stmts) + LENGTH stmts) ∧
   (stmt_weight (Par stmts) =
-    SUM (MAP stmt_weight stmts) + 1 + LENGTH stmts) ∧
+    SUM (MAP stmt_weight stmts) + LENGTH stmts) ∧
   (stmt_weight (Label v s) = stmt_weight s + 1) ∧
   (stmt_weight (Local v e s) = stmt_weight s + 1) ∧
   (stmt_weight (Atomic s) = stmt_weight s + 1)
@@ -352,6 +352,9 @@ val (evalrtc_seq, evalrtc_par) =
                    |> SIMP_RULE (srw_ss()) [DISJ_IMP_THM, FORALL_AND_THM,
                                             AND_IMP_INTRO, LEFT_AND_OVER_OR]
                    |> CONJ_PAIR
+
+val _ = save_thm("evalrtc_seq", evalrtc_seq)
+val _ = save_thm("evalrtc_par", evalrtc_par)
 
 val _ = augment_srw_ss [ETA_ss]
 
@@ -667,6 +670,16 @@ val labelled_done = store_thm(
   qexists_tac `(m, Label v Done)` >> reverse conj_tac >- e1tac >>
   simp[labelled_RTC_mono |> SPEC_ALL |> Q.INST [`vs` |-> `[v]`]
                          |> SIMP_RULE (srw_ss()) []]);
+
+val Label_RTC_mono = save_thm(
+  "Label_RTC_mono[simp]",
+  labelled_RTC_mono |> SPEC_ALL |> Q.INST [`vs` |-> `[v]`]
+                    |> SIMP_RULE (srw_ss()) [])
+
+val Label_Done = save_thm(
+  "Label_Done[simp]",
+  labelled_done |> Q.INST [`vs` |-> `[v]`]
+                |> SIMP_RULE list_ss [])
 
 val labelled_abort1 = store_thm(
   "labelled_abort1[simp]",
