@@ -93,6 +93,7 @@ val _ = Datatype`
        | Malloc vname expr value
        | ForLoop vname domain stmt
        | ParLoop vname domain stmt
+       | While expr stmt
        | Seq (stmt list)
        | Par (stmt list)
        | Local vname expr stmt
@@ -111,6 +112,7 @@ val stmt_induction = store_thm(
      (∀nm e value. P (Malloc nm e value)) ∧
      (∀s d stmt. P stmt ⇒ P (ForLoop s d stmt)) ∧
      (∀s d stmt. P stmt ⇒ P (ParLoop s d stmt)) ∧
+     (∀e s. P s ⇒ P (While e s)) ∧
      (∀stmts. (∀m s. MEM s stmts ⇒ P s) ⇒ P (Seq stmts)) ∧
      (∀stmts. (∀m s. MEM s stmts ⇒ P s) ⇒ P (Par stmts)) ∧
      (∀v s. P s ⇒ P (Label v s)) ∧
@@ -123,6 +125,22 @@ val stmt_induction = store_thm(
   `(∀s. P s) ∧ (∀l s. MEM s l ⇒ P s)` suffices_by simp[] >>
   ho_match_mp_tac (TypeBase.induction_of ``:stmt``) >>
   simp[] >> dsimp[pairTheory.FORALL_PROD] >> metis_tac[]);
+
+val whilefree_def = tDefine "whilefree" `
+  whilefree (IfStmt _ t e) = (whilefree t ∧ whilefree e) ∧
+  whilefree (ForLoop _ _ b) = whilefree b ∧
+  whilefree (ParLoop _ _ b) = whilefree b ∧
+  whilefree (Seq cs) = (∀c. MEM c cs ⇒ whilefree c) ∧
+  whilefree (Par cs) = (∀c. MEM c cs ⇒ whilefree c) ∧
+  whilefree (While _ _) = F ∧
+  whilefree (Label _ s) = whilefree s ∧
+  whilefree (Local _ _ s) = whilefree s ∧
+  whilefree (Atomic s) = whilefree s ∧
+  whilefree _ = T
+` (WF_REL_TAC `measure stmt_size` >> simp[] >>
+   Induct >> dsimp[definition "stmt_size_def"] >> rpt strip_tac >>
+   res_tac >> simp[])
+val _ = export_rewrites ["whilefree_def"]
 
 (* lookup_array : memory -> string -> int -> value *)
 val lookup_array_def = Define`
@@ -265,6 +283,8 @@ val ssubst_def = tDefine "ssubst" `
   (ssubst vnm value (ParLoop vnm' (D lo hi) s) =
      ParLoop vnm' (D (esubst vnm value lo) (esubst vnm value hi))
              (if vnm = vnm' then s else ssubst vnm value s)) ∧
+  (ssubst vnm value (While e s) =
+     While (esubst vnm value e) (ssubst vnm value s)) ∧
   (ssubst vnm value (Seq slist) = Seq (MAP (ssubst vnm value) slist)) ∧
   (ssubst vnm value (Par slist) = Par (MAP (ssubst vnm value) slist)) ∧
   (ssubst vnm value (Label v s) = Label v (ssubst vnm value s)) ∧
@@ -352,6 +372,7 @@ val svarsOf_def = tDefine "svarsOf" `
   svarsOf (Malloc _ e _) = varsOf e ∧
   svarsOf (ForLoop _ dm b) = dmvarsOf dm ∪ svarsOf b ∧
   svarsOf (ParLoop _ dm b) = dmvarsOf dm ∪ svarsOf b ∧
+  svarsOf (While g b) = varsOf g ∪ svarsOf b ∧
   svarsOf (Seq slist) = listVarsOf svarsOf slist ∧
   svarsOf (Par slist) = listVarsOf svarsOf slist ∧
   svarsOf (Label _ s) = svarsOf s ∧
@@ -553,6 +574,11 @@ val (eval_rules, eval_ind, eval_cases) = Hol_reln`
       MEM Abort cs
      ⇒
       eval (m, Par cs) (m, Abort))
+
+     ∧
+
+  (∀g b m.
+      eval (m, While g b) (m, IfStmt g (Seq [b; While g b]) Done))
 
      ∧
 

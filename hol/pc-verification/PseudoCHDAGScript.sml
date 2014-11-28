@@ -332,7 +332,9 @@ val graphOf_def = tDefine "graphOf" `
        SOME(m,HD (addLabel lab (readAction () m0 e)) <+ g)
      od) ∧
 
-  (graphOf lab m (Atomic s) = NONE)
+  (graphOf lab m (Atomic s) = NONE) ∧
+
+  (graphOf lab m (While g b) = NONE)
 ` (WF_REL_TAC
      `inv_image (mlt (<) LEX (<)) (λ(i,m,s). (loopbag s, stmt_weight (K 0) s))` >>
    simp[WF_mlt1, FOLDR_MAP, mlt_loopbag_lemma] >>
@@ -505,6 +507,7 @@ val graphOf_pcg_eval = store_thm(
   >- ((* Label *) simp[graphOf_def])
   >- ((* Local *) simp[graphOf_def, EXISTS_PROD, PULL_EXISTS])
   >- ((* Atomic *) simp[graphOf_def])
+  >- ((* While *) simp[graphOf_def])
 );
 
 val assert_EQ_SOME = store_thm(
@@ -948,6 +951,7 @@ val graphOf_apply_action_diamond = store_thm(
         by metis_tac[apply_action_expr_eval_commutes, touches_SYM] >>
       simp[])
   >- ((* Atomic *) simp[graphOf_def])
+  >- ((* While *) simp[graphOf_def])
 )
 
 val graphOf_pcg_eval_diamond = store_thm(
@@ -1358,6 +1362,7 @@ val graphOf_correct_lemma = store_thm(
       simp[graphOf_def, OPT_SEQUENCE_EQ_SOME, MEM_MAP,
            PULL_EXISTS] >> rpt strip_tac >>
       disj1_tac >> qexists_tac `Abort` >> simp[])
+  >- ((* While *) simp[graphOf_def])
   >- ((* Malloc *) simp[graphOf_def])
   >- ((* Label *) simp[graphOf_def])
   >- ((* Atomic *) simp[graphOf_def])
@@ -1451,7 +1456,8 @@ val assign_evalDexpr_lemma = prove(
 val graphOf_implies_Done_computation = store_thm(
   "graphOf_implies_Done_computation",
   ``∀c0 lab m0 m g. graphOf lab m0 c0 = SOME (m, g) ⇒ (m0,c0) --->* (m, Done)``,
-  ho_match_mp_tac graphOf_ind' >> simp[] >> Cases >> simp[]
+  ho_match_mp_tac graphOf_ind' >> simp[] >> Cases >> simp[] >>
+  TRY (simp[graphOf_def] >> NO_TAC)
   >- ((* assign *) simp[graphOf_def, PULL_EXISTS] >>
       disch_then kall_tac >> rpt strip_tac >>
       qmatch_assum_rename_tac `eval_lvalue m0 lve = SOME lv` [] >>
@@ -1646,7 +1652,6 @@ val graphOf_implies_Done_computation = store_thm(
       match_mp_tac Label_RTC_mono >> fs[AND_IMP_INTRO, PULL_FORALL] >>
       first_x_assum match_mp_tac >> simp[pairTheory.LEX_DEF] >>
       metis_tac[])
-  >- ((* Atomic *) simp[graphOf_def])
 )
 
 val graphOf_correct = store_thm(

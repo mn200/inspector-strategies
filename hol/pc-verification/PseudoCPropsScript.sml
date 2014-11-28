@@ -64,6 +64,7 @@ val stmt_weight_def = tDefine "stmt_weight" `
   (stmt_weight (IfStmt g t e) = MAX (stmt_weight t) (stmt_weight e) + 3) ∧
   (stmt_weight (ForLoop v d s) = stmt_weight s + 1) ∧
   (stmt_weight (ParLoop v d s) = stmt_weight s + 1) ∧
+  (stmt_weight (While g b) = stmt_weight b + 1) ∧
   (stmt_weight (Seq stmts) = SUM (MAP stmt_weight stmts) + LENGTH stmts) ∧
   (stmt_weight (Par stmts) =
     SUM (MAP stmt_weight stmts) + LENGTH stmts) ∧
@@ -80,6 +81,7 @@ val seq_count_def = tDefine "seq_count" `
   (seq_count (Par cs) = SUM (MAP seq_count cs) + 1) ∧
   (seq_count (ParLoop v d s) = seq_count s) ∧
   (seq_count (ForLoop v d s) = seq_count s) ∧
+  (seq_count (While g b) = seq_count b) ∧
   (seq_count (IfStmt g t e) = seq_count t + seq_count e) ∧
   (seq_count (Label v s) = seq_count s) ∧
   (seq_count (Local v e s) = seq_count s) ∧
@@ -103,6 +105,7 @@ val loopbag_def = tDefine "loopbag" `
                              else BAG_IMAGE SUC (loopbag s)) ∧
   (loopbag (ParLoop v d s) = if loopbag s = {||} then {|1|}
                              else BAG_IMAGE SUC (loopbag s)) ∧
+  (loopbag (While g b) = loopbag b) ∧
   (loopbag (Seq stmts) =
      FOLDR (λms b. BAG_UNION (loopbag ms) b) {||} stmts) ∧
   (loopbag (Par stmts) =
@@ -267,9 +270,9 @@ val stmt_weight_ssubst = store_thm(
 
 val eval_terminates = store_thm(
   "eval_terminates",
-  ``∀a b. eval a b ⇒ evalR b a``,
+  ``∀a b. eval a b ⇒ whilefree (SND a) ⇒ evalR b a``,
   Induct_on `eval a b` >> rpt strip_tac >>
-  lfs[LEX_DEF, MAX_SET_THM, SUM_APPEND]
+  lfs[LEX_DEF, MAX_SET_THM, SUM_APPEND, DISJ_IMP_THM, FORALL_AND_THM]
   >- (Induct_on `pfx` >> simp[])
   >- (Induct_on `pfx` >> simp[])
   >- (Induct_on `pfx` >> simp[])
@@ -281,10 +284,11 @@ val eval_terminates = store_thm(
   >- (rw[])
   >- (rw[] >> simp[FOLDR_MAP, mlt_loopbag_lemma])
   >- (rw[])
-  >- (disj1_tac >> rw[] >> Induct_on `pfx` >> simp[] >>
-      Induct_on `sfx` >> simp[])
-  >- (disj2_tac >> rw[] >> Induct_on `pfx` >> simp[])
-  >- (disj2_tac >> rw[] >> Induct_on `pfx` >> simp[])
+  >- (rw[] >> fs[DISJ_IMP_THM, FORALL_AND_THM]
+      >- (disj1_tac >> rw[] >> Induct_on `pfx` >> simp[] >>
+          Induct_on `sfx` >> simp[])
+      >- (disj2_tac >> rw[] >> Induct_on `pfx` >> simp[])
+      >- (disj2_tac >> rw[] >> Induct_on `pfx` >> simp[]))
   >- (metis_tac[])
   >- (metis_tac[])
   >- (metis_tac[])
@@ -300,6 +304,7 @@ val strip_label_def = tDefine "strip_label" `
   (strip_label (Label v s) = strip_label s) ∧
   (strip_label (Local v e s) = Local v e (strip_label s)) ∧
   (strip_label (Atomic s) = Atomic (strip_label s)) ∧
+  (strip_label (While g b) = While g (strip_label b)) ∧
   (strip_label s = s)
 ` (WF_REL_TAC `measure stmt_size` >> simp[] >>
    Induct >> dsimp[stmt_size_def] >> rpt strip_tac >> res_tac >>
@@ -468,6 +473,13 @@ val strip_label_EQ_Atomic = store_thm(
   ``∀c s. strip_label c = Atomic s ⇔
           ∃vs s'. c = labelled vs (Atomic s') ∧
                   strip_label s' = s``,
+  ho_match_mp_tac stmt_induction >> simp[PULL_EXISTS] >> metis_tac[]);
+
+val strip_label_EQ_While = store_thm(
+  "strip_label_EQ_While[simp]",
+  ``∀c g b. strip_label c = While g b ⇔
+            ∃vs b'. c = labelled vs (While g b') ∧
+                    strip_label b' = b``,
   ho_match_mp_tac stmt_induction >> simp[PULL_EXISTS] >> metis_tac[]);
 
 val strip_label_ssubst = store_thm(
@@ -889,6 +901,11 @@ val strip_label_simulation1 = prove(
       qmatch_assum_rename_tac `MAP strip_label sfx = MAP strip_label s'` [] >>
       qexists_tac `(m0, Par (p' ++ [Abort] ++ s'))` >> reverse conj_tac >- etac>>
       match_mp_tac evalrtc_par >> simp[])
+  >- ((* while *) simp[PULL_EXISTS, MAP_EQ_CONS] >>
+      qx_genl_tac [`g`, `b`, `m0`, `vs`, `b'`] >> strip_tac >>
+      map_every qexists_tac [`vs`, `[]`, `[]`, `b'`, `[]`, `b'`] >>
+      simp[] >> match_mp_tac labelled_RTC_mono >>
+      match_mp_tac RTC_SUBSET >> e1tac)
   >- (simp[PULL_EXISTS] >> qx_genl_tac [`m0`, `s`, `m`] >>
       strip_tac >>
       qmatch_assum_abbrev_tac `eR^* (m0,s) (m,Done)` >>
