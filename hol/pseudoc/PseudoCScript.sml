@@ -494,7 +494,7 @@ val (eval_rules, eval_ind, eval_cases) = Hol_reln`
   (* lvalue is evaluated atomically when reads are ready to go;
      assumption is that write/destination calculation is never
      racy with respect to data arrays. *)
-  (∀rdes m0 m' vf.
+  (∀w rdes m0 m' vf.
       EVERY isDValue rdes ∧
       upd_write m0 w vf (MAP destDValue rdes) = SOME m'
      ⇒
