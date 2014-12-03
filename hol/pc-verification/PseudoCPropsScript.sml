@@ -65,6 +65,7 @@ val stmt_weight_def = tDefine "stmt_weight" `
   (stmt_weight (ForLoop v d s) = stmt_weight s + 1) ∧
   (stmt_weight (ParLoop v d s) = stmt_weight s + 1) ∧
   (stmt_weight (While g b) = stmt_weight b + 1) ∧
+  (stmt_weight (WaitUntil g) = 1) ∧
   (stmt_weight (Seq stmts) = SUM (MAP stmt_weight stmts) + LENGTH stmts) ∧
   (stmt_weight (Par stmts) =
     SUM (MAP stmt_weight stmts) + LENGTH stmts) ∧
@@ -106,6 +107,7 @@ val loopbag_def = tDefine "loopbag" `
   (loopbag (ParLoop v d s) = if loopbag s = {||} then {|1|}
                              else BAG_IMAGE SUC (loopbag s)) ∧
   (loopbag (While g b) = loopbag b) ∧
+  (loopbag (WaitUntil g) = {||}) ∧
   (loopbag (Seq stmts) =
      FOLDR (λms b. BAG_UNION (loopbag ms) b) {||} stmts) ∧
   (loopbag (Par stmts) =
@@ -480,6 +482,12 @@ val strip_label_EQ_While = store_thm(
   ``∀c g b. strip_label c = While g b ⇔
             ∃vs b'. c = labelled vs (While g b') ∧
                     strip_label b' = b``,
+  ho_match_mp_tac stmt_induction >> simp[PULL_EXISTS] >> metis_tac[]);
+
+val strip_label_EQ_WaitUntil = store_thm(
+  "strip_label_EQ_WaitUntil[simp]",
+  ``∀c g. strip_label c = WaitUntil g ⇔
+          ∃vs. c = labelled vs (WaitUntil g)``,
   ho_match_mp_tac stmt_induction >> simp[PULL_EXISTS] >> metis_tac[]);
 
 val strip_label_ssubst = store_thm(

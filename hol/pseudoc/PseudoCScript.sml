@@ -94,6 +94,7 @@ val _ = Datatype`
        | ForLoop vname domain stmt
        | ParLoop vname domain stmt
        | While expr stmt
+       | WaitUntil expr
        | Seq (stmt list)
        | Par (stmt list)
        | Local vname expr stmt
@@ -113,6 +114,7 @@ val stmt_induction = store_thm(
      (∀s d stmt. P stmt ⇒ P (ForLoop s d stmt)) ∧
      (∀s d stmt. P stmt ⇒ P (ParLoop s d stmt)) ∧
      (∀e s. P s ⇒ P (While e s)) ∧
+     (∀e. P (WaitUntil e)) ∧
      (∀stmts. (∀m s. MEM s stmts ⇒ P s) ⇒ P (Seq stmts)) ∧
      (∀stmts. (∀m s. MEM s stmts ⇒ P s) ⇒ P (Par stmts)) ∧
      (∀v s. P s ⇒ P (Label v s)) ∧
@@ -141,6 +143,44 @@ val whilefree_def = tDefine "whilefree" `
    Induct >> dsimp[definition "stmt_size_def"] >> rpt strip_tac >>
    res_tac >> simp[])
 val _ = export_rewrites ["whilefree_def"]
+
+val waitfree_def = tDefine "waitfree" `
+  waitfree (IfStmt _ t e) = (waitfree t ∧ waitfree e) ∧
+  waitfree (ForLoop _ _ b) = waitfree b ∧
+  waitfree (ParLoop _ _ b) = waitfree b ∧
+  waitfree (Seq cs) = (∀c. MEM c cs ⇒ waitfree c) ∧
+  waitfree (Par cs) = (∀c. MEM c cs ⇒ waitfree c) ∧
+  waitfree (While _ b) = waitfree b ∧
+  waitfree (WaitUntil _) = F ∧
+  waitfree (Label _ s) = waitfree s ∧
+  waitfree (Local _ _ s) = waitfree s ∧
+  waitfree (Atomic s) = waitfree s ∧
+  waitfree _ = T
+` (WF_REL_TAC `measure stmt_size` >> simp[] >>
+   Induct >> dsimp[definition "stmt_size_def"] >> rpt strip_tac >>
+   res_tac >> simp[])
+val _ = export_rewrites ["waitfree_def"]
+
+val whilewaitfree_def = Define`
+  whilewaitfree s ⇔ whilefree s ∧ waitfree s
+`
+
+val whilewaitfree_thm = store_thm(
+  "whilewaitfree_thm[simp]",
+  ``whilewaitfree (IfStmt g th el) = (whilewaitfree th ∧ whilewaitfree el) ∧
+    whilewaitfree (ForLoop v d b) = whilewaitfree b ∧
+    whilewaitfree (ParLoop v d b) = whilewaitfree b ∧
+    whilewaitfree (Seq cs) = (∀c. MEM c cs ⇒ whilewaitfree c) ∧
+    whilewaitfree (Par cs) = (∀c. MEM c cs ⇒ whilewaitfree c) ∧
+    whilewaitfree (While g b) = F ∧
+    whilewaitfree (WaitUntil g) = F ∧
+    whilewaitfree (Label l s) = whilewaitfree s ∧
+    whilewaitfree (Local v e s) = whilewaitfree s ∧
+    whilewaitfree (Atomic s) = whilewaitfree s ∧
+    whilewaitfree Done = T ∧
+    whilewaitfree Abort = T ∧
+    whilewaitfree (Malloc x y z) = T``,
+  simp[whilewaitfree_def] >> metis_tac[]);
 
 (* lookup_array : memory -> string -> int -> value *)
 val lookup_array_def = Define`
@@ -285,6 +325,7 @@ val ssubst_def = tDefine "ssubst" `
              (if vnm = vnm' then s else ssubst vnm value s)) ∧
   (ssubst vnm value (While e s) =
      While (esubst vnm value e) (ssubst vnm value s)) ∧
+  (ssubst vnm value (WaitUntil e) = WaitUntil (esubst vnm value e)) ∧
   (ssubst vnm value (Seq slist) = Seq (MAP (ssubst vnm value) slist)) ∧
   (ssubst vnm value (Par slist) = Par (MAP (ssubst vnm value) slist)) ∧
   (ssubst vnm value (Label v s) = Label v (ssubst vnm value s)) ∧
@@ -373,6 +414,7 @@ val svarsOf_def = tDefine "svarsOf" `
   svarsOf (ForLoop _ dm b) = dmvarsOf dm ∪ svarsOf b ∧
   svarsOf (ParLoop _ dm b) = dmvarsOf dm ∪ svarsOf b ∧
   svarsOf (While g b) = varsOf g ∪ svarsOf b ∧
+  svarsOf (WaitUntil e) = varsOf e ∧
   svarsOf (Seq slist) = listVarsOf svarsOf slist ∧
   svarsOf (Par slist) = listVarsOf svarsOf slist ∧
   svarsOf (Label _ s) = svarsOf s ∧
@@ -579,6 +621,20 @@ val (eval_rules, eval_ind, eval_cases) = Hol_reln`
 
   (∀g b m.
       eval (m, While g b) (m, IfStmt g (Seq [b; While g b]) Done))
+
+     ∧
+
+  (∀m e.
+      evalexpr m e = Bool T
+     ⇒
+      eval (m, WaitUntil e) (m, Done))
+
+     ∧
+
+  (∀m e.
+      (∀b. evalexpr m e ≠ Bool b)
+     ⇒
+      eval (m, WaitUntil e) (m, Abort))
 
      ∧
 

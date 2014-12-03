@@ -334,7 +334,9 @@ val graphOf_def = tDefine "graphOf" `
 
   (graphOf lab m (Atomic s) = NONE) ∧
 
-  (graphOf lab m (While g b) = NONE)
+  (graphOf lab m (While g b) = NONE) ∧
+
+  (graphOf lab m (WaitUntil g) = NONE)
 ` (WF_REL_TAC
      `inv_image (mlt (<) LEX (<)) (λ(i,m,s). (loopbag s, stmt_weight (K 0) s))` >>
    simp[WF_mlt1, FOLDR_MAP, mlt_loopbag_lemma] >>
@@ -460,6 +462,7 @@ val graphOf_pcg_eval = store_thm(
   ``∀i0 m0 c m g.
       graphOf i0 m0 c = SOME(m,g) ⇒ pcg_eval g (SOME m0) = SOME m``,
   ho_match_mp_tac (theorem "graphOf_ind") >> rpt conj_tac >>
+  TRY (simp[graphOf_def] >> NO_TAC) >>
   map_every qx_gen_tac [`i0`, `m0`]
   >- ((* if *)
       map_every qx_gen_tac [`gd`, `t`, `e`] >> strip_tac >>
@@ -501,13 +504,7 @@ val graphOf_pcg_eval = store_thm(
       strip_tac >>
       `mergeReads ds opn (MAP (lookupRW m0) rds) = opn rvs` suffices_by simp[] >>
       imp_res_tac (GEN_ALL assign_lemma) >> simp[mergeReads_def])
-  >- ((* Abort *) simp[graphOf_def])
-  >- ((* Done *) simp[graphOf_def, pcg_eval_thm])
-  >- ((* Malloc *) simp[graphOf_def])
-  >- ((* Label *) simp[graphOf_def])
   >- ((* Local *) simp[graphOf_def, EXISTS_PROD, PULL_EXISTS])
-  >- ((* Atomic *) simp[graphOf_def])
-  >- ((* While *) simp[graphOf_def])
 );
 
 val assert_EQ_SOME = store_thm(
@@ -793,6 +790,7 @@ val graphOf_apply_action_diamond = store_thm(
         graphOf i0 m2 c = SOME(m,g) ∧
         apply_action a (SOME m1) = SOME m``,
   ho_match_mp_tac (theorem "graphOf_ind") >> rpt conj_tac >>
+  TRY (simp[graphOf_def] >> NO_TAC) >>
   map_every qx_gen_tac [`i0`, `m0`]
   >- ((* if *)
       qx_gen_tac `gd` >> rpt gen_tac >> strip_tac >> simp[graphOf_def] >>
@@ -941,17 +939,11 @@ val graphOf_apply_action_diamond = store_thm(
       `apply_action b (SOME m0) = SOME m1`
         by (fs[apply_action_def, Abbr`b`, upd_write_def] >> rfs[]) >>
       metis_tac[successful_action_diamond])
-  >- ((* abort *) simp[graphOf_def])
-  >- ((* Done *) simp[graphOf_def])
-  >- ((* malloc *) simp[graphOf_def])
-  >- ((* Label *) simp[graphOf_def])
   >- ((* Local *) simp[graphOf_def, EXISTS_PROD, PULL_EXISTS] >>
       rpt strip_tac >> fs[] >>
       `evalexpr m2 e = evalexpr m0 e ∧ readAction () m2 e = readAction () m0 e`
         by metis_tac[apply_action_expr_eval_commutes, touches_SYM] >>
       simp[])
-  >- ((* Atomic *) simp[graphOf_def])
-  >- ((* While *) simp[graphOf_def])
 )
 
 val graphOf_pcg_eval_diamond = store_thm(
@@ -1052,7 +1044,8 @@ val eval_graphOf_action = store_thm(
         graphOf i0 m0 c0 = SOME(m0', g0) ⇒
         ∃a. BAG_IN a (allnodes g0) ∧
             apply_action (polydata_upd SND a) (SOME m0) = SOME m``,
-  ho_match_mp_tac eval_ind' >> rpt conj_tac >> REWRITE_TAC []
+  ho_match_mp_tac eval_ind' >> rpt conj_tac >> REWRITE_TAC [] >>
+  TRY (simp[graphOf_def] >> NO_TAC)
   >- ((* member of Seq steps *)
       map_every qx_gen_tac [`c`, `c0`, `pfx`, `sfx`, `m0`, `m`] >>
       ntac 2 strip_tac >> fs[] >> simp[graphOf_def'] >>
@@ -1095,9 +1088,7 @@ val eval_graphOf_action = store_thm(
       qx_genl_tac [`i0`, `m'`] >> strip_tac >>
       qmatch_assum_rename_tac `graphOf i0 m0 c0 = SOME(mm,gg)` [] >>
       `TOS i0 m0 c0 = gg` by simp[Abbr`TOS`] >> metis_tac[])
-  >- ((* malloc *) simp[graphOf_def])
   >- ((* Label *) simp[graphOf_def] >> metis_tac[])
-  >- ((* Atomic *) simp[graphOf_def])
 );
 
 val hdbuild_append = store_thm(
@@ -1164,7 +1155,8 @@ val graphOf_correct_lemma = store_thm(
         ∃g.
           graphOf i0 m c = SOME(m0', g) ∧
           ∀g'. g ∼ᵍ g' ⇒ g0 ∼ᵍ g'``,
-  ho_match_mp_tac eval_ind' >> rpt conj_tac
+  ho_match_mp_tac eval_ind' >> rpt conj_tac >>
+  TRY (simp[graphOf_def] >> NO_TAC)
   >- ((* seq head takes one step *)
       simp[graphOf_def', PULL_EXISTS, FORALL_PROD, EXISTS_PROD,
            FOLDL_APPEND] >>
@@ -1240,13 +1232,9 @@ val graphOf_correct_lemma = store_thm(
          graphOfL CONS (λdv. ssubst vnm dv body) i0 x`
         by simp[graphOfL_def, FUN_EQ_THM] >>
       asm_simp_tac (srw_ss() ++ ETA_ss) [])
-  >- ((* forloop aborts because domain evaluates badly *)
-      simp[graphOf_def])
   >- ((* parloop turns into par *)
       simp[graphOf_def', MAP_MAP_o, combinTheory.o_ABS_R, oneTheory.one,
            PULL_EXISTS])
-  >- ((* parloop aborts because domain evaluates badly *)
-      simp[graphOf_def])
   >- ((* one component of a par takes a step *)
       map_every qx_gen_tac [`m0`, `m`, `pfx`, `c0`, `c`, `sfx`] >>
       strip_tac >>
@@ -1362,12 +1350,6 @@ val graphOf_correct_lemma = store_thm(
       simp[graphOf_def, OPT_SEQUENCE_EQ_SOME, MEM_MAP,
            PULL_EXISTS] >> rpt strip_tac >>
       disj1_tac >> qexists_tac `Abort` >> simp[])
-  >- ((* While *) simp[graphOf_def])
-  >- ((* Malloc *) simp[graphOf_def])
-  >- ((* Label *) simp[graphOf_def])
-  >- ((* Atomic *) simp[graphOf_def])
-  >- ((* Label-Done ---> Done *) simp[graphOf_def])
-  >- ((* Label-Abort ---> Abort *) simp[graphOf_def])
   >- ((* Local *) simp[graphOf_def, PULL_EXISTS, EXISTS_PROD])
 );
 

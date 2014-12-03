@@ -17,7 +17,7 @@ val evalths = [newrule ``Seq []``, newrule ``Done``,
                newrule ``Par (h::t)``,
                newrule ``IfStmt g t e``, newrule ``Malloc v n value``,
                newrule ``Label l s``, newrule ``Local var e s``,
-               newrule ``While g b``]
+               newrule ``While g b``, newrule ``WaitUntil g``]
 
 val option_CASE_Cong = prove(
   ``M1 = M2 ⇒ option_CASE M1 n f = option_CASE M2 n f``,
