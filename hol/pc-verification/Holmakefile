@@ -1,3 +1,5 @@
+OPTIONS = QUIT_ON_FAILURE
+
 INCLUDES = ../pseudoc ../actiongraphs
 
 ifdef POLY
