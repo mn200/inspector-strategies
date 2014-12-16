@@ -1395,12 +1395,13 @@ val bb = prove(``(!b. b) = F``, SIMP_TAC bool_ss [FORALL_BOOL])
 
 val graphOf_ind = theorem "graphOf_ind"
 
-val graphOf_ind' =
+val graphOf_ind' = save_thm(
+  "graphOf_ind'",
     WF_INDUCTION_THM
       |> Q.ISPEC `inv_image (mlt (<) LEX (<))
                             (λs. (loopbag s, stmt_weight (K 0) s))`
       |> SIMP_RULE (srw_ss()) [WF_mlt1, WF_inv_image, pairTheory.WF_LEX,
-                               WF_TC]
+                               WF_TC])
 
 val assign_evalDexpr_lemma = prove(
   ``∀ds rvs m.
