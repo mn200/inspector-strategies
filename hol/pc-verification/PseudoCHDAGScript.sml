@@ -113,6 +113,47 @@ val gentouches_touches = store_thm(
   map_every Cases_on [`a1.write`, `a2.write`] >>
   simp[] >> metis_tac[]);
 
+(* ----------------------------------------------------------------------
+
+    pcg_eval : α pcg -> memory option -> memory option
+
+    The function that takes a nested/hierarchical action graph and
+    evaluates its effect on a piece of memory. Because action
+    application can fail, so too must this. To make the types neater,
+    (and to match up with apply_action, for which similar comments
+    apply) it then makes sense to allow this function is take in a
+    failure state as input. This is just propagated.
+
+    The obvious approach to defining pcg_eval would start by instantiating
+
+       hidag_recursion
+           |> INST_TYPE [gamma |-> ``:memory option -> memory option``,
+                         delta |-> ``:memory option -> memory option``,
+                         alpha |-> ``:actionRW``,
+                         beta |-> ``:α # (value list -> value)``]
+           |> Q.SPECL [`λm. m`,
+                       `λn g nr gr m. gr (nr m)`, `λg gr. gr`,
+                       `λa. apply_action (polydata_upd SND a)`]
+
+    along these lines, but you are then stuck with trying to imagine what
+    the reads and writes should be for functions of type
+
+        :memory option -> memory option
+
+    If you guess that they all have empty sets of both, then the commuting
+    requirement becomes impossible to show. It's hard to imagine what else
+    you could pick for the read and writes set, so an alternative approach
+    is required.
+
+    We define a function, gflat_eval, that ignores nested graphs, and just
+    evaluates actions that appear at the top level. The commuting
+    requirement then becomes manageable, and we can define the eventual
+    function by first flattening the input graph, and then using
+    gflat_eval. It turns out that this combination has the desired
+    characterising equations.
+
+   ---------------------------------------------------------------------- *)
+
 val gflat_eval_def = new_specification(
   "gflat_eval_def", ["gflat_eval"],
   hidag_recursion
