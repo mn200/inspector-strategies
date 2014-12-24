@@ -1540,6 +1540,11 @@ val domreadAction_ident = store_thm(
   ``(domreadAction i m d).ident = i``,
   Cases_on `d` >> simp[domreadAction_def]);
 
+val domreadAction_write = store_thm(
+  "domreadAction_write[simp]",
+  ``(domreadAction l m d).write = NONE``,
+  Cases_on `d` >> simp[domreadAction_def]);
+
 val dvread_def = Define`
   (dvread m (DMA ma) =
      (case ma_reads m ma of (SOME x,xs) => x::xs | (NONE, xs) => xs)) ∧
