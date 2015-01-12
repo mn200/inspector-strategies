@@ -701,11 +701,11 @@ val maRead_ma_reads = save_thm(
   rpt strip_tac >>
   Cases_on `ma_reads m ma` >> simp[] >>
   Cases_on `evalexpr m e` >> simp[] >>
-  qmatch_assum_rename_tac `ma_reads m ma = (lvopt, rds)` [] >> fs[] >>
+  qmatch_assum_rename_tac `ma_reads m ma = (lvopt, rds)` >> fs[] >>
   Cases_on `lvopt` >> simp[] >>
-  qmatch_assum_rename_tac `maRead m ma = SOME lv` [] >>
+  qmatch_assum_rename_tac `maRead m ma = SOME lv` >>
   Cases_on `lv` >> simp[] >>
-  qmatch_assum_rename_tac `evalexpr m e = Int i` [] >>
+  qmatch_assum_rename_tac `evalexpr m e = Int i` >>
   `(∃n. i = &n) ∨ (∃n. i = -&n ∧ n ≠ 0)`
     by metis_tac[integerTheory.INT_NUM_CASES] >> simp[])
   |> CONJUNCT2);
@@ -745,7 +745,7 @@ val apply_action_dvreadAction_commutes = store_thm(
   simp[getReads_def] >> Cases >> simp[getReads_def, dvread_def, evalDexpr_def] >>
   simp[dvread_def, DISJ_IMP_THM, FORALL_AND_THM, PULL_EXISTS] >>
   simp[PULL_FORALL] >> qx_genl_tac [`lv`, `rds`] >> ntac 4 strip_tac >>
-  qmatch_assum_rename_tac `maRead m0 mref = SOME lv` [] >>
+  qmatch_assum_rename_tac `maRead m0 mref = SOME lv` >>
   `readAction () m0 (MAccess mref) ≁ₜ a`
     by simp[touches_def, readAction_def, expr_reads_def] >>
   `¬isArrayError (evalexpr m0 (MAccess mref))` by simp[evalexpr_def] >>
@@ -819,7 +819,7 @@ val evalDexpr_notArrayError = store_thm(
   ``∀ds m rvs. OPT_SEQUENCE (MAP (evalDexpr m) ds) = SOME rvs ⇒
                ∀v. MEM v rvs ⇒ ¬isArrayError v``,
   dsimp[OPT_SEQUENCE_EQ_SOME, MEM_MAP] >> rpt strip_tac >> res_tac >>
-  qmatch_assum_rename_tac `MEM y ds` [] >> Cases_on `y` >>
+  qmatch_assum_rename_tac `MEM y ds` >> Cases_on `y` >>
   fs[evalDexpr_def, value_case_eq] >> veq >> fs[]);
 
 val graphOf_apply_action_diamond = store_thm(
@@ -837,7 +837,7 @@ val graphOf_apply_action_diamond = store_thm(
       qx_gen_tac `gd` >> rpt gen_tac >> strip_tac >> simp[graphOf_def] >>
       rpt gen_tac >>
       Cases_on `evalexpr m0 gd` >> simp[] >>
-      qmatch_assum_rename_tac `evalexpr m0 gd = Bool b` [] >>
+      qmatch_assum_rename_tac `evalexpr m0 gd = Bool b` >>
       Cases_on `b` >> fs[] >> simp[PULL_EXISTS, EXISTS_PROD] >>
       qx_gen_tac `g'` >> rw[] >>
       fs[DISJ_IMP_THM, FORALL_AND_THM] >>
@@ -863,8 +863,7 @@ val graphOf_apply_action_diamond = store_thm(
       Induct >> simp[EXISTS_PROD, PULL_EXISTS, DISJ_IMP_THM,
                      FORALL_AND_THM] >> rpt strip_tac >> rw[] >>
       fs[] >>
-      qmatch_assum_rename_tac
-        `FOLDR ff (SOME (m0,ε)) vlist = SOME (m',g1)` [] >>
+      qmatch_assum_rename_tac `FOLDR ff (SOME (m0,ε)) vlist = SOME (m',g1)` >>
       first_x_assum ((fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) o
                      assert (is_forall o concl)) >>
       prove_tac[])
@@ -876,8 +875,7 @@ val graphOf_apply_action_diamond = store_thm(
       map_every qid_spec_tac [`g`, `m0`, `m1`, `m2`, `clist`] >>
       Induct >> simp[EXISTS_PROD, PULL_EXISTS, DISJ_IMP_THM,
                      FORALL_AND_THM] >> rpt strip_tac >>
-      qmatch_assum_rename_tac
-        `FOLDR ff (SOME(m0,ε)) clist = SOME (m1',g')` [] >>
+      qmatch_assum_rename_tac `FOLDR ff (SOME(m0,ε)) clist = SOME (m1',g')` >>
       rw[] >> fs[] >>
       first_x_assum ((fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) o
                      assert (is_forall o concl)) >>
@@ -1127,7 +1125,7 @@ val eval_graphOf_action = store_thm(
         TOS = λi m c. THE (OPTION_MAP SND (graphOf i m c))` >> simp[] >>
       simp[DISJ_IMP_THM, FORALL_AND_THM, EXISTS_PROD] >>
       qx_genl_tac [`i0`, `m'`] >> strip_tac >>
-      qmatch_assum_rename_tac `graphOf i0 m0 c0 = SOME(mm,gg)` [] >>
+      qmatch_assum_rename_tac `graphOf i0 m0 c0 = SOME(mm,gg)` >>
       `TOS i0 m0 c0 = gg` by simp[Abbr`TOS`] >> metis_tac[])
   >- ((* Label *) simp[graphOf_def] >> metis_tac[])
 );
@@ -1158,7 +1156,7 @@ val FOLDL_graphOfL_same_start = store_thm(
   first_x_assum (qspecl_then [`m'`, `g'`] mp_tac) >> simp[] >>
   disch_then (qx_choose_then `gd1` strip_assume_tac) >>
   fs[graphOfL_def] >>
-  qmatch_assum_rename_tac `graphOf (lf h lab) m0 (cf h) = SOME mg` [] >>
+  qmatch_assum_rename_tac `graphOf (lf h lab) m0 (cf h) = SOME mg` >>
   `∃m0' g0'. mg = (m0', g0')` by (Cases_on `mg` >> simp[]) >> rw[] >> fs[] >>
   rw[] >> qexists_tac `HG g0' <+ ε ⊕ gd1` >> simp[hdmerge_ASSOC]);
 
@@ -1461,9 +1459,9 @@ val assign_evalDexpr_lemma = prove(
       Cases_on `EL i ds` >> fs[] >> fs[evalDexpr_def]) >>
   dsimp[LENGTH_CONS, FILTER_EQ_CONS, FILTER_EQ_NIL] >>
   rpt strip_tac >>
-  qmatch_assum_rename_tac `LENGTH (FILTER ($~ o isDValue) sfx) = n` [] >>
-  qmatch_assum_rename_tac `EVERY (λx. isDValue x) pfx` [] >>
-  qmatch_assum_rename_tac `evalDexpr m rd = SOME v` [] >>
+  qmatch_assum_rename_tac `LENGTH (FILTER ($~ o isDValue) sfx) = n` >>
+  qmatch_assum_rename_tac `EVERY (λx. isDValue x) pfx` >>
+  qmatch_assum_rename_tac `evalDexpr m rd = SOME v` >>
   `∃ma. rd = DMA ma` by (Cases_on `rd` >> fs[evalDexpr_def]) >> veq >> fs[] >>
   match_mp_tac RTC_RULE2 >>
   qexists_tac `(m, Assign lve (pfx ++ [DValue v] ++ sfx) f)` >> conj_tac
@@ -1484,9 +1482,9 @@ val graphOf_implies_Done_computation = store_thm(
   TRY (simp[graphOf_def] >> NO_TAC)
   >- ((* assign *) simp[graphOf_def, PULL_EXISTS] >>
       disch_then kall_tac >> rpt strip_tac >>
-      qmatch_assum_rename_tac `eval_lvalue m0 lve = SOME lv` [] >>
-      qmatch_assum_rename_tac `getReads m0 ds = SOME rds` [] >>
-      qmatch_rename_tac `(m0, Assign lve ds f) --->* (m,Done)` [] >>
+      qmatch_assum_rename_tac `eval_lvalue m0 lve = SOME lv` >>
+      qmatch_assum_rename_tac `getReads m0 ds = SOME rds` >>
+      qmatch_rename_tac `(m0, Assign lve ds f) --->* (m,Done)` >>
       simp[Once RTC_CASES_RTC_TWICE] >>
       qexists_tac `(m0, Assign lve (MAP DValue rvs) f)` >> conj_tac
       >- metis_tac[assign_evalDexpr_lemma] >>
@@ -1519,7 +1517,7 @@ val graphOf_implies_Done_computation = store_thm(
       pop_assum mp_tac >>
       dsimp[graphOfL_def, FORALL_PROD] >> qx_gen_tac `subg` >> strip_tac >>
       qmatch_assum_rename_tac
-        `graphOf (d0::lab) m0 (ssubst vnm d0 body) = SOME (m0', subg)` [] >>
+        `graphOf (d0::lab) m0 (ssubst vnm d0 body) = SOME (m0', subg)` >>
       qabbrev_tac `bod' = ssubst vnm d0 body` >>
       `(m0, bod') --->* (m0', Done)`
         by (fs[AND_IMP_INTRO, PULL_FORALL] >> first_x_assum match_mp_tac >>
@@ -1552,7 +1550,7 @@ val graphOf_implies_Done_computation = store_thm(
       `pcg_eval g' (SOME m0) = SOME m'` by metis_tac[graphOf_pcg_eval] >>
       first_x_assum (qspecl_then [`m'`, `gs0`] mp_tac) >> simp[] >> fs[] >>
       qmatch_assum_rename_tac
-        `graphOf (dv::lab) m0 (ssubst vnm dv body) = SOME (m', g')` [] >>
+        `graphOf (dv::lab) m0 (ssubst vnm dv body) = SOME (m', g')` >>
       fs[AND_IMP_INTRO, PULL_FORALL] >>
       `(m0, ssubst vnm dv body) --->* (m', Done)`
         by (first_x_assum match_mp_tac >> simp[pairTheory.LEX_DEF] >> rw[] >>
@@ -1588,7 +1586,7 @@ val graphOf_implies_Done_computation = store_thm(
       qx_genl_tac [`lab`, `m0`, `m`, `g`] >> strip_tac >>
       qabbrev_tac `g0 : value list pcg = ε` >>
       Q.RM_ABBREV_TAC `g0` >>
-      qmatch_rename_tac `(m0, Seq cs) --->* (m, Done)` [] >>
+      qmatch_rename_tac `(m0, Seq cs) --->* (m, Done)` >>
       `∀c lab m0 m g.
           MEM c cs ∧ graphOf lab m0 c = SOME(m,g) ⇒ (m0,c) --->* (m,Done)`
         by (rpt strip_tac >> fs[AND_IMP_INTRO, PULL_FORALL] >>
@@ -1619,7 +1617,7 @@ val graphOf_implies_Done_computation = store_thm(
       first_x_assum (qspecl_then [`g0'`, `m0'`] mp_tac) >> simp[] >>
       disch_then match_mp_tac >> metis_tac[])
   >- ((* par *) simp[graphOf_def', PULL_EXISTS] >>
-      rpt strip_tac >> qmatch_rename_tac `(m0, Par cs) --->* (m, Done)` [] >>
+      rpt strip_tac >> qmatch_rename_tac `(m0, Par cs) --->* (m, Done)` >>
       `∀c lab m0 m g.
         MEM c cs ∧ graphOf lab m0 c = SOME(m,g) ⇒ (m0,c) --->* (m,Done)`
         by (rpt strip_tac >> fs[AND_IMP_INTRO, PULL_FORALL] >>
@@ -1670,7 +1668,7 @@ val graphOf_implies_Done_computation = store_thm(
       metis_tac[])
   >- ((* Label *) simp[graphOf_def, PULL_EXISTS, FORALL_PROD] >>
       rpt strip_tac >> simp[Once RTC_CASES2] >>
-      qmatch_assum_rename_tac `graphOf (v::lab) m0 s0 = SOME(m,g)` [] >>
+      qmatch_assum_rename_tac `graphOf (v::lab) m0 s0 = SOME(m,g)` >>
       qexists_tac `(m, Label v Done)` >> reverse conj_tac
       >- simp[Once eval_cases] >>
       match_mp_tac Label_RTC_mono >> fs[AND_IMP_INTRO, PULL_FORALL] >>

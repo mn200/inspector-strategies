@@ -351,7 +351,7 @@ val dagAdd_11_thm = store_thm(
       first_x_assum (mp_tac o Q.AP_TERM `nodebag`) >> simp[]) >>
   qx_gen_tac `g1` >>
   qspec_then `g1` strip_assume_tac dag_CASES >> simp[] >> strip_tac >>
-  qmatch_assum_rename_tac `g1 = c <+ g0` [] >>
+  qmatch_assum_rename_tac `g1 = c <+ g0` >>
   fs[DECIDE ``SUC m = x + 1 ⇔ m = x``] >> rpt (pop_assum SUBST_ALL_TAC) >>
   map_every qx_gen_tac [`g2`, `a`, `b`] >>
   Cases_on `a = b` >> simp[]
@@ -408,7 +408,7 @@ val BIJ_FOLDR_add_EQ = store_thm(
   Induct >> simp[] >- csimp[LENGTH_NIL] >>
   map_every qx_gen_tac [`h1`, `l2`, `b`] >>
   strip_tac >>
-  qmatch_assum_rename_tac `LENGTH l2 = SUC (LENGTH t1)` [] >>
+  qmatch_assum_rename_tac `LENGTH l2 = SUC (LENGTH t1)` >>
   `EL 0 (h1::t1) = h1` by simp[] >>
   `EL (b 0) l2 = h1` by simp[] >>
   `b 0 < SUC (LENGTH t1)`
@@ -435,9 +435,9 @@ val BIJ_FOLDR_add_EQ = store_thm(
             `b (i + 1) ≠ b 0` by simp[] >>
             simp[])
         >- (pop_assum mp_tac >>
-            qmatch_assum_rename_tac `m < LENGTH t1` [] >>
+            qmatch_assum_rename_tac `m < LENGTH t1` >>
             strip_tac >>
-            qmatch_assum_rename_tac `n < LENGTH t1` [] >>
+            qmatch_assum_rename_tac `n < LENGTH t1` >>
             Cases_on `b 0 < b (m + 1)` >> simp[]
             >- (Cases_on `b 0 < b (n + 1)` >> simp[]
                 >- simp[DECIDE ``0 < y ∧ 0 < z ⇒ (y - 1n = z - 1 ⇔ y = z)``] >>
@@ -662,7 +662,7 @@ val itbag_ddel_add = store_thm(
                     else a <+ (d - ms)``,
   gen_tac >> Induct_on `BAG_CARD ms` >> rpt strip_tac
   >- (`ms = {||}` by metis_tac[BCARD_0] >> simp[]) >>
-  qmatch_assum_rename_tac `SUC n = BAG_CARD ms` [] >>
+  qmatch_assum_rename_tac `SUC n = BAG_CARD ms` >>
   `∃ms0 b. ms = BAG_INSERT b ms0 ∧ BAG_CARD ms0 = n`
     by metis_tac[BCARD_SUC] >>
   fs[COMMUTING_ITBAG_INSERT, ddel_commutes] >>
@@ -752,7 +752,7 @@ val dagREL_elim_add = store_thm(
   qx_genl_tac [`d1`, `d2`, `a1`, `a2`] >> strip_tac >>
   qx_genl_tac [`a`, `d10`] >> simp[SimpL ``$==>``, dagAdd_11_thm] >>
   strip_tac >- (rw[] >> metis_tac[]) >>
-  qmatch_assum_rename_tac `d1 = a <+ d10'` [] >>
+  qmatch_assum_rename_tac `d1 = a <+ d10'` >>
   `∃b d20. d2 = b <+ d20 ∧ R a.data b.data ∧ b.write = a.write ∧
            b.reads = a.reads ∧ dagREL R d10' d20` by metis_tac[] >>
   rw[] >> map_every qexists_tac [`b`, `a2 <+ d20`] >> simp[] >>

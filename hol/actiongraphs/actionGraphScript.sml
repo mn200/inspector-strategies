@@ -354,8 +354,8 @@ val INJ_RIMAGE_TC = store_thm(
   rpt strip_tac
   >- (`a ∈ field R ∧ b ∈ field R` by (simp[field_def] >> metis_tac[]) >>
       metis_tac[INJ_DEF, relationTheory.TC_SUBSET]) >>
-  qmatch_assum_rename_tac `(RIMAGE f R)⁺ x a` [] >>
-  qmatch_assum_rename_tac `(RIMAGE f R)⁺ a y` [] >>
+  qmatch_assum_rename_tac `(RIMAGE f R)⁺ x a` >>
+  qmatch_assum_rename_tac `(RIMAGE f R)⁺ a y` >>
   `∃a0. a0 ∈ field R ∧ f a0 = a` by metis_tac[RIMAGE_TC_IN_field] >>
   metis_tac[relationTheory.TC_RULES]);
 
@@ -493,7 +493,7 @@ val wfG_dgmap = store_thm(
   >- (fs[RIMAGE_DEF, wfG_def] >> metis_tac[])
   >- (simp[RIMAGE_DEF, GSYM IMP_DISJ_THM] >> eq_tac >> strip_tac >> fs[wfG_def]
       >- metis_tac[] >>
-      qmatch_assum_rename_tac `g.edges a1 a2` [] >>
+      qmatch_assum_rename_tac `g.edges a1 a2` >>
       map_every qx_gen_tac [`a3`, `a4`] >> rpt strip_tac >>
       `a1 ∈ g.nodes ∧ a2 ∈g.nodes ∧ a3 ∈ g.nodes ∧ a4 ∈ g.nodes` by metis_tac[] >>
       rpt (first_x_assum (mp_tac o assert (is_eq o concl))) >> simp[] >>
@@ -728,7 +728,7 @@ val graph_ind = store_thm(
   `ag_nodes g ≠ ∅` by (strip_tac >> fs[]) >>
   `∃a. a ∈ g ∧ ∀b. b -<g>/-> a`
      by metis_tac[nonempty_wfG_has_points, IN_edges] >>
-  qmatch_assum_rename_tac `SUC n = gCARD g` [] >>
+  qmatch_assum_rename_tac `SUC n = gCARD g` >>
   `gCARD (g \\ a) = n` by simp[gCARD_gDELETE] >>
   `a ⊕ (g \\ a) = g`
     by (dsimp[graph_equality, idents_thm, gDELETE_edges,
@@ -736,7 +736,7 @@ val graph_ind = store_thm(
         >- metis_tac[ident_11] >>
         dsimp[EQ_IMP_THM] >> rpt strip_tac
         >- metis_tac[touching_actions_link] >>
-        qmatch_assum_rename_tac `a1 -<g>-> a2` [] >>
+        qmatch_assum_rename_tac `a1 -<g>-> a2` >>
         `a ≠ a2` by metis_tac[] >> simp[] >>
         Cases_on `a = a1` >> simp[] >>
         metis_tac[IN_edges, ident_11]) >>
@@ -1039,14 +1039,14 @@ val FOLD_add_action_edges_ALL_DISTINCT = store_thm(
   Induct_on `l` >> simp[IN_FOLD_add_action, add_action_edges] >>
   simp[idents_thm] >> qx_gen_tac `h` >> strip_tac >>
   fs[] >> qpat_assum `XX a1 a2 ⇔ YY` kall_tac >> eq_tac >> strip_tac >| [
-    qmatch_assum_rename_tac `MEM i l` [] >>
+    qmatch_assum_rename_tac `MEM i l` >>
     `∃n. n < LENGTH l ∧ i = EL n l` by metis_tac[MEM_EL] >>
     map_every qexists_tac [`0`, `SUC n`] >> simp[],
-    qmatch_assum_rename_tac `a1 = f (EL i l)` [] >>
-    qmatch_assum_rename_tac `a2 = f (EL j l)` [] >>
+    qmatch_assum_rename_tac `a1 = f (EL i l)` >>
+    qmatch_assum_rename_tac `a2 = f (EL j l)` >>
     map_every qexists_tac [`SUC i`, `SUC j`] >> simp[],
-    qmatch_assum_rename_tac `a1 = f (EL i (h::l))` [] >>
-    qmatch_assum_rename_tac `a2 = f (EL j (h::l))` [] >>
+    qmatch_assum_rename_tac `a1 = f (EL i (h::l))` >>
+    qmatch_assum_rename_tac `a2 = f (EL j (h::l))` >>
     `i = 0 ∨ ∃i0. i = SUC i0` by (Cases_on `i` >> simp[])
     >- (disj1_tac >> fs[] >>
         `∃j0. j = SUC j0` by (Cases_on `j` >> fs[]) >>
@@ -1114,7 +1114,7 @@ val genEvalG_det = store_thm(
     ∀s0 g s1 s2. genEvalG ap s0 g s1 ∧ genEvalG ap s0 g s2 ⇒ s1 = s2``,
   strip_tac >> rpt gen_tac >> map_every qid_spec_tac [`s0`, `s1`, `s2`] >>
   completeInduct_on `gCARD g` >> qx_gen_tac `g` >>
-  qmatch_rename_tac `n = gCARD g ⇒ XX` ["XX"] >> strip_tac >>
+  qmatch_rename_tac `n = gCARD g ⇒ _` >> strip_tac >>
   map_every qx_gen_tac [`s2`, `s1`, `s0`] >> strip_tac >>
   Cases_on `g = emptyG`
   >- (RULE_ASSUM_TAC (ONCE_REWRITE_RULE [genEvalG_cases]) >> fs[]) >>
@@ -1169,7 +1169,7 @@ val genEvalG_imap_irrelevance = store_thm(
           metis_tac[]) >>
       metis_tac[IN_edges]) >>
   rpt gen_tac >>
-  qmatch_rename_tac `a0 ∈ G ⇒ a1' -<G>/-> a2' ∨ XX` ["XX"] >> strip_tac >>
+  qmatch_rename_tac `a0 ∈ G ⇒ a1' -<G>/-> a2' ∨ _` >> strip_tac >>
   Cases_on `a1' -<G>-> a2'` >> simp[] >> metis_tac[IN_edges]);
 
 (* ----------------------------------------------------------------------
@@ -1247,7 +1247,7 @@ val IN_merge_graph = store_thm(
   map_every qid_spec_tac [`a`, `g1`, `g2`] >> ho_match_mp_tac graph_ind >>
   simp[merge_graph_thm] >> rpt gen_tac >> strip_tac >>
   dsimp[EQ_IMP_THM] >> rpt strip_tac >>
-  qmatch_assum_rename_tac `b.ident ∉ idents g1` [] >>
+  qmatch_assum_rename_tac `b.ident ∉ idents g1` >>
   Cases_on `a.ident = b.ident` >> fs[idents_thm]);
 
 val idents_merge_graph = store_thm(

@@ -108,26 +108,6 @@ val strip_labels_merge = store_thm(
   ``∀g1 g2. strip_labels (g1 ⊕ g2) = strip_labels g1 ⊕ strip_labels g2``,
   Induct >> simp[]);
 
-fun rename_subterm pat_t avoids t = let
-  fun test (bvs, subt) =
-      case SOME(match_term pat_t subt) handle HOL_ERR _ => NONE of
-          SOME(tmsub, tysub)
-      if can (match_term pat_t) subt then
-
-
-fun case_t (q,sl) = let
-  fun has_t (asl, w) = let
-    val t = parse_in_context (w::asl) q
-  in
-    if List.exists (free_in t) (w::asl) then ALL_TAC
-    else NO_TAC
-  end (asl,w)
-in
-  qmatch_rename_tac q sl ORELSE qmatch_assum_rename_tac q sl ORELSE
-  has_t
-end
-
-
 val hdmerge_cons_snoc = store_thm(
   "hdmerge_cons_snoc",
   ``∀g h a b. g ⊕ (a <+ ε) = b <+ h ⇔
@@ -155,7 +135,7 @@ val hdmerge_11 = store_thm(
   pop_assum (fn th => ONCE_REWRITE_TAC [th]) >>
   simp[] >> pop_assum kall_tac >> map_every qid_spec_tac [`g2`, `g1`] >>
   Induct >> simp[] >> rpt strip_tac >- (Cases_on `g2` >> simp[]) >>
-  qmatch_rename_tac `b <+ (g1 ⊕ a <+ ε) = g2 ⊕ a <+ ε ⇔ b <+ g1 = g2` [] >>
+  qmatch_rename_tac `b <+ (g1 ⊕ a <+ ε) = g2 ⊕ a <+ ε ⇔ b <+ g1 = g2` >>
   dsimp[hdmerge_cons_snoc, EQ_IMP_THM] >> rw[] >> fs[]);
 
 (*
@@ -170,17 +150,17 @@ val graphOf_label_invariant = store_thm(
   TRY (simp_tac (srw_ss()) [Once graphOf_def] >> NO_TAC) >>
   FIRST [
 
-  has_t `Assign` >>
+  qcase_tac `Assign` >>
     simp[graphOf_def, PULL_EXISTS, mareadAction_def, actionTheory.polydata_upd_def,
          dvreadAction_def, addLabel_def],
 
-  has_t `IfStmt` >>
+  qcase_tac `IfStmt` >>
     dsimp[graphOf_def, value_case_eq, PULL_EXISTS, bool_case_eq, EXISTS_PROD,
           addLabel_def, readAction_def, actionTheory.polydata_upd_def] >>
     fs[AND_IMP_INTRO, PULL_FORALL] >> rpt strip_tac >> first_x_assum match_mp_tac >>
     simp[pairTheory.LEX_DEF, MAX_PLUS] >> metis_tac[],
 
-  has_t `ForLoop` >>
+  qcase_tac `ForLoop` >>
     simp[graphOf_def, PULL_EXISTS, EXISTS_PROD, FORALL_PROD, addLabel_def,
          actionTheory.polydata_upd_def] >>
     qx_genl_tac [`lab`, `m0`, `m`, `dvs`, `g`] >> strip_tac >>
@@ -201,7 +181,7 @@ val graphOf_label_invariant = store_thm(
     first_x_assum match_mp_tac >> simp[pairTheory.LEX_DEF] >> rw[] >>
     metis_tac[],
 
-  has_t `ParLoop` >>
+  qcase_tac `ParLoop` >>
     simp[graphOf_def, PULL_EXISTS, addLabel_def, combinTheory.o_ABS_R]
 
   ALL_TAC

@@ -338,7 +338,7 @@ val evaltc_seq = store_thm(
                        mp_tac th) >>
   map_every qid_spec_tac [`x`, `x0`] >>
   Induct_on `TC` >> rw[] >- metis_tac[TC_SUBSET, eval_rules] >>
-  qmatch_assum_rename_tac `(m0,c0) --->⁺ y` [] >> Cases_on `y` >> fs[] >>
+  qmatch_assum_rename_tac `(m0,c0) --->⁺ y` >> Cases_on `y` >> fs[] >>
   metis_tac[TC_RULES]);
 
 val evalrtc_seqpar = prove(
@@ -782,9 +782,9 @@ val strip_label_simulation1 = prove(
        match_mp_tac labelled_RTC_mono >> etac)
   >- (simp[PULL_EXISTS, MAP_EQ_APPEND, MAP_EQ_CONS] >>
       qx_genl_tac [`c`, `c0`, `pfx`, `sfx`, `m0`, `m`] >> rpt strip_tac >>
-      qmatch_assum_rename_tac `MAP strip_label pfx = MAP strip_label pf'` [] >>
-      qmatch_assum_rename_tac `MAP strip_label sfx = MAP strip_label sf'` [] >>
-      qmatch_assum_rename_tac `strip_label c0 = strip_label c0'` [] >>
+      qmatch_assum_rename_tac `MAP strip_label pfx = MAP strip_label pf'` >>
+      qmatch_assum_rename_tac `MAP strip_label sfx = MAP strip_label sf'` >>
+      qmatch_assum_rename_tac `strip_label c0 = strip_label c0'` >>
       `∃c'. (m0,c0') --->* (m,c') ∧ strip_label c' = strip_label c`
         by metis_tac[] >>
       map_every qexists_tac [`vs`, `sf'`, `pfx`, `c'`] >> simp[] >>
@@ -881,9 +881,9 @@ val strip_label_simulation1 = prove(
   >- (simp[PULL_EXISTS] >> rpt strip_tac >>
       pop_assum mp_tac >>
       simp[SimpL ``$==>``, MAP_EQ_APPEND, MAP_EQ_CONS] >> rw[] >>
-      qmatch_assum_rename_tac `MAP strip_label pfx = MAP strip_label p'` [] >>
-      qmatch_assum_rename_tac `MAP strip_label sfx = MAP strip_label s'` [] >>
-      qmatch_assum_rename_tac `strip_label c0 = strip_label c0'` [] >>
+      qmatch_assum_rename_tac `MAP strip_label pfx = MAP strip_label p'` >>
+      qmatch_assum_rename_tac `MAP strip_label sfx = MAP strip_label s'` >>
+      qmatch_assum_rename_tac `strip_label c0 = strip_label c0'` >>
       `∃c'. (m0,c0') --->* (m,c') ∧ strip_label c' = strip_label c`
         by metis_tac[] >>
       map_every qexists_tac [`vs`, `p' ++ [c'] ++ s'`] >> simp[] >>
@@ -905,8 +905,8 @@ val strip_label_simulation1 = prove(
       fs[Once MEM_SPLIT_APPEND_first] >> rw[] >>
       fs[MAP_EQ_APPEND, MAP_EQ_CONS] >> rw[] >>
       simp[Once RTC_CASES_RTC_TWICE] >>
-      qmatch_assum_rename_tac `MAP strip_label pfx = MAP strip_label p'` [] >>
-      qmatch_assum_rename_tac `MAP strip_label sfx = MAP strip_label s'` [] >>
+      qmatch_assum_rename_tac `MAP strip_label pfx = MAP strip_label p'` >>
+      qmatch_assum_rename_tac `MAP strip_label sfx = MAP strip_label s'` >>
       qexists_tac `(m0, Par (p' ++ [Abort] ++ s'))` >> reverse conj_tac >- etac>>
       match_mp_tac evalrtc_par >> simp[])
   >- ((* while *) simp[PULL_EXISTS, MAP_EQ_CONS] >>
@@ -958,7 +958,7 @@ val strip_label_simulation0 = prove(
              ∃c'. (m0,c0') --->* (m,c') ∧ strip_label c' = strip_label c``,
   ho_match_mp_tac RTC_STRONG_INDUCT >> simp[] >> rw[]
   >- metis_tac [RTC_RULES] >>
-  qmatch_assum_rename_tac `(m0,c0) ---> mc'` [] >>
+  qmatch_assum_rename_tac `(m0,c0) ---> mc'` >>
   `∃m' c'. mc' = (m',c')` by (Cases_on `mc'` >> simp[]) >> rw[] >>
   `∃c''. (m0, c0') --->* (m', c'') ∧ strip_label c'' = strip_label c'`
     by metis_tac[strip_label_simulation1] >>
@@ -1470,18 +1470,18 @@ val apply_action_commutes = store_thm(
   simp[] >>
   Cases_on `A1U gm` >> simp[]
   >- (Cases_on `A2U gm` >> simp[] >>
-      qmatch_assum_rename_tac `A2U gm = SOME m'` [] >>
+      qmatch_assum_rename_tac `A2U gm = SOME m'` >>
       fs[Abbr`A1U`, Abbr`A2U`] >>
       `MAP (lookupRW m') a1.reads = MAP (lookupRW gm) a1.reads`
         by metis_tac[nontouching_updm_expreval] >> simp[] >>
       metis_tac[upd_memory_diamond_NONE_preserved]) >>
-  qmatch_assum_rename_tac `A1U gm = SOME m1` [] >>
+  qmatch_assum_rename_tac `A1U gm = SOME m1` >>
   Cases_on `A2U gm` >> simp[]
   >- (fs[Abbr`A1U`, Abbr`A2U`] >>
       `MAP (lookupRW m1) a2.reads = MAP (lookupRW gm) a2.reads`
         by metis_tac[nontouching_updm_expreval, touches_SYM] >> simp[] >>
       metis_tac[upd_memory_diamond_NONE_preserved]) >>
-  qmatch_assum_rename_tac `A2U gm = SOME m2` [] >>
+  qmatch_assum_rename_tac `A2U gm = SOME m2` >>
   fs[Abbr`A1U`, Abbr`A2U`] >>
   `MAP (lookupRW m1) a2.reads = MAP (lookupRW gm) a2.reads ∧
    MAP (lookupRW m2) a1.reads = MAP (lookupRW gm) a1.reads`

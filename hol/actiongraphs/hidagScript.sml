@@ -737,7 +737,7 @@ val hidagAdd_11_thm = store_thm(
   >- (eq_tac >> strip_tac >> simp[Once hidagAdd_commutes]) >>
   reverse eq_tac >- (rw[] >> metis_tac[hidagAdd_commutes, htouches_SYM]) >>
   strip_tac >>
-  qmatch_assum_rename_tac `a1 <+ b <+ g0 = a2 <+ g2` [] >>
+  qmatch_assum_rename_tac `a1 <+ b <+ g0 = a2 <+ g2` >>
   Cases_on `b = a2` >> dsimp[]
   >- (rw[] >> dsimp[] >>
       `g2 = a1 <+ g0` suffices_by metis_tac[hidag_commutes_EQ] >>
