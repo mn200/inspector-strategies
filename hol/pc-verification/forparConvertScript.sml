@@ -7,7 +7,7 @@ open PseudoCTheory
 open PseudoCOpsTheory
 open PseudoCPropsTheory
 open hidagTheory
-open PseudoCHDAGTheory
+open PseudoCHDAGTheory PseudoCHDAGPropsTheory
 open monadsyntax boolSimps
 open lcsymtacs
 

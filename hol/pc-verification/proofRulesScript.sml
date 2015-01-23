@@ -1,7 +1,8 @@
 open HolKernel Parse boolLib bossLib;
 
 open optionTheory pairTheory listTheory rich_listTheory
-open indexedListsTheory PseudoCTheory PseudoCHDAGTheory
+open indexedListsTheory hidagTheory PseudoCTheory
+open PseudoCHDAGTheory
 
 open lcsymtacs monadsyntax
 
