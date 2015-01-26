@@ -175,12 +175,24 @@ val graphOf_pcg_eval = store_thm(
   ho_match_mp_tac graphOf_ind >> rpt conj_tac >>
   TRY (simp[graphOf_def] >> NO_TAC) >>
   map_every qx_gen_tac [`i0`, `m0`]
-  >- ((* if *)
+  >- ((* if *) qcase_tac `IfStmt` >>
       map_every qx_gen_tac [`gd`, `t`, `e`] >> strip_tac >>
       simp[graphOf_def] >>
       Cases_on `evalexpr m0 gd` >> simp[] >>
       fs[] >> COND_CASES_TAC >> fs[EXISTS_PROD, PULL_EXISTS])
   >- ((* forloop *)
+      rpt strip_tac >> qcase_tac `ForLoop vnm d body` >>
+      `∃lo_e hi_e. d = D lo_e hi_e` by (Cases_on `d` >> simp[]) >> veq >>
+      qspecl_then [`vnm`, `body`, `i0`, `λ(m,g). pcg_eval g (SOME m0) = SOME m`,
+                   `hi_e`, `lo_e`] mp_tac
+        (Q.GENL [`lo`, `hi`, `Inv`, `lo_e`, `hi_e`, `P`, `lab`, `s`,
+                 `v`] for_rule) >>
+      simp[] >> disch_then match_mp_tac >>
+      qexists_tac `λi (m,g). pcg_eval g (SOME m0) = SOME m` >> simp[] >>
+      fs[graphOf_def, dvalues_def, option_case_eq, value_case_eq] >> fs[] >>
+
+
+
       simp[graphOf_def, PULL_EXISTS, FORALL_PROD, FOLDL_FOLDR_REVERSE] >>
       qx_genl_tac [`vnm`, `d`, `body`] >> strip_tac >>
       qx_genl_tac [`m`, `dvs`, `g`] >>
