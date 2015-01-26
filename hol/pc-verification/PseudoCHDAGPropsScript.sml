@@ -4,6 +4,7 @@ open lcsymtacs monadsyntax boolSimps
 open relationTheory pairTheory optionTheory listTheory rich_listTheory
 
 open actionTheory hidagTheory PseudoCTheory PseudoCHDAGTheory PseudoCPropsTheory
+open proofRulesTheory
 
 val veq = rpt BasicProvers.VAR_EQ_TAC
 val bool_case_eq = prove_case_eq_thm{
@@ -168,6 +169,20 @@ val pcg_eval_dvreadAction = store_thm(
   ``pcg_eval (HD (addLabel l (dvreadAction i m d)) <+ g) mo = pcg_eval g mo``,
   simp[pcg_eval_thm, dvreadAction_def, apply_action_def]);
 
+val _ = augment_srw_ss [intSimps.OMEGA_ss]
+
+val INT_OF_NUM = store_thm(
+  "INT_OF_NUM",
+  ``0 ≤ i ⇒ &(Num i) = i``,
+  strip_tac >> simp[integerTheory.Num] >> SELECT_ELIM_TAC >> simp[] >>
+  metis_tac[integerTheory.NUM_POSINT_EXISTS]);
+
+val NUM_LT_NUM = store_thm(
+  "NUM_LT_NUM",
+  ``0 ≤ i ∧ 0 ≤ j ⇒ (Num i < Num j ⇔ i < j)``,
+  strip_tac >> simp[integerTheory.Num] >> rpt SELECT_ELIM_TAC >>
+  simp[] >> metis_tac[integerTheory.NUM_POSINT_EXISTS]);
+
 val graphOf_pcg_eval = store_thm(
   "graphOf_pcg_eval",
   ``∀i0 m0 c m g.
@@ -184,27 +199,18 @@ val graphOf_pcg_eval = store_thm(
       rpt strip_tac >> qcase_tac `ForLoop vnm d body` >>
       `∃lo_e hi_e. d = D lo_e hi_e` by (Cases_on `d` >> simp[]) >> veq >>
       qspecl_then [`vnm`, `body`, `i0`, `λ(m,g). pcg_eval g (SOME m0) = SOME m`,
-                   `hi_e`, `lo_e`] mp_tac
-        (Q.GENL [`lo`, `hi`, `Inv`, `lo_e`, `hi_e`, `P`, `lab`, `s`,
-                 `v`] for_rule) >>
+                   `hi_e`, `lo_e`, `m0`] mp_tac
+        (Q.GENL [`Inv`, `m0`, `lo_e`, `hi_e`, `P`, `lab`, `s`, `v`]
+                weak_for_rule) >>
       simp[] >> disch_then match_mp_tac >>
       qexists_tac `λi (m,g). pcg_eval g (SOME m0) = SOME m` >> simp[] >>
-      fs[graphOf_def, dvalues_def, option_case_eq, value_case_eq] >> fs[] >>
-
-
-
-      simp[graphOf_def, PULL_EXISTS, FORALL_PROD, FOLDL_FOLDR_REVERSE] >>
-      qx_genl_tac [`vnm`, `d`, `body`] >> strip_tac >>
-      qx_genl_tac [`m`, `dvs`, `g`] >>
-      Cases_on `dvalues m0 d = SOME dvs` >> simp[] >> fs[] >>
-      pop_assum kall_tac >>
-      qabbrev_tac `vlist = REVERSE dvs` >>
-      `∀x. MEM x dvs = MEM x vlist` by simp[Abbr`vlist`] >> fs[] >>
-      ntac 2 (pop_assum kall_tac) >> pop_assum mp_tac >>
-      map_every qid_spec_tac [`m`, `g`, `vlist`] >> Induct >>
-      simp[EXISTS_PROD] >> dsimp[] >> rpt gen_tac >> strip_tac >> fs[PULL_FORALL] >>
-      pop_assum (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
-      rpt strip_tac >> res_tac >> simp[pcg_eval_merge_graph])
+      qx_genl_tac [`lo`, `hi`] >> strip_tac >>
+      qx_genl_tac [`m'`, `g'`, `i`] >> strip_tac >>
+      fs[dvalues_def, MEM_MAP, PULL_EXISTS, MEM_GENLIST] >>
+      simp[iSOMEP_EQN, FORALL_PROD] >> qx_genl_tac [`m''`, `g''`] >>
+      strip_tac >>
+      first_x_assum (qspecl_then [`m'`, `Num (i - lo)`] mp_tac) >>
+      simp[INT_OF_NUM, NUM_LT_NUM])
   >- ((* seq *)
       simp[graphOf_def, FOLDL_FOLDR_REVERSE] >> qx_gen_tac `cmds` >> strip_tac >>
       qx_genl_tac [`m`, `g`] >>
