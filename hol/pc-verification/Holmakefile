@@ -1,6 +1,6 @@
 OPTIONS = QUIT_ON_FAILURE
 
-INCLUDES = ../pseudoc ../actiongraphs
+INCLUDES = ../pseudoc ../actiongraphs ../lib
 
 ifdef POLY
 HOLHEAP = ../pseudoc/ie0-heap
