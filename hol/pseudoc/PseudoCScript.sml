@@ -632,6 +632,13 @@ val (eval_rules, eval_ind, eval_cases) = Hol_reln`
      ∧
 
   (∀m e.
+      evalexpr m e = Bool F
+     ⇒
+      eval (m, WaitUntil e) (m, WaitUntil e))
+
+     ∧
+
+  (∀m e.
       (∀b. evalexpr m e ≠ Bool b)
      ⇒
       eval (m, WaitUntil e) (m, Abort))

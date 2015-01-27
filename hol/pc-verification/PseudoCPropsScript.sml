@@ -272,7 +272,7 @@ val stmt_weight_ssubst = store_thm(
 
 val eval_terminates = store_thm(
   "eval_terminates",
-  ``∀a b. eval a b ⇒ whilefree (SND a) ⇒ evalR b a``,
+  ``∀a b. eval a b ⇒ whilewaitfree (SND a) ⇒ evalR b a``,
   Induct_on `eval a b` >> rpt strip_tac >>
   lfs[LEX_DEF, MAX_SET_THM, SUM_APPEND, DISJ_IMP_THM, FORALL_AND_THM]
   >- (Induct_on `pfx` >> simp[])
