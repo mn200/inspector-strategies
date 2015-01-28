@@ -1,4 +1,4 @@
-INCLUDES = ../hol/pseudoc
+INCLUDES = ../hol/pseudoc ../hol/pc-verification
 
 ifdef POLY
 HOLHEAP = ../hol/pseudoc/ie0-heap

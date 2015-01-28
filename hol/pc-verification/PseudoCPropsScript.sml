@@ -64,11 +64,14 @@ val stmt_weight_def = tDefine "stmt_weight" `
   (stmt_weight (IfStmt g t e) = MAX (stmt_weight t) (stmt_weight e) + 3) ∧
   (stmt_weight (ForLoop v d s) = stmt_weight s + 1) ∧
   (stmt_weight (ParLoop v d s) = stmt_weight s + 1) ∧
+  (stmt_weight (While g b) = stmt_weight b + 1) ∧
+  (stmt_weight (WaitUntil g) = 1) ∧
   (stmt_weight (Seq stmts) = SUM (MAP stmt_weight stmts) + LENGTH stmts) ∧
   (stmt_weight (Par stmts) =
-    SUM (MAP stmt_weight stmts) + 1 + LENGTH stmts) ∧
+    SUM (MAP stmt_weight stmts) + LENGTH stmts) ∧
   (stmt_weight (Label v s) = stmt_weight s + 1) ∧
-  (stmt_weight (Local v e s) = stmt_weight s + 1)
+  (stmt_weight (Local v e s) = stmt_weight s + 1) ∧
+  (stmt_weight (Atomic s) = stmt_weight s + 1)
 ` (WF_REL_TAC `measure stmt_size` >> simp[] >>
    Induct >> dsimp[stmt_size_def] >>
    rpt strip_tac >> res_tac >> simp[])
@@ -79,9 +82,11 @@ val seq_count_def = tDefine "seq_count" `
   (seq_count (Par cs) = SUM (MAP seq_count cs) + 1) ∧
   (seq_count (ParLoop v d s) = seq_count s) ∧
   (seq_count (ForLoop v d s) = seq_count s) ∧
+  (seq_count (While g b) = seq_count b) ∧
   (seq_count (IfStmt g t e) = seq_count t + seq_count e) ∧
   (seq_count (Label v s) = seq_count s) ∧
   (seq_count (Local v e s) = seq_count s) ∧
+  (seq_count (Atomic s) = seq_count s) ∧
   (seq_count _ = 0)
 `
   (WF_REL_TAC `measure stmt_size` >> simp[] >> Induct >> simp[] >>
@@ -93,6 +98,7 @@ val loopbag_def = tDefine "loopbag" `
   (loopbag Done = {| |}) ∧
   (loopbag (Label v s) = loopbag s) ∧
   (loopbag (Local v e s) = loopbag s) ∧
+  (loopbag (Atomic s) = loopbag s) ∧
   (loopbag (Assign w ds v) = {| |}) ∧
   (loopbag (Malloc v d value) = {| |}) ∧
   (loopbag (IfStmt g t e) = BAG_UNION (loopbag t) (loopbag e)) ∧
@@ -100,6 +106,8 @@ val loopbag_def = tDefine "loopbag" `
                              else BAG_IMAGE SUC (loopbag s)) ∧
   (loopbag (ParLoop v d s) = if loopbag s = {||} then {|1|}
                              else BAG_IMAGE SUC (loopbag s)) ∧
+  (loopbag (While g b) = loopbag b) ∧
+  (loopbag (WaitUntil g) = {||}) ∧
   (loopbag (Seq stmts) =
      FOLDR (λms b. BAG_UNION (loopbag ms) b) {||} stmts) ∧
   (loopbag (Par stmts) =
@@ -169,11 +177,6 @@ val mlt_loopbag_lemma = store_thm(
         Cases_on `list` >> fs[] >> metis_tac[]) >>
   rpt strip_tac >> Cases_on `list` >> fs[] >- fs[Abbr`FF`] >>
   res_tac >> metis_tac[DECIDE ``x < SUC x``])
-
-val FORALL_domain = store_thm(
-  "FORALL_domain",
-  ``(∀d. P d) ⇔ ∀e1 e2. P (D e1 e2)``,
-  simp[EQ_IMP_THM] >> strip_tac >> Cases >> simp[]);
 
 val loopbag_ssubst = store_thm(
   "loopbag_ssubst[simp]",
@@ -269,9 +272,9 @@ val stmt_weight_ssubst = store_thm(
 
 val eval_terminates = store_thm(
   "eval_terminates",
-  ``∀a b. eval a b ⇒ evalR b a``,
+  ``∀a b. eval a b ⇒ whilewaitfree (SND a) ⇒ evalR b a``,
   Induct_on `eval a b` >> rpt strip_tac >>
-  lfs[LEX_DEF, MAX_SET_THM, SUM_APPEND]
+  lfs[LEX_DEF, MAX_SET_THM, SUM_APPEND, DISJ_IMP_THM, FORALL_AND_THM]
   >- (Induct_on `pfx` >> simp[])
   >- (Induct_on `pfx` >> simp[])
   >- (Induct_on `pfx` >> simp[])
@@ -283,10 +286,12 @@ val eval_terminates = store_thm(
   >- (rw[])
   >- (rw[] >> simp[FOLDR_MAP, mlt_loopbag_lemma])
   >- (rw[])
-  >- (disj1_tac >> rw[] >> Induct_on `pfx` >> simp[] >>
-      Induct_on `sfx` >> simp[])
-  >- (disj2_tac >> rw[] >> Induct_on `pfx` >> simp[])
-  >- (disj2_tac >> rw[] >> Induct_on `pfx` >> simp[])
+  >- (rw[] >> fs[DISJ_IMP_THM, FORALL_AND_THM]
+      >- (disj1_tac >> rw[] >> Induct_on `pfx` >> simp[] >>
+          Induct_on `sfx` >> simp[])
+      >- (disj2_tac >> rw[] >> Induct_on `pfx` >> simp[])
+      >- (disj2_tac >> rw[] >> Induct_on `pfx` >> simp[]))
+  >- (metis_tac[])
   >- (metis_tac[])
   >- (metis_tac[])
   >- (simp[DECIDE ``x < y + 1n ⇔ x ≤ y``, stmt_weight_ssubst])
@@ -300,6 +305,8 @@ val strip_label_def = tDefine "strip_label" `
   (strip_label (Par stmts) = Par (MAP strip_label stmts)) ∧
   (strip_label (Label v s) = strip_label s) ∧
   (strip_label (Local v e s) = Local v e (strip_label s)) ∧
+  (strip_label (Atomic s) = Atomic (strip_label s)) ∧
+  (strip_label (While g b) = While g (strip_label b)) ∧
   (strip_label s = s)
 ` (WF_REL_TAC `measure stmt_size` >> simp[] >>
    Induct >> dsimp[stmt_size_def] >> rpt strip_tac >> res_tac >>
@@ -331,7 +338,7 @@ val evaltc_seq = store_thm(
                        mp_tac th) >>
   map_every qid_spec_tac [`x`, `x0`] >>
   Induct_on `TC` >> rw[] >- metis_tac[TC_SUBSET, eval_rules] >>
-  qmatch_assum_rename_tac `(m0,c0) --->⁺ y` [] >> Cases_on `y` >> fs[] >>
+  qmatch_assum_rename_tac `(m0,c0) --->⁺ y` >> Cases_on `y` >> fs[] >>
   metis_tac[TC_RULES]);
 
 val evalrtc_seqpar = prove(
@@ -352,6 +359,9 @@ val (evalrtc_seq, evalrtc_par) =
                    |> SIMP_RULE (srw_ss()) [DISJ_IMP_THM, FORALL_AND_THM,
                                             AND_IMP_INTRO, LEFT_AND_OVER_OR]
                    |> CONJ_PAIR
+
+val _ = save_thm("evalrtc_seq", evalrtc_seq)
+val _ = save_thm("evalrtc_par", evalrtc_par)
 
 val _ = augment_srw_ss [ETA_ss]
 
@@ -458,6 +468,26 @@ val strip_label_EQ_Local = store_thm(
   ``∀c v e s. strip_label c = Local v e s ⇔
               ∃vs s'. c = labelled vs (Local v e s') ∧
                       strip_label s' = s``,
+  ho_match_mp_tac stmt_induction >> simp[PULL_EXISTS] >> metis_tac[]);
+
+val strip_label_EQ_Atomic = store_thm(
+  "strip_label_EQ_Atomic[simp]",
+  ``∀c s. strip_label c = Atomic s ⇔
+          ∃vs s'. c = labelled vs (Atomic s') ∧
+                  strip_label s' = s``,
+  ho_match_mp_tac stmt_induction >> simp[PULL_EXISTS] >> metis_tac[]);
+
+val strip_label_EQ_While = store_thm(
+  "strip_label_EQ_While[simp]",
+  ``∀c g b. strip_label c = While g b ⇔
+            ∃vs b'. c = labelled vs (While g b') ∧
+                    strip_label b' = b``,
+  ho_match_mp_tac stmt_induction >> simp[PULL_EXISTS] >> metis_tac[]);
+
+val strip_label_EQ_WaitUntil = store_thm(
+  "strip_label_EQ_WaitUntil[simp]",
+  ``∀c g. strip_label c = WaitUntil g ⇔
+          ∃vs. c = labelled vs (WaitUntil g)``,
   ho_match_mp_tac stmt_induction >> simp[PULL_EXISTS] >> metis_tac[]);
 
 val strip_label_ssubst = store_thm(
@@ -661,6 +691,16 @@ val labelled_done = store_thm(
   simp[labelled_RTC_mono |> SPEC_ALL |> Q.INST [`vs` |-> `[v]`]
                          |> SIMP_RULE (srw_ss()) []]);
 
+val Label_RTC_mono = save_thm(
+  "Label_RTC_mono[simp]",
+  labelled_RTC_mono |> SPEC_ALL |> Q.INST [`vs` |-> `[v]`]
+                    |> SIMP_RULE (srw_ss()) [])
+
+val Label_Done = save_thm(
+  "Label_Done[simp]",
+  labelled_done |> Q.INST [`vs` |-> `[v]`]
+                |> SIMP_RULE list_ss [])
+
 val labelled_abort1 = store_thm(
   "labelled_abort1[simp]",
   ``(m, labelled vs Abort) --->* (m, Abort)``,
@@ -718,6 +758,19 @@ val ParRTCDone_I = store_thm(
   simp[Once eval_cases] >> rw[] >> fs[] >>
   metis_tac[eval_rules, RTC_RULES, APPEND]);
 
+val RINTER_RTC_E = store_thm(
+  "RINTER_RTC_E",
+  ``!x y. (R1 RINTER R2)^* x y ==> R1^* x y /\ R2^* x y``,
+  HO_MATCH_MP_TAC RTC_INDUCT THEN SRW_TAC[][RINTER] THEN
+  METIS_TAC [RTC_RULES]);
+
+val transitive_RTC_R = store_thm(
+  "transitive_RTC_R",
+  ``reflexive R ∧ transitive R ⇒ RTC R = R``,
+  SRW_TAC [][reflexive_def, transitive_def] THEN
+  SIMP_TAC (srw_ss()) [FUN_EQ_THM, FORALL_AND_THM, EQ_IMP_THM] THEN
+  HO_MATCH_MP_TAC RTC_INDUCT THEN METIS_TAC[]);
+
 val strip_label_simulation1 = prove(
   ``∀m0 c0 m c.
       (m0,c0) ---> (m,c) ⇒
@@ -729,9 +782,9 @@ val strip_label_simulation1 = prove(
        match_mp_tac labelled_RTC_mono >> etac)
   >- (simp[PULL_EXISTS, MAP_EQ_APPEND, MAP_EQ_CONS] >>
       qx_genl_tac [`c`, `c0`, `pfx`, `sfx`, `m0`, `m`] >> rpt strip_tac >>
-      qmatch_assum_rename_tac `MAP strip_label pfx = MAP strip_label pf'` [] >>
-      qmatch_assum_rename_tac `MAP strip_label sfx = MAP strip_label sf'` [] >>
-      qmatch_assum_rename_tac `strip_label c0 = strip_label c0'` [] >>
+      qmatch_assum_rename_tac `MAP strip_label pfx = MAP strip_label pf'` >>
+      qmatch_assum_rename_tac `MAP strip_label sfx = MAP strip_label sf'` >>
+      qmatch_assum_rename_tac `strip_label c0 = strip_label c0'` >>
       `∃c'. (m0,c0') --->* (m,c') ∧ strip_label c' = strip_label c`
         by metis_tac[] >>
       map_every qexists_tac [`vs`, `sf'`, `pfx`, `c'`] >> simp[] >>
@@ -828,9 +881,9 @@ val strip_label_simulation1 = prove(
   >- (simp[PULL_EXISTS] >> rpt strip_tac >>
       pop_assum mp_tac >>
       simp[SimpL ``$==>``, MAP_EQ_APPEND, MAP_EQ_CONS] >> rw[] >>
-      qmatch_assum_rename_tac `MAP strip_label pfx = MAP strip_label p'` [] >>
-      qmatch_assum_rename_tac `MAP strip_label sfx = MAP strip_label s'` [] >>
-      qmatch_assum_rename_tac `strip_label c0 = strip_label c0'` [] >>
+      qmatch_assum_rename_tac `MAP strip_label pfx = MAP strip_label p'` >>
+      qmatch_assum_rename_tac `MAP strip_label sfx = MAP strip_label s'` >>
+      qmatch_assum_rename_tac `strip_label c0 = strip_label c0'` >>
       `∃c'. (m0,c0') --->* (m,c') ∧ strip_label c' = strip_label c`
         by metis_tac[] >>
       map_every qexists_tac [`vs`, `p' ++ [c'] ++ s'`] >> simp[] >>
@@ -852,10 +905,39 @@ val strip_label_simulation1 = prove(
       fs[Once MEM_SPLIT_APPEND_first] >> rw[] >>
       fs[MAP_EQ_APPEND, MAP_EQ_CONS] >> rw[] >>
       simp[Once RTC_CASES_RTC_TWICE] >>
-      qmatch_assum_rename_tac `MAP strip_label pfx = MAP strip_label p'` [] >>
-      qmatch_assum_rename_tac `MAP strip_label sfx = MAP strip_label s'` [] >>
+      qmatch_assum_rename_tac `MAP strip_label pfx = MAP strip_label p'` >>
+      qmatch_assum_rename_tac `MAP strip_label sfx = MAP strip_label s'` >>
       qexists_tac `(m0, Par (p' ++ [Abort] ++ s'))` >> reverse conj_tac >- etac>>
       match_mp_tac evalrtc_par >> simp[])
+  >- ((* while *) simp[PULL_EXISTS, MAP_EQ_CONS] >>
+      qx_genl_tac [`g`, `b`, `m0`, `vs`, `b'`] >> strip_tac >>
+      map_every qexists_tac [`vs`, `[]`, `[]`, `b'`, `[]`, `b'`] >>
+      simp[] >> match_mp_tac labelled_RTC_mono >>
+      match_mp_tac RTC_SUBSET >> e1tac)
+  >- (simp[PULL_EXISTS] >> qx_genl_tac [`m0`, `s`, `m`] >>
+      strip_tac >>
+      qmatch_assum_abbrev_tac `eR^* (m0,s) (m,Done)` >>
+      qabbrev_tac `
+        R = λ(m0,s0) (m,s).
+             ∀c. strip_label c = strip_label s0 ⇒
+                 ∃c'. (m0,c) --->* (m,c') ∧
+                      strip_label c' = strip_label s` >>
+      `eR = eval RINTER R`
+        by simp[FUN_EQ_THM, Abbr`eR`, Abbr`R`, RINTER, FORALL_PROD] >>
+      Q.RM_ABBREV_TAC `eR` >> pop_assum SUBST_ALL_TAC >>
+      imp_res_tac RINTER_RTC_E >>
+      `reflexive R /\ transitive R`
+        by (simp[transitive_def, Abbr`R`, FORALL_PROD, reflexive_def] >>
+            metis_tac[RTC_RTC, RTC_RULES]) >>
+      `RTC R = R` by metis_tac[transitive_RTC_R] >> pop_assum SUBST_ALL_TAC >>
+      qunabbrev_tac `R` >> fs[] >> qx_genl_tac [`vs`, `s'`] >> strip_tac >>
+      qexists_tac `vs` >> match_mp_tac labelled_RTC_mono >>
+      match_mp_tac RTC_SUBSET >>
+      `∃s'' vs'. (m0,s') --->* (m,s'') ∧ s'' = labelled vs' Done`
+        by metis_tac[] >>
+      `(m, labelled vs' Done) --->* (m, Done)` by simp[] >> rw[] >>
+      `(m0, s') --->* (m, Done)` by metis_tac[RTC_RTC] >>
+      e1tac)
   >- (simp[PULL_EXISTS] >> rpt strip_tac >>
       qexists_tac `labelled vs (ssubst vnm (evalexpr m0 e) s')` >> simp[] >>
       match_mp_tac labelled_RTC_mono >>
@@ -876,7 +958,7 @@ val strip_label_simulation0 = prove(
              ∃c'. (m0,c0') --->* (m,c') ∧ strip_label c' = strip_label c``,
   ho_match_mp_tac RTC_STRONG_INDUCT >> simp[] >> rw[]
   >- metis_tac [RTC_RULES] >>
-  qmatch_assum_rename_tac `(m0,c0) ---> mc'` [] >>
+  qmatch_assum_rename_tac `(m0,c0) ---> mc'` >>
   `∃m' c'. mc' = (m',c')` by (Cases_on `mc'` >> simp[]) >> rw[] >>
   `∃c''. (m0, c0') --->* (m', c'') ∧ strip_label c'' = strip_label c'`
     by metis_tac[strip_label_simulation1] >>
@@ -888,14 +970,6 @@ val strip_label_bisimulation = save_thm(
   "strip_label_bisimulation",
   strip_label_simulation0
     |> SIMP_RULE (srw_ss()) [PULL_FORALL, AND_IMP_INTRO]);
-
-(* ----------------------------------------------------------------------
-    Create an action graph from a PseudoC program.
-
-    Function is partial to allow for possibility that actions
-    parallelised underneath a Par may be touching/conflicting. If this
-    happens, the result has to be NONE.
-   ---------------------------------------------------------------------- *)
 
 open monadsyntax
 
@@ -940,9 +1014,9 @@ val lookupRW_def = Define`
 
 val apply_action_def = Define`
   apply_action a m_opt =
-    case a.writes of
-        [] => m_opt
-      | (w::_) =>
+    case a.write of
+        NONE => m_opt
+      | SOME w =>
         do
           m <- m_opt;
           vs <- SOME(MAP (lookupRW m) a.reads);
@@ -985,7 +1059,7 @@ val upd_memory_preserves_FDOMs = store_thm(
 val apply_action_preserves_FDOMs = store_thm(
   "apply_action_preserves_FDOMs",
   ``apply_action a (SOME m) = SOME m' ⇒ FDOM m' = FDOM m``,
-  simp[apply_action_def] >> Cases_on `a.writes` >> simp[] >>
+  simp[apply_action_def] >> Cases_on `a.write` >> simp[] >>
   metis_tac[upd_memory_preserves_FDOMs]);
 
 val upd_nested_array_preserves_array_length = store_thm(
@@ -1136,10 +1210,10 @@ val nontouching_updm_read_after_writes = store_thm(
 
 val nontouching_updm_expreval = store_thm(
   "nontouching_updm_expreval",
-  ``¬(touches a1 a2) ∧ a2.writes = w::rest ∧ upd_memory w value m = SOME m' ⇒
+  ``a1 ≁ₜ a2 ∧ a2.write = SOME w ∧ upd_memory w value m = SOME m' ⇒
     MAP (lookupRW m') a1.reads = MAP (lookupRW m) a1.reads``,
   simp[MAP_EQ_f] >> strip_tac >> qx_gen_tac `r` >> strip_tac >>
-  `r ≠ w` by metis_tac[touches_def, MEM] >>
+  `r ≠ w` by (fs[touches_def] >> metis_tac[]) >>
   metis_tac[nontouching_updm_read_after_writes]);
 
 val FLOOKUP_memory_cases = prove(
@@ -1384,10 +1458,10 @@ val apply_action_commutes = store_thm(
   simp[apply_action_def, lift_OPTION_BIND, combinTheory.o_ABS_R,
        o_UNCURRY_R, C_UNCURRY_L,
        combinTheory.C_ABS_L] >>
-  `a1.writes = [] ∨ ∃w1 t1. a1.writes = w1::t1`
-    by (Cases_on `a1.writes` >> simp[]) >>
-  `a2.writes = [] ∨ ∃w2 t2. a2.writes = w2::t2`
-    by (Cases_on `a2.writes` >> simp[]) >>
+  `a1.write = NONE ∨ ∃w1. a1.write = SOME w1`
+    by (Cases_on `a1.write` >> simp[]) >>
+  `a2.write = NONE ∨ ∃w2. a2.write = SOME w2`
+    by (Cases_on `a2.write` >> simp[]) >>
   simp[] >>
   qabbrev_tac `
     A1U = λm. upd_memory w1 (a1.data (MAP (lookupRW m) a1.reads)) m` >>
@@ -1396,18 +1470,18 @@ val apply_action_commutes = store_thm(
   simp[] >>
   Cases_on `A1U gm` >> simp[]
   >- (Cases_on `A2U gm` >> simp[] >>
-      qmatch_assum_rename_tac `A2U gm = SOME m'` [] >>
+      qmatch_assum_rename_tac `A2U gm = SOME m'` >>
       fs[Abbr`A1U`, Abbr`A2U`] >>
       `MAP (lookupRW m') a1.reads = MAP (lookupRW gm) a1.reads`
         by metis_tac[nontouching_updm_expreval] >> simp[] >>
       metis_tac[upd_memory_diamond_NONE_preserved]) >>
-  qmatch_assum_rename_tac `A1U gm = SOME m1` [] >>
+  qmatch_assum_rename_tac `A1U gm = SOME m1` >>
   Cases_on `A2U gm` >> simp[]
   >- (fs[Abbr`A1U`, Abbr`A2U`] >>
       `MAP (lookupRW m1) a2.reads = MAP (lookupRW gm) a2.reads`
         by metis_tac[nontouching_updm_expreval, touches_SYM] >> simp[] >>
       metis_tac[upd_memory_diamond_NONE_preserved]) >>
-  qmatch_assum_rename_tac `A2U gm = SOME m2` [] >>
+  qmatch_assum_rename_tac `A2U gm = SOME m2` >>
   fs[Abbr`A1U`, Abbr`A2U`] >>
   `MAP (lookupRW m1) a2.reads = MAP (lookupRW gm) a2.reads ∧
    MAP (lookupRW m2) a1.reads = MAP (lookupRW gm) a1.reads`
@@ -1443,7 +1517,7 @@ val expr_reads_def = tDefine "expr_reads" `
 val readAction_def = Define`
   readAction i m e = <|
     reads := expr_reads m e;
-    writes := [];
+    write := NONE;
     data := ARB : value list -> value;
     ident := i |>
 `;
@@ -1456,7 +1530,7 @@ val readAction_ident = store_thm(
 val domreadAction_def = Define`
   domreadAction i m (D lo hi) = <|
     reads := expr_reads m lo ++ expr_reads m hi;
-    writes := [];
+    write := NONE;
     data := ARB : value list -> value;
     ident := i
   |> `;
@@ -1464,6 +1538,11 @@ val domreadAction_def = Define`
 val domreadAction_ident = store_thm(
   "domreadAction_ident[simp]",
   ``(domreadAction i m d).ident = i``,
+  Cases_on `d` >> simp[domreadAction_def]);
+
+val domreadAction_write = store_thm(
+  "domreadAction_write[simp]",
+  ``(domreadAction l m d).write = NONE``,
   Cases_on `d` >> simp[domreadAction_def]);
 
 val dvread_def = Define`
@@ -1474,7 +1553,7 @@ val dvread_def = Define`
 
 val dvreadAction_def = Define`
   dvreadAction i m ds = <| reads := FLAT (MAP (dvread m) ds);
-                           writes := [];
+                           write := NONE;
                            data := ARB : value list -> value;
                            ident := i |>
 `
@@ -1810,12 +1889,11 @@ val apply_action_expr_eval_commutes = store_thm(
      ⇒
        evalexpr m e = evalexpr m0 e ∧ readAction j m e = readAction j m0 e``,
   simp[readAction_def, touches_def, apply_action_def] >> gen_tac >>
-  `a.writes = [] ∨ ∃w t. a.writes = w::t` by (Cases_on `a.writes` >> simp[]) >>
+  `a.write = NONE ∨ ∃w. a.write = SOME w` by (Cases_on `a.write` >> simp[]) >>
   simp[] >>
   REWRITE_TAC [DECIDE ``p \/ q <=> ~p ==> q``] >>
   simp[DISJ_IMP_THM, FORALL_AND_THM, MEM_FILTER] >>
   pop_assum kall_tac >> map_every qx_gen_tac [`e`, `m0`, `m`] >> strip_tac >>
-  first_x_assum (kall_tac o assert (is_forall o concl)) >>
   qabbrev_tac `d = a.data (MAP (lookupRW m0) a.reads)` >>
   markerLib.RM_ALL_ABBREVS_TAC >>
   match_mp_tac (aec_lemma |> CONJUNCT1) >> simp[] >>

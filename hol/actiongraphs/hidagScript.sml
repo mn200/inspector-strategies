@@ -6,10 +6,14 @@ open actionTheory
 open bagTheory
 open quotientLib
 open indexedListsTheory
+open monadsyntax
 
 val _ = new_theory "hidag";
 
 val _ = type_abbrev("node", ``:(β,α,unit)action``)
+val _ = overload_on ("monad_bind", ``OPTION_BIND``)
+val _ = overload_on ("monad_unitbind", ``OPTION_IGNORE_BIND``)
+val _ = overload_on ("assert", ``OPTION_GUARD``)
 
 val _ = Datatype`hn0 = HD0 ((α,β) node) | HG0 hg0 ;
                  hg0 = emptyHDG0 | hadd0 hn0 hg0`
@@ -24,7 +28,7 @@ val greads0_def = Define`
 val gwrites0_def = Define`
   gwrites0 emptyHDG0 = ∅ ∧
   gwrites0 (hadd0 n g) = nwrites0 n ∪ gwrites0 g ∧
-  nwrites0 (HD0 n) = set n.writes ∧
+  nwrites0 (HD0 n) = set n.write ∧
   nwrites0 (HG0 g) = gwrites0 g
 `;
 
@@ -85,7 +89,6 @@ val ax = TypeBase.axiom_of ``:(α,β)hn0``
             |> Q.SPEC `af`
             |> BETA_RULE
 
-
 val recursion = prove(
   ``∀   (e : γ)
         (af :: respects (neq ===> heq ===> (=) ===> (=)))
@@ -96,7 +99,7 @@ val recursion = prove(
         (grr : γ -> α -> bool)
         (grw : γ -> α -> bool).
       (∀m : (α,β)node. nrr (df m) ⊆ set m.reads) ∧
-      (∀m : (α,β)node. nrw (df m) ⊆ set m.writes) ∧
+      (∀m : (α,β)node. nrw (df m) ⊆ set m.write) ∧
       (∀g : (α,β)hg0 gr : γ. grr gr ⊆ greads0 g ⇒ nrr (gf g gr) ⊆ greads0 g) ∧
       (∀g : (α,β)hg0 gr : γ. grw gr ⊆ gwrites0 g ⇒ nrw (gf g gr) ⊆ gwrites0 g) ∧
 
@@ -308,7 +311,7 @@ val _ = set_mapped_fixity { fixity = Infix(NONASSOC, 450),
                             tok = "≁ᵍ", term_name = "not_gtouches"}
 val _ = overload_on("ngtouches", ``gentouches nreads nwrites greads gwrites``)
 val _ = overload_on("agtouches",
-  ``gentouches (set o action_reads) (set o action_writes) greads gwrites``);
+  ``gentouches (set o action_reads) (set o action_write) greads gwrites``);
 
 val _ = set_mapped_fixity { fixity = Infixr 501, term_name = "hidagAdd",
                             tok = "<+" }
@@ -591,6 +594,37 @@ val grws_gfilter = store_thm(
   ``greads (gfilter P g) ⊆ greads g ∧ gwrites (gfilter P g) ⊆ gwrites g``,
   Induct_on `g` >> rw[] >> rw[] >> metis_tac[SUBSET_TRANS, SUBSET_UNION])
 
+val gafilter_def = new_specification("gafilter_def",
+  ["gafilter", "nafilter"],
+  hidag_recursion
+    |> INST_TYPE [gamma |-> ``:(α,β)hidag``, delta |-> ``:(α,β)hinode option``]
+    |> Q.SPECL [`ε`, `λn g nr gr. case nr of NONE => gr | SOME n' => n' <+ gr`,
+                `λg gr. if gr = ε then NONE else SOME (HG gr)`,
+                `λn. if P n then SOME (HD n) else NONE`,
+                `λnopt. case nopt of NONE => ∅ | SOME n => nreads n`,
+                `λnopt. case nopt of NONE => ∅ | SOME n => nwrites n`,
+                `greads`, `gwrites`]
+    |> SIMP_RULE (srw_ss()) []
+    |> CONV_RULE
+         (LAND_CONV (SIMP_CONV (srw_ss() ++ boolSimps.COND_elim_ss) [Cong DISJ_CONG] THENC
+                     SIMP_CONV (srw_ss()) [optionTheory.FORALL_OPTION]))
+    |> SIMP_RULE (srw_ss()) [SUBSET_DEF, gentouches_def, Once hidagAdd_commutes]
+    |> Q.GEN `P`
+    |> SIMP_RULE (srw_ss()) [SKOLEM_THM, FORALL_AND_THM]);
+val _ = export_rewrites ["gafilter_def"]
+
+val gafilter_gafilter = store_thm(
+  "gafilter_gafilter",
+  ``(∀n.
+       nafilter (λa. P a ∧ Q a) n =
+         do
+           n' <- nafilter Q n ;
+           nafilter P n'
+         od) ∧
+    ∀g. gafilter P (gafilter Q g) = gafilter (λa. P a ∧ Q a) g``,
+  ho_match_mp_tac hidag_ind >> simp[] >> rw[] >> fs[] >>
+  Cases_on `nafilter Q n` >> simp[]);
+
 val gwave_lemma = prove(
   ``(∀n g nr gr.
         greads gr ⊆ greads g ⇒ greads (gfilter P gr) ⊆ Q ∪ greads g) ∧
@@ -703,7 +737,7 @@ val hidagAdd_11_thm = store_thm(
   >- (eq_tac >> strip_tac >> simp[Once hidagAdd_commutes]) >>
   reverse eq_tac >- (rw[] >> metis_tac[hidagAdd_commutes, htouches_SYM]) >>
   strip_tac >>
-  qmatch_assum_rename_tac `a1 <+ b <+ g0 = a2 <+ g2` [] >>
+  qmatch_assum_rename_tac `a1 <+ b <+ g0 = a2 <+ g2` >>
   Cases_on `b = a2` >> dsimp[]
   >- (rw[] >> dsimp[] >>
       `g2 = a1 <+ g0` suffices_by metis_tac[hidag_commutes_EQ] >>
@@ -990,11 +1024,11 @@ val move_nontouching_hdbuild_front = store_thm(
 val htouches_rewrites = store_thm(
   "htouches_rewrites[simp]",
   ``gentouches nreads nwrites rf1 wf1 (HD a) =
-      gentouches (set o action_reads) (set o action_writes) rf1 wf1 a ∧
+      gentouches (set o action_reads) (set o action_write) rf1 wf1 a ∧
     gentouches nreads nwrites rf2 wf2 (HG g) =
       gentouches greads gwrites rf2 wf2 g ∧
     gentouches rf3 wf3 nreads nwrites x (HD a) =
-      gentouches rf3 wf3 (set o action_reads) (set o action_writes) x a ∧
+      gentouches rf3 wf3 (set o action_reads) (set o action_write) x a ∧
     gentouches rf4 wf4 nreads nwrites x (HG g)=
       gentouches rf4 wf4 greads gwrites x g``,
   simp[FUN_EQ_THM, gentouches_def]);

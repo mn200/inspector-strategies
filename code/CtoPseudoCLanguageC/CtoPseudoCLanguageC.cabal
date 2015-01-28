@@ -1,0 +1,20 @@
+name:           CtoPseudoCLanguageC
+version:        0.1
+cabal-version:  >=1.2
+build-type:     Simple
+author:         lrabiet
+
+
+-- PseudoCDefinition is found in public/code
+library
+  hs-source-dirs:  src
+  build-depends:   language-c, base, groom, PseudoCDefinition, pretty
+  Exposed-modules: CtoPseudoCParser
+  ghc-options:     -Wall
+
+executable CtoPseudoCLanguageC
+  hs-source-dirs:  src
+  main-is:         Main.hs
+  build-depends:   language-c, base, groom, PseudoCDefinition, pretty
+  ghc-options:     
+

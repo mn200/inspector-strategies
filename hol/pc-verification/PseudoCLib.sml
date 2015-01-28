@@ -4,6 +4,7 @@ struct
 open HolKernel simpLib
 
 open listRangeTheory finite_mapTheory PseudoCTheory PseudoCOpsTheory
+open PseudoCHDAGTheory
 
 open lcsymtacs intReduce
 
@@ -13,9 +14,10 @@ fun newrule t =
 val evalths = [newrule ``Seq []``, newrule ``Done``,
                newrule ``ForLoop v d b``, newrule ``Assign w rds vf``,
                newrule ``ParLoop v d b``, newrule ``Par []``,
-               newrule ``Par (h::t)``, newrule ``AssignVar v rds vf``,
+               newrule ``Par (h::t)``,
                newrule ``IfStmt g t e``, newrule ``Malloc v n value``,
-               newrule ``Label l s``, newrule ``Local var e s``]
+               newrule ``Label l s``, newrule ``Local var e s``,
+               newrule ``While g b``, newrule ``WaitUntil g``]
 
 val option_CASE_Cong = prove(
   ``M1 = M2 ⇒ option_CASE M1 n f = option_CASE M2 n f``,
@@ -55,21 +57,41 @@ val evalseq_cons = prove(
 
 val bb = prove(``(!b. b) = F``, SIMP_TAC bool_ss [FORALL_BOOL])
 
+val atomic = prove(
+  ``∀m0 s mr.
+      (m0, Atomic s) ---> mr ⇔
+      case graphOf [] m0 s of
+          SOME (m, _) => mr = (m, Done)
+        | NONE => unint ((m0, unint (Atomic s)) ---> mr)``,
+  simp[Once eval_cases, SimpLHS, pairTheory.FORALL_PROD] >>
+  rpt gen_tac >>
+  `graphOf [] m0 s = NONE ∨ ∃m g. graphOf [] m0 s = SOME(m,g)`
+    by metis_tac[optionTheory.option_CASES, pairTheory.pair_CASES]
+  >- (simp[markerTheory.unint_def] >> simp[SimpRHS, Once eval_cases]) >>
+  simp[] >> metis_tac[graphOf_correct])
+
+val unint_CONG = prove(``unint x = unint x``, simp[])
+
+
 fun subeval t =
     (SIMP_CONV (srw_ss() ++ INT_REDUCE_ss)
               (FLOOKUP_UPDATE :: lookup_v_def :: evalexpr_def ::
                evalseq_cons :: alt_upd_var :: Cong option_CASE_Cong ::
+               Cong unint_CONG :: atomic ::
+               RIGHT_AND_OVER_OR :: LEFT_AND_OVER_OR :: EXISTS_OR_THM ::
                PULL_EXISTS :: dvalues_def :: ssubst_def :: esubst_def ::
                dsubst_def :: listTheory.APPEND_EQ_CONS :: LET_THM ::
                minusval_def :: plusval_def :: cmpGTEval_def ::
                bb :: maxval_def :: upd_write_def :: eval_lvalue_def ::
                lookup_array_def :: upd_array_def :: listTheory.LUPDATE_compute::
+               graphOf_def :: getReads_def :: maRead_def :: evalDexpr_def ::
+               PseudoCPropsTheory.OPT_SEQUENCE_def ::
                evalths) THENC
      SIMP_CONV (srw_ss() ++ INT_REDUCE_ss)
                [RIGHT_AND_OVER_OR, LEFT_AND_OVER_OR, EXISTS_OR_THM,
                 evalexpr_def, lookup_v_def, lookup_array_def,
                 minusval_def, plusval_def, cmpGTEval_def,
-                bb,
+                bb, Cong unint_CONG,
                 FLOOKUP_UPDATE])
       t
 
@@ -133,5 +155,30 @@ in
            d
            t)
 end
+
+(* test for Atomic.
+
+   In this one, final states can be [(x, 4); (y, 3)] or [(x,6), (y,3)]
+
+      chaineval 10 ``(FEMPTY |+ ("x", Int 1) |+ ("y", Int 2),
+                      Par [Atomic (Assign (VRead "x")
+                                          [DMA (VRead "y"); DMA (VRead "y")]
+                                          (λvl. case vl of
+                                                    [Int i; Int j] => Int (i + j)
+                                                  | _ => Error));
+                           Assign (VRead "y") [] (λvl. Int 3)])``
+
+but in this one without the Atomic, x can be 4, 5 or 6, depending on how the
+assignment to y and the reads in the other assignment interleave.
+
+      chaineval 10 ``(FEMPTY |+ ("x", Int 1) |+ ("y", Int 2),
+                      Par [Assign (VRead "x")
+                                          [DMA (VRead "y"); DMA (VRead "y")]
+                                          (λvl. case vl of
+                                                    [Int i; Int j] => Int (i + j)
+                                                  | _ => Error);
+                           Assign (VRead "y") [] (λvl. Int 3)])``
+*)
+
 
 end (* struct *)

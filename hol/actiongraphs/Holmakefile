@@ -1,1 +1,1 @@
-INCLUDES = $(HOLDIR)/examples/set-theory/hol_sets/ ../lib
+INCLUDES = ../lib

@@ -1,13 +1,12 @@
 open HolKernel Parse boolLib bossLib;
 
-open stringTheory
+open listTheory stringTheory
 open integerTheory intLib
 open realTheory
 open finite_mapTheory
 open lcsymtacs
 open listRangeTheory
-open intrealTheory transcTheory
-open monadsyntax
+open monadsyntax boolSimps
 
 val _ = new_theory "PseudoC";
 
@@ -54,6 +53,7 @@ val _ = Datatype`
   maccess = VRead string
           | ASub maccess expr
 `
+val expr_size_def = definition "expr_size_def"
 
 val isValue_def = Define`
   isValue (Value _) = T ∧
@@ -63,6 +63,11 @@ val _ = export_rewrites ["isValue_def"]
 
 
 val _ = Datatype`domain = D expr expr`  (* lo/hi pair *)
+val FORALL_domain = store_thm(
+  "FORALL_domain",
+  ``(∀d. P d) ⇔ ∀e1 e2. P (D e1 e2)``,
+  simp[EQ_IMP_THM] >> strip_tac >> Cases >> simp[]);
+
 val _ = Datatype`dexpr = DMA maccess | DValue value`
 val destDValue_def = Define`
   destDValue (DValue (Array _)) = Error ∧
@@ -88,13 +93,17 @@ val _ = Datatype`
        | Malloc vname expr value
        | ForLoop vname domain stmt
        | ParLoop vname domain stmt
+       | While expr stmt
+       | WaitUntil expr
        | Seq (stmt list)
        | Par (stmt list)
        | Local vname expr stmt
        | Label value stmt
+       | Atomic stmt
        | Abort
        | Done
 `
+val stmt_size_def = definition "stmt_size_def"
 
 val stmt_induction = store_thm(
   "stmt_induction",
@@ -104,10 +113,13 @@ val stmt_induction = store_thm(
      (∀nm e value. P (Malloc nm e value)) ∧
      (∀s d stmt. P stmt ⇒ P (ForLoop s d stmt)) ∧
      (∀s d stmt. P stmt ⇒ P (ParLoop s d stmt)) ∧
+     (∀e s. P s ⇒ P (While e s)) ∧
+     (∀e. P (WaitUntil e)) ∧
      (∀stmts. (∀m s. MEM s stmts ⇒ P s) ⇒ P (Seq stmts)) ∧
      (∀stmts. (∀m s. MEM s stmts ⇒ P s) ⇒ P (Par stmts)) ∧
      (∀v s. P s ⇒ P (Label v s)) ∧
      (∀v e s. P s ⇒ P (Local v e s)) ∧
+     (∀s. P s ⇒ P (Atomic s)) ∧
      P Abort ∧ P Done
     ⇒
      ∀s. P s``,
@@ -115,6 +127,60 @@ val stmt_induction = store_thm(
   `(∀s. P s) ∧ (∀l s. MEM s l ⇒ P s)` suffices_by simp[] >>
   ho_match_mp_tac (TypeBase.induction_of ``:stmt``) >>
   simp[] >> dsimp[pairTheory.FORALL_PROD] >> metis_tac[]);
+
+val whilefree_def = tDefine "whilefree" `
+  whilefree (IfStmt _ t e) = (whilefree t ∧ whilefree e) ∧
+  whilefree (ForLoop _ _ b) = whilefree b ∧
+  whilefree (ParLoop _ _ b) = whilefree b ∧
+  whilefree (Seq cs) = (∀c. MEM c cs ⇒ whilefree c) ∧
+  whilefree (Par cs) = (∀c. MEM c cs ⇒ whilefree c) ∧
+  whilefree (While _ _) = F ∧
+  whilefree (Label _ s) = whilefree s ∧
+  whilefree (Local _ _ s) = whilefree s ∧
+  whilefree (Atomic s) = whilefree s ∧
+  whilefree _ = T
+` (WF_REL_TAC `measure stmt_size` >> simp[] >>
+   Induct >> dsimp[definition "stmt_size_def"] >> rpt strip_tac >>
+   res_tac >> simp[])
+val _ = export_rewrites ["whilefree_def"]
+
+val waitfree_def = tDefine "waitfree" `
+  waitfree (IfStmt _ t e) = (waitfree t ∧ waitfree e) ∧
+  waitfree (ForLoop _ _ b) = waitfree b ∧
+  waitfree (ParLoop _ _ b) = waitfree b ∧
+  waitfree (Seq cs) = (∀c. MEM c cs ⇒ waitfree c) ∧
+  waitfree (Par cs) = (∀c. MEM c cs ⇒ waitfree c) ∧
+  waitfree (While _ b) = waitfree b ∧
+  waitfree (WaitUntil _) = F ∧
+  waitfree (Label _ s) = waitfree s ∧
+  waitfree (Local _ _ s) = waitfree s ∧
+  waitfree (Atomic s) = waitfree s ∧
+  waitfree _ = T
+` (WF_REL_TAC `measure stmt_size` >> simp[] >>
+   Induct >> dsimp[definition "stmt_size_def"] >> rpt strip_tac >>
+   res_tac >> simp[])
+val _ = export_rewrites ["waitfree_def"]
+
+val whilewaitfree_def = Define`
+  whilewaitfree s ⇔ whilefree s ∧ waitfree s
+`
+
+val whilewaitfree_thm = store_thm(
+  "whilewaitfree_thm[simp]",
+  ``whilewaitfree (IfStmt g th el) = (whilewaitfree th ∧ whilewaitfree el) ∧
+    whilewaitfree (ForLoop v d b) = whilewaitfree b ∧
+    whilewaitfree (ParLoop v d b) = whilewaitfree b ∧
+    whilewaitfree (Seq cs) = (∀c. MEM c cs ⇒ whilewaitfree c) ∧
+    whilewaitfree (Par cs) = (∀c. MEM c cs ⇒ whilewaitfree c) ∧
+    whilewaitfree (While g b) = F ∧
+    whilewaitfree (WaitUntil g) = F ∧
+    whilewaitfree (Label l s) = whilewaitfree s ∧
+    whilewaitfree (Local v e s) = whilewaitfree s ∧
+    whilewaitfree (Atomic s) = whilewaitfree s ∧
+    whilewaitfree Done = T ∧
+    whilewaitfree Abort = T ∧
+    whilewaitfree (Malloc x y z) = T``,
+  simp[whilewaitfree_def] >> metis_tac[]);
 
 (* lookup_array : memory -> string -> int -> value *)
 val lookup_array_def = Define`
@@ -170,7 +236,7 @@ val evalexpr_def = tDefine "evalexpr" `
 ` (WF_REL_TAC `measure (λs. case s of
                                 INL (m,ma) => maccess_size ma
                               | INR (m,e) => expr_size e)` >>
-   simp[] >> Induct >> rw[definition "expr_size_def"] >>
+   simp[] >> Induct >> rw[expr_size_def] >>
    res_tac >> simp[])
 
 val devals_scalar_def = Define`
@@ -225,8 +291,7 @@ val esubst_def = tDefine "esubst" `
                                 INL (_,_,e) => expr_size e
                               | INR (_,_,ma) => maccess_size ma)` >>
    simp[] >>
-   Induct >> dsimp[definition "expr_size_def"] >> rpt strip_tac >>
-   res_tac >> simp[])
+   Induct >> dsimp[expr_size_def] >> rpt strip_tac >> res_tac >> simp[])
 
 val dsubst_def = Define`
   (dsubst _ _ (DValue v) = DValue v) ∧
@@ -258,18 +323,125 @@ val ssubst_def = tDefine "ssubst" `
   (ssubst vnm value (ParLoop vnm' (D lo hi) s) =
      ParLoop vnm' (D (esubst vnm value lo) (esubst vnm value hi))
              (if vnm = vnm' then s else ssubst vnm value s)) ∧
+  (ssubst vnm value (While e s) =
+     While (esubst vnm value e) (ssubst vnm value s)) ∧
+  (ssubst vnm value (WaitUntil e) = WaitUntil (esubst vnm value e)) ∧
   (ssubst vnm value (Seq slist) = Seq (MAP (ssubst vnm value) slist)) ∧
   (ssubst vnm value (Par slist) = Par (MAP (ssubst vnm value) slist)) ∧
   (ssubst vnm value (Label v s) = Label v (ssubst vnm value s)) ∧
   (ssubst vnm value (Local v e s) =
-     if v = vnm then Local v e s
+     if v = vnm then Local v (esubst vnm value e) s
      else Local v (esubst vnm value e) (ssubst vnm value s)) ∧
+  (ssubst vnm value (Atomic s) = Atomic (ssubst vnm value s)) ∧
   (ssubst vnm value Abort = Abort) ∧
   (ssubst vnm value Done = Done)
 `
   (WF_REL_TAC `measure (λ(vnm,value,s). stmt_size s)` >> simp[] >>
-   Induct >> dsimp[definition "stmt_size_def"] >> rpt strip_tac >>
-   res_tac >> simp[])
+   Induct >> dsimp[stmt_size_def] >> rpt strip_tac >> res_tac >> simp[])
+
+val varsOf_def = tDefine "varsOf" `
+  varsOf (MAccess ma) = mvarsOf ma ∧
+  varsOf (Opn _ es) = BIGUNION (IMAGE varsOf (set es)) ∧
+  varsOf (Value _) = ∅ ∧
+  mvarsOf (VRead v) = {v} ∧
+  mvarsOf (ASub ma e) = mvarsOf ma ∪ varsOf e
+` (WF_REL_TAC
+     `measure (λs. case s of INL e => expr_size e | INR m => maccess_size m)` >>
+   simp[] >> Induct >> simp[] >> rpt strip_tac >> simp[expr_size_def] >>
+   res_tac >> simp[]);
+val _ = export_rewrites ["varsOf_def"]
+val varsOf_ind = theorem "varsOf_ind"
+
+val _ = set_fixity "#" (Infix(NONASSOC, 450))
+val _ = overload_on ("#", ``λn e. n ∉ varsOf e``)
+
+val fresh_esubst = store_thm(
+  "fresh_esubst[simp]",
+  ``(∀e. n # e ⇒ esubst n v e = e) ∧
+    ∀m. n ∉ mvarsOf m ⇒ msubst n v m = m``,
+  ho_match_mp_tac varsOf_ind >> simp[esubst_def] >> conj_tac >| [
+    Cases >> simp[esubst_def],
+    rpt strip_tac >> simp[LIST_EQ_REWRITE, EL_MAP] >>
+    metis_tac[MEM_EL]
+  ]);
+
+val dvarsOf_def = Define`
+  dvarsOf (DValue _) = ∅ ∧
+  dvarsOf (DMA ma) = mvarsOf ma
+`;
+val _ = export_rewrites ["dvarsOf_def"]
+val _ = overload_on ("#", ``λn d. n ∉ dvarsOf d``)
+
+val fresh_dsubst = store_thm(
+  "fresh_dsubst[simp]",
+  ``∀d. n # d ⇒ dsubst n v d = d``,
+  Induct >> simp[dsubst_def] >> Cases >> simp[]);
+
+val listVarsOf_def = Define`
+  listVarsOf ef [] = ∅ ∧
+  listVarsOf ef (h::t) = ef h ∪ listVarsOf ef t
+`;
+val _ = export_rewrites ["listVarsOf_def"]
+val _ = overload_on ("#", ``λn dl : dexpr list. n ∉ listVarsOf dvarsOf dl``)
+
+val listVarsOf_CONG = store_thm(
+  "listVarsOf_CONG[defncong]",
+  ``∀l1 l2 f1 f2.
+      l1 = l2 ∧ (∀e. MEM e l2 ⇒ f1 e = f2 e) ⇒
+      listVarsOf f1 l1 = listVarsOf f2 l2``,
+  simp[] >> Induct >> simp[DISJ_IMP_THM, FORALL_AND_THM] >>
+  metis_tac[]);
+
+val listVarsOf_MEM = store_thm(
+  "listVarsOf_MEM",
+  ``n ∈ listVarsOf f l ⇔ ∃e. MEM e l ∧ n ∈ f e``,
+  Induct_on `l` >> simp[] >> metis_tac[]);
+
+val fresh_dsubstl = store_thm(
+  "fresh_dsubstl[simp]",
+  ``∀dl. n # dl ⇒ MAP (dsubst n v) dl = dl``,
+  Induct >> simp[]);
+
+val dmvarsOf_def = Define`
+  dmvarsOf (D lo hi) = varsOf lo ∪ varsOf hi
+`;
+val _ = export_rewrites ["dmvarsOf_def"]
+
+val svarsOf_def = tDefine "svarsOf" `
+  svarsOf (Assign w ds _) = mvarsOf w ∪ listVarsOf dvarsOf ds ∧
+  svarsOf (IfStmt g t e) = varsOf g ∪ svarsOf t ∪ svarsOf e ∧
+  svarsOf (Malloc _ e _) = varsOf e ∧
+  svarsOf (ForLoop _ dm b) = dmvarsOf dm ∪ svarsOf b ∧
+  svarsOf (ParLoop _ dm b) = dmvarsOf dm ∪ svarsOf b ∧
+  svarsOf (While g b) = varsOf g ∪ svarsOf b ∧
+  svarsOf (WaitUntil e) = varsOf e ∧
+  svarsOf (Seq slist) = listVarsOf svarsOf slist ∧
+  svarsOf (Par slist) = listVarsOf svarsOf slist ∧
+  svarsOf (Label _ s) = svarsOf s ∧
+  svarsOf (Local v e s) = (svarsOf s DELETE v) ∪ varsOf e ∧
+  svarsOf (Atomic s) = svarsOf s ∧
+  svarsOf Abort = ∅ ∧
+  svarsOf Done = ∅
+` (WF_REL_TAC `measure stmt_size` >> simp[] >>
+   Induct >> simp[] >> rw[] >> simp[stmt_size_def] >>
+   res_tac >> simp[]);
+val _ = export_rewrites ["svarsOf_def"]
+
+val _ = overload_on("#", ``λn s. n ∉ svarsOf s``)
+val _ = overload_on("#", ``λn sl. n ∉ listVarsOf svarsOf sl``)
+
+val fresh_ssubst = store_thm(
+  "fresh_ssubst[simp]",
+  ``∀s. n # s ⇒ ssubst n v s = s``,
+  ho_match_mp_tac (theorem "svarsOf_ind") >>
+  asm_simp_tac (srw_ss() ++ ETA_ss)[ssubst_def, FORALL_domain] >> rw[] >>
+  simp[LIST_EQ_REWRITE, EL_MAP] >> fs[listVarsOf_MEM] >> metis_tac[MEM_EL]);
+
+val fresh_ssubstl = store_thm(
+  "fresh_ssubstl[simp]",
+  ``n # sl ⇒ MAP (ssubst n v) sl = sl``,
+  simp[LIST_EQ_REWRITE, EL_MAP, listVarsOf_MEM] >>
+  metis_tac[MEM_EL, fresh_ssubst]);
 
 val eval_lvalue_def = Define`
   (eval_lvalue m (VRead nm) = SOME (nm, [])) ∧
@@ -364,7 +536,7 @@ val (eval_rules, eval_ind, eval_cases) = Hol_reln`
   (* lvalue is evaluated atomically when reads are ready to go;
      assumption is that write/destination calculation is never
      racy with respect to data arrays. *)
-  (∀rdes m0 m' vf.
+  (∀w rdes m0 m' vf.
       EVERY isDValue rdes ∧
       upd_write m0 w vf (MAP destDValue rdes) = SOME m'
      ⇒
@@ -447,6 +619,32 @@ val (eval_rules, eval_ind, eval_cases) = Hol_reln`
 
      ∧
 
+  (∀g b m.
+      eval (m, While g b) (m, IfStmt g (Seq [b; While g b]) Done))
+
+     ∧
+
+  (∀m e.
+      evalexpr m e = Bool T
+     ⇒
+      eval (m, WaitUntil e) (m, Done))
+
+     ∧
+
+  (∀m e.
+      evalexpr m e = Bool F
+     ⇒
+      eval (m, WaitUntil e) (m, WaitUntil e))
+
+     ∧
+
+  (∀m e.
+      (∀b. evalexpr m e ≠ Bool b)
+     ⇒
+      eval (m, WaitUntil e) (m, Abort))
+
+     ∧
+
   (∀anm sz_e sz_i iv m0.
       evalexpr m0 sz_e = Int sz_i ∧
       0 ≤ sz_i ∧
@@ -462,6 +660,13 @@ val (eval_rules, eval_ind, eval_cases) = Hol_reln`
       eval (m0, c0) (m, c)
      ⇒
       eval (m0, Label v c0) (m, Label v c))
+
+     ∧
+
+  (∀m0 s m.
+      RTC eval (m0,s) (m, Done)
+     ⇒
+      eval (m0, Atomic s) (m, Done))
 
      ∧
 
