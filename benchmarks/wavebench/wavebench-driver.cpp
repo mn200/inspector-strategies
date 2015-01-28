@@ -167,7 +167,7 @@ void find_waves_fast(COO_mat *mat, int nnz, int * row, int *col,
     // being put in the waves.  No can't do that because iteration
     // can be put into later waves as the reduction resolves.
 
-    for (int p=1; p<nnz; p++) {
+    for (int p=0; p<nnz; p++) {
         // reading and writing to indices r and c for iter p
         int r = row[p];
         int c = col[p];
