@@ -884,6 +884,7 @@ val strip_label_simulation1 = prove(
       qmatch_assum_rename_tac `MAP strip_label pfx = MAP strip_label p'` >>
       qmatch_assum_rename_tac `MAP strip_label sfx = MAP strip_label s'` >>
       qmatch_assum_rename_tac `strip_label c0 = strip_label c0'` >>
+      qmatch_assum_rename_tac `(m0,c0) ---> (m,c)` >>
       `∃c'. (m0,c0') --->* (m,c') ∧ strip_label c' = strip_label c`
         by metis_tac[] >>
       map_every qexists_tac [`vs`, `p' ++ [c'] ++ s'`] >> simp[] >>
