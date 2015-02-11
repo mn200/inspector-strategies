@@ -1,7 +1,7 @@
 open HolKernel Parse boolLib bossLib;
 
 open optionTheory pairTheory listTheory rich_listTheory
-open indexedListsTheory hidagTheory PseudoCTheory
+open indexedListsTheory listExtrasTheory hidagTheory PseudoCTheory
 open PseudoCHDAGTheory
 
 open lcsymtacs monadsyntax
@@ -35,6 +35,12 @@ val cSOMEP_EQN = store_thm(
 val Num_EQ_num = store_thm(
   "Num_EQ_num",
   ``0 ≤ i ⇒ (Num i = n ⇔ i = &n) ∧ (n = Num i ⇔ i = &n)``,
+  strip_tac >> simp[integerTheory.Num] >> SELECT_ELIM_TAC >> simp[] >>
+  metis_tac [integerTheory.NUM_POSINT_EXISTS]);
+
+val Num_LT_num = store_thm(
+  "Num_LT_num",
+  ``0 ≤ i ⇒ (Num i < n ⇔ i < &n) ∧ (n < Num i ⇔ &n < i)``,
   strip_tac >> simp[integerTheory.Num] >> SELECT_ELIM_TAC >> simp[] >>
   metis_tac [integerTheory.NUM_POSINT_EXISTS]);
 
@@ -84,8 +90,8 @@ val total_for_rule = store_thm(
   `∀x:int. x + 1 + 1 = x + 2` by simp[] >> simp[])
 
 val iSOMEP_def = Define`
-  (iSOMEP P NONE ⇔ T) ∧
-  (iSOMEP P (SOME v) ⇔ P v)
+  ((iSOMEP) P NONE ⇔ T) ∧
+  ((iSOMEP) P (SOME v) ⇔ P v)
 `;
 val _ = export_rewrites ["iSOMEP_def"]
 val _ = set_fixity "iSOMEP" Binder
@@ -95,6 +101,19 @@ val iSOMEP_OPTION_BIND_I = store_thm(
   ``∀P Q f v. (iSOMEP) P v ∧ (∀z. P z ⇒ (iSOMEP) Q (f z)) ⇒
               (iSOMEP) Q (OPTION_BIND v f)``,
   rpt gen_tac >> Cases_on `v` >> simp[]);
+
+val iSOMEP_OPTION_IGNORE_BIND = store_thm(
+  "iSOMEP_OPTION_IGNORE_BIND",
+  ``∀Q v1 v2.
+        (iSOMEP) Q (OPTION_IGNORE_BIND v1 v2) ⇔
+        ∀v0. v1 = SOME v0 ⇒ (iSOMEP) Q v2``,
+  rpt gen_tac >> Cases_on `v1` >> simp[]);
+
+val iSOMEP_assert_BIND = store_thm(
+  "iSOMEP_assert_BIND[simp]",
+  ``∀Q v b.
+      (iSOMEP) Q (OPTION_IGNORE_BIND (assert b) v) ⇔ b ⇒ (iSOMEP) Q v``,
+  Cases_on `b` >> simp[]);
 
 val iSOMEP_EQN = store_thm(
   "iSOMEP_EQN",
@@ -152,4 +171,69 @@ val weak_for_rule = store_thm(
   `∀x:int. hi - 1 - x = hi - (x + 1)` by simp[] >>
   `∀x:int. x + 1 + 1 = x + 2` by simp[] >> simp[])
 
+open PseudoCPropsTheory
+val iSOMEP_OPT_SEQUENCE = store_thm(
+  "iSOMEP_OPT_SEQUENCE",
+  ``(iSOMEP) P (OPT_SEQUENCE l) ⇔
+    (∀e. MEM e l ⇒ ∃v. e = SOME v) ⇒ P (MAP THE l)``,
+  simp[iSOMEP_EQN, OPT_SEQUENCE_EQ_SOME]);
+
+(*
+val weak_par_rule = store_thm(
+  "weak_par_rule",
+  ``(∀lo hi.
+       evalexpr m0 lo_e = Int lo ∧ evalexpr m0 hi_e = Int hi ⇒
+       Inv lo (m0, ε) ∧
+       (∀m g i m' sg.
+          lo ≤ i ∧ i < hi ∧ Inv i (m,g) ∧
+          graphOf (Int i :: lab) m (ssubst v (Int i) s) = SOME(m',sg) ∧
+          sg ≁ᵍ g ⇒
+          Inv (i + 1) (m', g ⊕ (HG sg <+ ε))) ∧
+       (∀m g. Inv (int_max lo hi) (m, g) ⇒
+              P (m, HD (addLabel lab
+                           (domreadAction () m0 (D lo_e hi_e))) <+ g))) ⇒
+      (iSOMEP) P (graphOf lab m0 (ParLoop v (D lo_e hi_e) s))``,
+  simp[graphOf_def, dvalues_def, FOLDL_FOLDR_REVERSE, MAP_GENLIST] >>
+  Cases_on `evalexpr m0 lo_e` >> simp[] >>
+  Cases_on `evalexpr m0 hi_e` >> simp[] >>
+  qcase_tac `evalexpr m0 lo_e = Int lo` >>
+  qcase_tac `evalexpr m0 hi_e = Int hi` >>
+  reverse (Cases_on `lo ≤ hi`) >> simp[]
+  >- (rpt strip_tac >> `int_max lo hi = lo` by simp[] >>
+      simp[OPT_SEQUENCE_def]) >>
+  `int_max lo hi = hi` by simp[] >> simp[] >>
+  simp[MAP_GENLIST, combinTheory.o_ABS_R] >> rpt strip_tac >>
+  match_mp_tac iSOMEP_OPTION_BIND_I >>
+  simp[FORALL_PROD, iSOMEP_OPT_SEQUENCE, MEM_GENLIST, MAP_GENLIST,
+       PULL_EXISTS, combinTheory.o_ABS_R] >>
+  qexists_tac `
+    λgl. (iSOMEP) P
+         (do
+           assert(∀i j. i < j ∧ j < LENGTH gl ⇒ EL i gl ≁ᵍ EL j gl);
+           m <- pcg_eval (FOLDR (λg acc. HG g <+ acc) ε gl) (SOME m0);
+           SOME (m, HD (addLabel lab (domreadAction () m0 (D lo_e hi_e))) <+
+                    FOLDR (λg acc. HG g <+ acc) ε gl)
+          od)` >>
+  simp[] >>
+  simp[SimpL ``(==>)``, SKOLEM_THM, GSYM RIGHT_EXISTS_IMP_THM] >>
+  disch_then (qx_choosel_then [`GG`] assume_tac) >>
+  simp[Cong GENLIST_CONG] >> strip_tac >>
+  match_mp_tac iSOMEP_OPTION_BIND_I >> simp[] >>
+  qexists_tac `
+    λm. Inv hi (m,
+                FOLDR (λg acc. HG g <+ acc) ε
+                      (GENLIST (λn. SND (GG n)) (Num (hi - lo))))
+  ` >> simp[] >>
+  map_every (fn q => Q.UNDISCH_THEN q kall_tac) [
+    `evalexpr m0 lo_e = Int lo`, `evalexpr m0 hi_e = Int hi`,
+    `int_max lo hi = hi`
+  ] >>
+  qpat_assum `∀m g. Inv hi (m,g) ==> X` kall_tac >>
+  `∃n. hi = lo + &n`
+    by (`∃i. hi = lo + i ∧ 0 ≤ i` by simp[] >>
+        qexists_tac `Num i` >> metis_tac[integerTheory.INT_OF_NUM]) >>
+  pop_assum SUBST_ALL_TAC >> fs[] >>
+  `∃n0. n0 ≤ n ∧ n0 = n` by simp[] >>
+  pop_assum (SUBST1_TAC o SYM) >> Induct_on `n0`
+*)
 val _ = export_theory();
