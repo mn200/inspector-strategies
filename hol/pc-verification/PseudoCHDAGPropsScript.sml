@@ -3,6 +3,7 @@ open HolKernel Parse boolLib bossLib;
 open lcsymtacs monadsyntax boolSimps
 open relationTheory pairTheory optionTheory listTheory rich_listTheory
 
+open listExtrasTheory
 open actionTheory hidagTheory PseudoCTheory PseudoCHDAGTheory PseudoCPropsTheory
 open proofRulesTheory
 
@@ -69,14 +70,6 @@ val OPTION_IGNORE_BIND_EQUALS_OPTION = store_thm(
     ((OPTION_IGNORE_BIND x y = SOME z) <=>
       (?x'. x = SOME x') /\ (y = SOME z))``,
   Cases_on `x` THEN SIMP_TAC (srw_ss()) []);
-
-val OPT_SEQUENCE_EQ_SOME = store_thm(
-   "OPT_SEQUENCE_EQ_SOME",
-   ``∀l. OPT_SEQUENCE optlist = SOME l ⇔
-         (∀e. MEM e optlist ⇒ ∃v. e = SOME v) ∧
-         (l = MAP THE optlist)``,
-   Induct_on `optlist` >> dsimp[OPT_SEQUENCE_def] >>
-   csimp[] >> metis_tac []);
 
 val some_EQ_SOME_E = save_thm(
   "some_EQ_SOME_E",

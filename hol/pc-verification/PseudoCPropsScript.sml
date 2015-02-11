@@ -9,7 +9,7 @@ open pred_setTheory finite_mapTheory
 open intLib
 open optionTheory pairTheory listTheory rich_listTheory
 open boolSimps
-open indexedListsTheory
+open indexedListsTheory listExtrasTheory
 open relationTheory
 
 val _ = new_theory "PseudoCProps";
@@ -973,12 +973,6 @@ val strip_label_bisimulation = save_thm(
     |> SIMP_RULE (srw_ss()) [PULL_FORALL, AND_IMP_INTRO]);
 
 open monadsyntax
-
-(* opt_sequence : (α option) list -> α list option *)
-val OPT_SEQUENCE_def = Define`
-  (OPT_SEQUENCE [] = SOME []) ∧
-  (OPT_SEQUENCE (h :: t) = lift2 CONS h (OPT_SEQUENCE t))
-`;
 
 val _ = augment_srw_ss [
   rewrites [SIMP_RULE (bool_ss ++ ETA_ss) [] FINITE_BAG_FOLDR_loopbag]
