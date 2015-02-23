@@ -151,22 +151,27 @@ val upd_var_def = Define`
 `;
 
 (* iteration over the entire set, belong to test, intersection, union, difference, sort *)
-(*val it_set_def = Define`
-  it_set s f = case s of
-		   SOME (Set t::q) => case (it_set (Set q) f)  of 
-				       SOME (Set r) => Set (LUPDATE (f (EL 1 l)) 1 r)
-				     | _ => NONE
-		| _ =>  NONE
+
+val it_set_aux_def = Define`
+  it_set_aux s f = case s of
+		   (Set t::q) => (f t)::(it_set_aux q f)
+		| _ => []
 `;
 
-*)
-(*
+val it_set_def = Define`
+  it_set s f = Set (it_set_aux s f)
+`;
+
+(* OK *)
+
 val belong_set_def = Define`
   belong_set s e = case s of
-		   (Set (t::q)) => if t=e then True else (belong_set (Set q) e)
-		| _ =>  False
-`;*)
-(*
+		   (Set (t::q)) => if t=e then (1=1) else (belong_set (Set q) e)
+		| _ =>  (2=1)
+`;
+
+
+
 val intersection_set_aux_def = Define`
   intersection_set_aux s ss = case s of
 			      Set (t::q) => if (belong_set ss t) 
@@ -175,11 +180,13 @@ val intersection_set_aux_def = Define`
 			   | _ => [] 
 `;
 
-val intersection_set_aux_def = Define`
-  intersection_set_aux s ss = Set (intersection_set_aux s ss)
-`;*)
 
-(*
+
+val intersection_set_def = Define`
+  intersection_set s ss = Set (intersection_set_aux s ss)
+`;
+
+
 val union_set_aux_def = Define`
   union_set_aux s ss = case s of
 			      Set (t::q) => t::(union_set_aux (Set q) ss)
@@ -190,48 +197,79 @@ val union_set_def = Define`
   union_set s ss = Set (union_set_aux s ss)
 `;
 
+
+
 val difference_set_aux_def = Define`
   difference_set_aux s ss = case s of
 					Set (t::q) => if (belong_set ss t) 
-								then difference_set_aux (Set q) ss
-								else t::( difference_set_aux (Set q) ss)
-					_ => []
+								then (difference_set_aux (Set q) ss)
+								else t::(difference_set_aux (Set q) ss)
+				     |  _ => []
 `;
+
 
 val difference_set_def = Define`
   difference_set s ss = Set (difference_set_aux s ss)
+`;
 
-  
-val sort_set_def = Define`
-  sort_set s f = case s of
+
+val sort_set_aux_def = Define`
+  sort_set_aux s f flag = case s of
 				Set (t::(tt::q)) => if f t tt
-									then tt::(sort_set (t::q))
-									else t::(sort_set (tt::q))
-				Set (t::[]) => t
+									then 
+									    ( case (sort_set_aux (Set (t::q)) f (1=2)) of 
+										(Set (p::r), (1=2)) => tt::(p::r),(1=2)
+									       | (Set (p::r), (1=1)) => tt::(p::r),(1=2)
+									    )
+									    
+									else ( case (sort_set_aux (Set (tt::q)) f (1=1)) of 
+										(Set (p::r), (1=2)) => t::(p::r),(flag /\ (snd (sort_set_aux (Set (tt::q)) f flag)))
+									       | (Set (p::r), (1=1)) => t::(p::r),(flag /\ (snd (sort_set_aux (Set (tt::q)) f flag)))
+									    )
+			     | Set (t::[]) => ([t],flag)
+`;
+(*
+val sort_set_def = Define`
+  sort_set s f = case (sort_set_aux s f (1=1)) of
+		     (Set (t::q), (1=2)) => sort_set (Set (t::q)) f
+		  | (Set (t::q), (1=1)) => Set (t::q)
+
 `;*)
 
-(*
+val min_set_aux_def = Define`
+  min_set_aux s f x = case s of
+			      Set (t::q) => if (f x t) then min_set_aux (Set q) f t else min_set_aux (Set q) f x
+			   | Set ([]) => x 
+			   | _  => Error
+`;
+
+val min_set_def = Define`
+  min_set s f = case s of
+		    Set (t::q) => min_set_aux s f t
+		  | _  => Error 
+`;
 
 
 val read_k_th_elemt_def = Define`
-  read_k_th_elemt t k = case t,k of
-			      Tuple (p::q),0 => p
-			   | Tuple ([]),k => Error
-			   | Tuple (p::q),k => read_k_th_elemt q (k-1)
+  read_k_th_elemt t k = case t of
+			   | Tuple ([]) => Error
+			   | Tuple (p::q) => if k=0 
+						 then p 
+						 else (if k>0 
+						      then read_k_th_elemt (Tuple q) (k-1) 
+						      else Error)
 			   `;
 			   
 			   
 val write_k_th_elemt_aux_def = Define`
-   write_k_th_elemt_aux t k v = case t,k of
-			      Tuple (p::q),0 => v::q
-			   | Tuple ([]),k => Error
-			   | Tuple (p::q),k => p::(write_k_th_elemt_aux q (k-1) v)
-`;
+   write_k_th_elemt_aux t k v = case t of
+			   | Tuple ([]) => []
+          		   | Tuple (p::q) => if k=0 then (v::q) else (if k>0 then p::(write_k_th_elemt_aux (Tuple q) (k-1) v) else [])`;
 			   
 val write_k_th_elemt_def = Define`
    write_k_th_elemt t k v = Tuple (write_k_th_elemt_aux t k v)`;
    
-*)
+
 
 
 (* lookup_v : memory -> string -> value *)
