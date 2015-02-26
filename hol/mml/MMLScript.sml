@@ -1,9 +1,9 @@
 open HolKernel Parse boolLib bossLib;
 
-open listTheory stringTheory
-open integerTheory intLib
-open realTheory
-open finite_mapTheory
+open listTheory stringTheory;
+open integerTheory intLib;
+open realTheory;
+open finite_mapTheory;
 open lcsymtacs
 open listRangeTheory
 open monadsyntax boolSimps
@@ -15,15 +15,27 @@ val _ = overload_on ("monad_bind", ``OPTION_BIND``)
 val _ = overload_on ("monad_unitbind", ``OPTION_IGNORE_BIND``)
 val _ = overload_on ("assert", ``OPTION_GUARD``)
 
+(* int for the memory and iteration number *)
+val _ = Datatype` 
+iteration =  It int 
+`;
+val _ = Datatype` 
+location = Loc int
+`;
+
+(* you need an iteration or a location to define an element *)
+val _ = Datatype` 
+element =  el iteration location | iteration | location
+`;
+
 val _ = Datatype`
-value = Int int
-        | Real real
+value = element
+        | Int int (* kept for the moment: TODO remove it *)
         (* Set should be a bit different than array: in particular, no order *)
 	| Set (value list) 
 	(* Ops on Set: iteration over the entire set, belong to test, intersection, union, difference, sort [to be understood as conversion from set to list function], min. *)
 	| Tuple (value list)
 	(* Ops on tuple: access k-th elmt, write k-th elmt *)
-        | Bool bool
         | Error
 `;
 
@@ -154,8 +166,8 @@ val upd_var_def = Define`
 
 val it_set_aux_def = Define`
   it_set_aux s f = case s of
-		   (Set t::q) => (f t)::(it_set_aux q f)
-		| _ => []
+		   (Set (t::q)) => (f t)::(it_set_aux (Set q) f)
+		| _  => []
 `;
 
 val it_set_def = Define`
@@ -165,9 +177,9 @@ val it_set_def = Define`
 (* OK *)
 
 val belong_set_def = Define`
-  belong_set s e = case s of
-		   (Set (t::q)) => if t=e then (1=1) else (belong_set (Set q) e)
-		| _ =>  (2=1)
+  belong_set s (e:value) = case s of
+		   (Set (t::q)) => if t=e then T else (belong_set (Set q) e)
+		| _ =>  F
 `;
 
 
@@ -215,26 +227,26 @@ val difference_set_def = Define`
 
 val sort_set_aux_def = Define`
   sort_set_aux s f flag = case s of
-				Set (t::(tt::q)) => if f t tt
+				Set ((Int t)::((Int tt)::q)) => if (t > tt)
 									then 
-									    ( case (sort_set_aux (Set (t::q)) f (1=2)) of 
-										(Set (p::r), (1=2)) => tt::(p::r),(1=2)
-									       | (Set (p::r), (1=1)) => tt::(p::r),(1=2)
+									    ( case (sort_set_aux (Set ((Int t)::q)) f F) of 
+										(Set (p::r), F) => (Set ((Int tt)::(p::r)),T)
+									       | (Set (p::r), T) => (Set ((Int tt)::(p::r)),T)
 									    )
 									    
-									else ( case (sort_set_aux (Set (tt::q)) f (1=1)) of 
-										(Set (p::r), (1=2)) => t::(p::r),(flag /\ (snd (sort_set_aux (Set (tt::q)) f flag)))
-									       | (Set (p::r), (1=1)) => t::(p::r),(flag /\ (snd (sort_set_aux (Set (tt::q)) f flag)))
+									else ( case (sort_set_aux (Set ((Int tt)::q)) f F) of 
+										(Set (p::r), F) => (Set ((Int t)::(p::r)),F)
+									       | (Set (p::r), T) => (Set ((Int t)::(p::r)),T)
 									    )
-			     | Set (t::[]) => ([t],flag)
+			     | Set ((Int t)::[]) => (Set ((Int t)::[]),flag)
 `;
-(*
-val sort_set_def = Define`
-  sort_set s f = case (sort_set_aux s f (1=1)) of
-		     (Set (t::q), (1=2)) => sort_set (Set (t::q)) f
-		  | (Set (t::q), (1=1)) => Set (t::q)
 
-`;*)
+val sort_set_def = Define`
+  sort_set s f = case (sort_set_aux s f F) of
+		     (Set (t::q), T) => sort_set (Set (t::q)) f
+		  | (Set (t::q), F) => Set (t::q)
+
+`;
 
 val min_set_aux_def = Define`
   min_set_aux s f x = case s of
@@ -271,9 +283,64 @@ val write_k_th_elemt_def = Define`
    
 
 
+(*val _ = Datatype` 
+relations =  Dp iteration iteration (* dependencies *)
+          | Sto iteration location (* i -> x *)
+`;
+
+(* infix is easier to read for this ones *) 
+set_fixity "Dp" (Infixl 1100); 
+set_fixity "Sto" (Infixl 1100);*)
+
+
+(*val _ = Datatype` 
+transformations =  Delta element element
+`;*)
+
+(*val _ = Datatype` 
+time_space =  Time int | Space int | Both int int
+`;*)
+
+
+(*val _ = Datatype` 
+schedule =  Theta element time_space
+`;*)
+
+
+(*val depends_on_def = Define `
+	depends_on i = !j. j Dp i
+`;
+
+val depends_of_def  = Define `
+	depends_on i = !j. i Dp j
+`;*)
+
+val (Dep_rules, _, Dep_cases) = Hol_reln `
+(!(x:iteration) (y:iteration). DD x y /\ Dep DD y x ==> Dep DD x y)`;
+
+val correctness_dep_def = Define `
+correctness_dep  (dd:iteration->iteration->bool) (Delta:element->element) (Theta:element->int) = !(i:iteration) (j:iteration) (k:iteration) (x:location) (y:location) (z:location). ((Dep dd j i) /\ (Dep dd i k)) ==> ((Theta (Delta (el i x))) > (Theta (Delta (el j y)))) /\ ((Theta (Delta (el i x)))< (Theta (Delta (el k z))))
+`;
+
+
+val correctness_data_def = Define `
+correctness_data  (dd:iteration->iteration->bool) (Delta:element->element) (Theta:element->int) = !(i:iteration) (j:iteration) (k:iteration) (x:location) (y:location) (z:location). (Dep dd i k) ==> (Theta (Delta(el k y)) <= Theta (Delta (el j x)))
+`;
+
+
+(* Abstract *)
+(* W = \{ ( min \{ i | i \rightarrow x \in A_{I\rightarrow X} \}, x) | x \in X\} *)
+(* \sigma(x) = sort(W).pos(\_,x) *)
+(*          *)
+
+
+val cpack_mml_def = Define `
+cpack_mml (A_inv:location->(iteration list) ) (x:location) (sort:value->value list) =  (A_inv x)
+`;
+
 
 (* lookup_v : memory -> string -> value *)
-val lookup_v_def = Define`
+(*val lookup_v_def = Define`
   lookup_v m v =
     case FLOOKUP m v of
         NONE => Error
@@ -667,5 +734,5 @@ val _ = overload_on ("--->⁺", ``TC eval``)
 val _ = set_fixity "--->*" (Infix(NONASSOC, 450))
 val _ = overload_on ("--->*", ``RTC eval``)
 
-
+*)
 val _ = export_theory()
