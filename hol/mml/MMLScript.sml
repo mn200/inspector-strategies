@@ -25,11 +25,11 @@ location = Loc int
 
 (* you need an iteration or a location to define an element *)
 val _ = Datatype` 
-element =  el iteration location | iteration | location
+element =  el iteration location | Vit iteration | Vl location
 `;
 
 val _ = Datatype`
-value = element
+value = El element
         | Int int (* kept for the moment: TODO remove it *)
         (* Set should be a bit different than array: in particular, no order *)
 	| Set (value list) 
@@ -225,7 +225,7 @@ val difference_set_def = Define`
 `;
 
 
-val sort_set_aux_def = Define`
+(*val sort_set_aux_def = Define`
   sort_set_aux s f flag = case s of
 				Set ((Int t)::((Int tt)::q)) => if (t > tt)
 									then 
@@ -245,6 +245,41 @@ val sort_set_def = Define`
   sort_set s f = case (sort_set_aux s f F) of
 		     (Set (t::q), T) => sort_set (Set (t::q)) f
 		  | (Set (t::q), F) => Set (t::q)
+
+`;*)
+
+val order_tuple_def = Define `
+ order_tuple x y = case x,y of
+		      (Tuple((Int t)::q)),(Tuple ((Int v)::w)) => if (t<v) then T else (if (t>v) then F else (order_tuple (Tuple q) (Tuple w)))
+		    | _ => F
+`;
+
+val sort_insertion_aux_def = Define `
+ sort_insertion_aux (s:value) (r:value) = case s,r of
+			  Set((Tuple((Int t)::q))::z),Tuple ((Int v)::w) => if (order_tuple (Tuple((Int t)::q)) (Tuple ((Int v)::w)))
+								       then ((Tuple((Int t)::q))::(sort_insertion_aux (Set z) ((Tuple ((Int v)::w)))))
+								       else ((Tuple ((Int v)::w))::((Tuple((Int t)::q))::z))
+			| Set((Int t)::q), (Int x) => if x<t
+					     then (
+						 ((Int x)::((Int t)::q))
+						 )
+					     else (
+						 (Int t)::(sort_insertion_aux (Set q) (Int x))
+						 )
+		       | _ => [r]
+`;
+
+
+val sort_insertion_def = Define `
+ sort_insertion (s:value) (x:value) = Set (sort_insertion_aux s x)
+`;
+
+val sort_def = Define `
+ sort s = case s of 
+	      Set ((Tuple(t::q))::r) => (sort_insertion (sort (Set (r))) (Tuple(t::q)))
+	   |  Set ((Int t)::q) => (sort_insertion (sort (Set (q))) (Int t))
+	   | _ => Set ([])
+
 
 `;
 
@@ -328,14 +363,58 @@ correctness_data  (dd:iteration->iteration->bool) (Delta:element->element) (Thet
 `;
 
 
+
+
+val min_list_aux_def = Define `
+min_list_aux l m = case l of 
+		   t::q => if t<m then min_list_aux q t
+						else min_list_aux q m
+		| [t] => if t<m then t else m
+`;
+
+val min_list_def = Define `
+min_list l = case l of 
+		   t::q => min_list_aux q t
+		| t::[] => t 
+`;
+
+val min_list_iteration_aux_def = Define `
+min_list_iteration_aux l m = case l of 
+		   (It t)::q => if t<m then min_list_iteration_aux q t
+						else min_list_iteration_aux q m
+		| [It t] => if t<m then t else m
+`;
+
+val min_list_iteration_def = Define `
+min_list_iteration (l:iteration list) = case l of 
+		   (It t)::q => min_list_iteration_aux q t
+		| (It t)::[] => t 
+`;
+
 (* Abstract *)
 (* W = \{ ( min \{ i | i \rightarrow x \in A_{I\rightarrow X} \}, x) | x \in X\} *)
 (* \sigma(x) = sort(W).pos(\_,x) *)
 (*          *)
 
+val cpack_mml_aux_def = Define `
+cpack_mml_aux (A_inv:location->(iteration list) ) (lx:location list) =  case lx of
+												 x::q => (Tuple (El (Vit (It (min_list_iteration (A_inv x))))::[El (Vl (Loc 0))]))::(cpack_mml_aux A_inv q)
+												  | [x] => [(Tuple (El (Vit (It (min_list_iteration (A_inv x))))::[El (Vl (Loc 0))]))]
+`;
+
+val position_aux_def = Define `
+position_aux (v:value) (x:location) (pos:int)= case v,x of
+				      (Set ((Tuple((El (Vit (It i)))::[(El (Vl (Loc t)))]))::q),(Loc r)) => if t=r then pos else position_aux (Set q) x (pos+1)
+				      | _ => pos
+`;
+
+val position_def = Define `
+position (v:value) (x:location) = position_aux v x 0
+`;
+
 
 val cpack_mml_def = Define `
-cpack_mml (A_inv:location->(iteration list) ) (x:location) (sort:value->value list) =  (A_inv x)
+cpack_mml (A_inv:location->(iteration list) ) (lx:location list) (x:location)  =  position (sort(Set (cpack_mml_aux A_inv lx))) x
 `;
 
 
