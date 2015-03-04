@@ -403,20 +403,41 @@ cpack_mml_aux (A_inv:location->(iteration list) ) (lx:location list) =  case lx 
 `;
 
 val position_aux_def = Define `
-position_aux (v:value) (x:location) (pos:int)= case v,x of
-				      (Set ((Tuple((El (Vit (It i)))::[(El (Vl (Loc t)))]))::q),(Loc r)) => if t=r then pos else position_aux (Set q) x (pos+1)
-				      | _ => pos
+position_aux (v:value) (x:location) (pos:num) = case v,x of
+				      (Set (Tuple [El (Vit (It _)); El (Vl (Loc t))] :: q), Loc r) => if t=r then pos else position_aux (Set q) x (pos+1)
+				    | [] => NOT_PRESENT
+					| _ => NOT_WELL_FORMED
 `;
 
 val position_def = Define `
 position (v:value) (x:location) = position_aux v x 0
 `;
 
+ (* position (v:value) x = 
+       case (v,x) of 
+       (Set (Tuple [...] :: q) => if ... then SOME 0 else do i0 <- position v (Set q); SOME (i0 + 1) od
+      | _ => NONE 
+                    *)
+                    
+                    (*HOWEVER:  f (Set (t::q)) = ..... f (Set q) ....  is not great.
+                    better:
+                         f (Set vs) = g vs
+                         g [] = ...
+                         g (h::t) = ... *)
+ 
+                    
+                    
+ (!i. wellformed v /\ x in v /\ position v x = SOME i ==> ?u. element i v = Tuple [El (Vit (It u)); x]
+ 
+       
 
 val cpack_mml_def = Define `
-cpack_mml (A_inv:location->(iteration list) ) (lx:location list) (x:location)  =  position (sort(Set (cpack_mml_aux A_inv lx))) x
+cpack_hol (A_inv:location->(iteration list) ) (lx:location list) (x:location)  =  position (sort(Set (cpack_mml_aux A_inv lx))) x
 `;
+(* cpack_mml A_inv lx x = POS( SORT (Set (cpack_mml_aux A_inv lx)))) *)
+ 
 
+(* FUNDEF "cpack" ["A_inv", "lx", "x"] (apply (prim POS) (apply (prim SORT) (apply (VAR "cpack_mml_aux") ...)) *)
 
 (* lookup_v : memory -> string -> value *)
 (*val lookup_v_def = Define`
